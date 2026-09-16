@@ -6,7 +6,7 @@ Phases are sequential. Each phase ends with a passing headless test suite, inclu
 Claude Code downloads, builds, and calibrates. The owner pastes the files, opens Claude Code, and follows README.md. If a step truly needs a human, Claude Code asks in one sentence with the exact link (CLAUDE.md rule 23).
 
 ## Phase 0: Scaffold
-- [ ] Vite + TypeScript + Vitest. `engine/`, `ui/`, `data/`, `tests/`.
+- [x] Vite + TypeScript + Vitest. `engine/`, `ui/`, `data/`, `tests/`.
 - [ ] `engine/state.ts`, `engine/rng.ts`, `engine/tick.ts` with daily/monthly split (D30).
 - [ ] `data/calibration.ts` with the source-and-verified format (D37), populated by `scripts/calibrate.ts`.
 - [ ] `scripts/fetch-data.ts` per SYSTEMS.md (Part 2): downloads every raw file to `raw/`, logs to `raw/manifest.json`, idempotent.
@@ -111,3 +111,4 @@ Done: $1T+ bank in three countries with a reconciled multi-currency balance shee
 ## Progress log
 Claude Code appends one line per session here: date | phase and item | what passed | what is open.
 
+2026-09-16 | Phase 0, Vite + TypeScript + Vitest scaffold | typecheck, 3 scaffold tests (folders exist, engine never imports ui, no em or en dashes), vite build all pass | next: engine/state.ts, engine/rng.ts, engine/tick.ts with daily/monthly split (D30)

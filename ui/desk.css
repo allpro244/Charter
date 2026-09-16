@@ -1,0 +1,79 @@
+/* The one stylesheet. Implements DESIGN.md Part 3: a terminal, not a dashboard.
+   Dark background, one alert color, one positive color, monospace numbers,
+   tables with header rows, no cards, no gradients, no icons. */
+
+:root {
+  --bg: #0b0e11;
+  --fg: #d5d8dc;
+  --dim: #7a8087;
+  --rule: #23282e;
+  --alert: #ff5c3a;
+  --positive: #3ad07a;
+  --font: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.desk {
+  padding: 8px 12px;
+}
+
+.bar {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-weight: bold;
+}
+
+.status {
+  color: var(--dim);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  padding: 1px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--dim);
+  font-weight: normal;
+  border-bottom: 1px solid var(--rule);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.alert {
+  color: var(--alert);
+}
+
+.positive {
+  color: var(--positive);
+}

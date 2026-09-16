@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+
+# Raw downloads are hundreds of MB and are rebuilt by scripts/fetch-data.ts.
+# The manifest is kept so every source, status, and hash is on record.
+raw/*
+!raw/manifest.json
