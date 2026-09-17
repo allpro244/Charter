@@ -1,10 +1,15 @@
 // The tick. tick(state, decisions) -> { state, pending, events }.
 // Daily is light: cash and deposit movement, decision checks, events.
-// Monthly close is heavy: accrual on average daily balance, credit,
-// economy, regulation, rival AI. Quarterly: tax, call report, dividends.
-// (CLAUDE.md rules 1, 5, 21; D30.)
+// Monthly close is heavy: accrual on average daily balance, economy,
+// credit, regulation, rival AI. Quarterly: tax, dividends, call report.
+// Systems are called here explicitly, in order. (CLAUDE.md rules 1, 5,
+// 11, 21; D30.)
 
 import { calibration } from '../data/calibration';
+import { type Ctx } from './ctx';
+import { depositRatesMonthly, depositsDaily } from './deposits';
+import { economyMonthly } from './economy';
+import { failuresDaily } from './failure';
 import {
   type Accounts,
   type DepositType,
@@ -21,65 +26,16 @@ import {
   totalEquity,
   tier1Capital,
 } from './ledger';
-import {
-  type Bank,
-  type Decision,
-  type FeedItem,
-  type FeedSource,
-  type Pending,
-  type World,
-  emptyAdb,
-  nextId,
-  FEED_CAP,
-} from './state';
+import { regulationMonthly } from './regulation';
+import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP } from './state';
 import { dateOf, formatDate, isMonthEnd, isQuarterEnd, isYearEnd, quarterOf } from './time';
+import { wealthMonthly, wealthQuarterly } from './wealth';
 
 export interface TickResult {
   state: World;
   pending: Pending[];
-  events: FeedItem[];
+  events: import('./state').FeedItem[];
 }
-
-export interface Ctx {
-  world: World;
-  events: FeedItem[];
-}
-
-export function emit(
-  ctx: Ctx,
-  source: FeedSource,
-  text: string,
-  opts: { severity?: FeedItem['severity']; bankId?: string | null; ref?: FeedItem['ref'] } = {},
-): FeedItem {
-  const item: FeedItem = {
-    id: nextId(ctx.world, 'e'),
-    day: ctx.world.day,
-    source,
-    text,
-    severity: opts.severity ?? 'info',
-    bankId: opts.bankId ?? null,
-    ref: opts.ref ?? null,
-  };
-  ctx.events.push(item);
-  return item;
-}
-
-export function addPending(ctx: Ctx, p: Omit<Pending, 'id' | 'day'>): Pending {
-  const item: Pending = { ...p, id: nextId(ctx.world, 'p'), day: ctx.world.day };
-  ctx.world.pending.push(item);
-  return item;
-}
-
-// Decision handlers are registered by the systems that own them. Kept as a
-// plain table, filled by engine/decisions.ts.
-export type DecisionHandler = (ctx: Ctx, pending: Pending, decision: Decision) => void;
-export const decisionHandlers: Partial<Record<Pending['kind'], DecisionHandler>> = {};
-
-// Hooks filled by later systems. Each is a plain list of functions.
-export const dailyHooks: ((ctx: Ctx) => void)[] = [];
-export const monthlyHooks: ((ctx: Ctx) => void)[] = [];
-export const quarterlyHooks: ((ctx: Ctx) => void)[] = [];
-export const yearlyHooks: ((ctx: Ctx) => void)[] = [];
 
 export function tick(world: World, decisions: Decision[] = []): TickResult {
   const ctx: Ctx = { world, events: [] };
@@ -88,7 +44,6 @@ export function tick(world: World, decisions: Decision[] = []): TickResult {
   daily(ctx);
   if (isMonthEnd(world.day)) monthlyClose(ctx);
   if (isQuarterEnd(world.day)) quarterlyClose(ctx);
-  if (isYearEnd(world.day)) for (const h of yearlyHooks) h(ctx);
   assertWorldBalanced(world);
   if (ctx.events.length > 0) {
     world.feed.push(...ctx.events);
@@ -103,16 +58,31 @@ export function applyDecisions(ctx: Ctx, decisions: Decision[]): void {
     if (idx < 0) continue;
     const pending = ctx.world.pending[idx] as Pending;
     ctx.world.pending.splice(idx, 1);
-    const handler = decisionHandlers[pending.kind];
-    if (handler) handler(ctx, pending, d);
+    resolve(ctx, pending, d);
   }
+}
+
+function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
+  switch (pending.kind) {
+    case 'failure':
+      // Acknowledged. The desk returns to the map.
+      return;
+    default:
+      void ctx;
+      void decision;
+      return;
+  }
+}
+
+function isLive(b: Bank): boolean {
+  return b.status === 'open' || b.status === 'closing';
 }
 
 function daily(ctx: Ctx): void {
   const { world } = ctx;
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
-    if (b.status === 'failed' || b.status === 'acquired') continue;
+    if (!isLive(b)) continue;
     const a = b.acct;
     const adb = b.adb;
     adb.days += 1;
@@ -129,7 +99,8 @@ function daily(ctx: Ctx): void {
     adb.fedFundsPurchased += a.fedFundsPurchased;
     adb.subDebt += a.subDebt;
   }
-  for (const h of dailyHooks) h(ctx);
+  depositsDaily(ctx);
+  failuresDaily(ctx);
 }
 
 const DAYS_IN_YEAR = 365;
@@ -149,22 +120,19 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
   m.days += days;
 
   // Interest income. Loans accrue to a receivable and pools pay at the close.
-  // Nonaccrual balances are excluded by the credit system, which sets
-  // b.loanYield on the accruing balance only.
+  // The credit system keeps b.loanYield on the accruing balance only.
   const loanInterest = accrue(adb.loans / days, b.loanYield, days);
   if (loanInterest !== 0) {
     post(a, { interestReceivable: loanInterest, retainedEarnings: loanInterest });
     m.interestLoans += loanInterest;
   }
-  const afsInterest = accrue(adb.securitiesAFS / days, b.afsYield, days);
-  const htmInterest = accrue(adb.securitiesHTM / days, b.htmYield, days);
-  const secInterest = afsInterest + htmInterest;
+  const secInterest = accrue(adb.securitiesAFS / days, b.afsYield, days) + accrue(adb.securitiesHTM / days, b.htmYield, days);
   if (secInterest !== 0) {
     post(a, { cash: secInterest, retainedEarnings: secInterest });
     m.interestSecurities += secInterest;
   }
   const cashYield = ctx.world.economy.fedFunds + calibration.cashYieldVsFedFunds.typical / 10_000;
-  const cashInterest = accrue(adb.cash / days, Math.max(0, cashYield), days);
+  const cashInterest = accrue(Math.max(0, adb.cash) / days, Math.max(0, cashYield), days);
   if (cashInterest !== 0) {
     post(a, { cash: cashInterest, retainedEarnings: cashInterest });
     m.interestCash += cashInterest;
@@ -192,9 +160,12 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
     m.interestBorrowings += borrowings;
   }
 
-  // Overhead on average assets, split by the calibration shares.
-  const avgAssets = (adb.cash + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
-  const overhead = accrue(avgAssets, b.overheadRate, days);
+  // Overhead on average assets, split by the calibration shares, plus the
+  // fixed cost of every branch from real local wages.
+  const avgAssets = (Math.max(0, adb.cash) + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
+  let branchCost = 0;
+  for (const br of b.branches) branchCost += br.fixedCost;
+  const overhead = accrue(avgAssets, b.overheadRate, days) + accrue(branchCost, 1, days);
   if (overhead > 0) {
     const salaries = Math.round((overhead * calibration.salariesShareOfNie.typical) / 100);
     const occupancy = Math.round((overhead * calibration.occupancyShareOfNie.typical) / 100);
@@ -219,8 +190,6 @@ function isKey(t: DepositType): 'interestChecking' | 'interestSavings' | 'intere
   }
 }
 
-// Collects the interest receivable in cash. Pools pay at the close; the
-// relationship book pays on payment days and the credit system nets it.
 function collectReceivable(b: Bank): void {
   const x = b.acct.interestReceivable;
   if (x !== 0) post(b.acct, { cash: x, interestReceivable: -x });
@@ -230,35 +199,37 @@ function monthlyClose(ctx: Ctx): void {
   const { world } = ctx;
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
-    if (b.status === 'failed' || b.status === 'acquired') continue;
+    if (!isLive(b)) continue;
     accrueMonth(ctx, b);
     collectReceivable(b);
   }
-  for (const h of monthlyHooks) h(ctx);
+  economyMonthly(ctx);
+  depositRatesMonthly(ctx);
+  wealthMonthly(ctx);
+  regulationMonthly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
-    if (b.status === 'failed' || b.status === 'acquired') continue;
+    if (!isLive(b)) continue;
     addIS(b.is.quarter, b.is.month);
     addIS(b.is.year, b.is.month);
     b.is.month = emptyIS();
     b.adb = emptyAdb();
     b.bookValueAtLastClose = totalEquity(b.acct);
   }
-  world.economy.month += 1;
 }
 
 function quarterlyClose(ctx: Ctx): void {
   const { world } = ctx;
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
-    if (b.status === 'failed' || b.status === 'acquired') continue;
+    if (!isLive(b)) continue;
     assess(b);
     taxQuarter(b);
   }
-  for (const h of quarterlyHooks) h(ctx);
+  wealthQuarterly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
-    if (b.status === 'failed' || b.status === 'acquired') continue;
+    if (!isLive(b)) continue;
     b.reports.push(callReport(world, b));
     b.is.lastQuarter = b.is.quarter;
     b.is.quarter = emptyIS();
@@ -281,8 +252,7 @@ function assess(b: Bank): void {
   }
 }
 
-// Flat effective tax with a loss carryforward. Real enough: banks pay tax
-// on positive quarters and carry losses forward.
+// Flat effective tax with a loss carryforward.
 function taxQuarter(b: Bank): void {
   const pretax = pretaxIncome(b.is.quarter);
   if (pretax > 0) {
@@ -307,9 +277,14 @@ export function callReport(world: World, b: Bank): Bank['reports'][number] {
   const ni = netIncome(q);
   const days = q.days || 1;
   const annualize = (x: number) => (x * DAYS_IN_YEAR) / days;
-  const avgLoans = b.reports.length > 0 ? ((b.reports[b.reports.length - 1] as { loans: number }).loans + a.loans) / 2 : a.loans;
+  const last = b.reports[b.reports.length - 1];
+  const avgLoans = last ? (last.loans + a.loans) / 2 : a.loans;
   const earning = a.loans + a.securitiesAFS + a.securitiesHTM + a.cash;
-  const nii = q.interestLoans + q.interestSecurities + q.interestCash - (q.interestChecking + q.interestSavings + q.interestMmda + q.interestCd + q.interestBrokered + q.interestBorrowings);
+  const nii =
+    q.interestLoans +
+    q.interestSecurities +
+    q.interestCash -
+    (q.interestChecking + q.interestSavings + q.interestMmda + q.interestCd + q.interestBrokered + q.interestBorrowings);
   return {
     day: world.day,
     quarter: `${y}Q${qn}`,

@@ -84,6 +84,11 @@ export const calibration = {
   loanSpreadOverFedFunds: hand(150, 350, 250, 'basis points', 'FDIC QBP loan yield vs FEDFUNDS, community banks'),
   rivalDividendPayout: hand(20, 50, 35, 'percent of quarterly earnings', 'FDIC QBP dividends vs net income'),
   ceoSalaryPerBillionAssets: hand(150, 400, 250, 'thousands of dollars per year at $1B assets, log scaled', 'Bank CEO pay surveys, community banks'),
+  founderCash: hand(2, 10, 5, 'millions of dollars', 'Design choice, no public source: what a de novo organizer group member typically commits'),
+  depositRateElasticity: hand(3, 15, 8, 'percent change in deposit share per 100bp above market', 'Fed and FDIC deposit competition studies, community banks'),
+  depositsPerBranch: hand(40, 400, 120, 'millions of dollars per branch', 'FDIC Summary of Deposits, deposits divided by offices'),
+  deNovoShareCeiling: hand(1, 5, 2.5, 'percent of home county deposits after ramp', 'FDIC de novo studies, share after 5 years'),
+  takeoverPremium: hand(100, 160, 125, 'percent of book value for a control stake', 'S&P bank M&A price to tangible book, small deals'),
   // Economy. These are not FDIC bands and stay hand-entered with sources.
   recessionIntervalYears: hand(7, 12, 9, 'years', 'NBER business cycle dates, 1970 onward'),
   bankingCrisisShare: hand(0.25, 0.45, 0.33, 'fraction of recessions', 'NBER dates vs FDIC failure waves (S&L, 2008)'),

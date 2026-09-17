@@ -3,7 +3,7 @@
 
 import { type Accounts, type DepositType, type IncomeStatement, emptyAccounts, emptyIS } from './ledger';
 import { type Rng, makeRng } from './rng';
-import type { Sector, WorldData } from '../data/types';
+import { SECTORS, type Sector, type WorldData } from '../data/types';
 
 export const LOAN_TYPES = ['ci', 'cre_oo', 'cre_inv', 'construction', 'resi', 'consumer', 'ag', 'energy'] as const;
 export type LoanType = (typeof LOAN_TYPES)[number];
@@ -108,7 +108,19 @@ export interface Bank {
   confidence: number; // 0 to 1, depositor confidence
   uninsuredShare: number; // ratio of deposits above the insurance limit
   dividendPayout: number; // ratio of quarterly earnings paid out (rivals set by AI, player by choice)
+  dividendsPaid: number; // lifetime
   failedBankRecord: string[]; // names of banks this one absorbed
+  branches: Branch[];
+  franchise: { baseShare: number; openedDay: number }; // deposit franchise in the home county
+  takeover: { criticizedShare: number; seed: number } | null; // inherited book condition, used by credit
+}
+
+export interface Branch {
+  id: string;
+  county: string; // fips
+  openedDay: number;
+  deposits: number; // core deposits attributed to this branch
+  fixedCost: number; // annual, dollars
 }
 
 export interface PlayerRecord {
@@ -125,7 +137,8 @@ export interface Player {
   bankId: string | null;
   salary: number; // annual, dollars
   taxRate: number; // flat, on salary, dividends, and stock sale proceeds
-  dividendsReceived: number;
+  dividendsReceived: number; // after tax
+  dividendsGross: number; // before tax, pro rata share of what the bank paid
   salaryReceived: number;
   stockSaleProceeds: number;
   invested: number; // dollars put into banks over the run
@@ -154,6 +167,9 @@ export interface Economy {
   sectorMomentum: Record<Sector, number>; // last month log change
   recessions: { startMonth: number; endMonth: number | null; crisis: boolean }[];
   fedPath: number[]; // last 24 months of fed funds
+  nationalMomentum: number; // employment-weighted sector move last month
+  oilPrev: number | null;
+  hpiPrev: number | null;
 }
 
 export interface CountyState {
@@ -205,6 +221,7 @@ export interface Geo {
   counties: Record<string, CountyState>;
   metros: Record<string, MetroState>;
   states: Record<string, StateState>;
+  nationalShares: Record<Sector, number> | null; // employment-weighted sector mix
 }
 
 export type FeedSource = 'borrower' | 'depositor' | 'rival' | 'officer' | 'regulator' | 'market' | 'system';
@@ -334,11 +351,14 @@ export function initialEconomy(data: WorldData | null): Economy {
     sectorMomentum: emptySectors(0),
     recessions: [],
     fedPath: [],
+    nationalMomentum: 0,
+    oilPrev: null,
+    hpiPrev: null,
   };
 }
 
 export function buildGeo(data: WorldData | null): Geo {
-  const geo: Geo = { counties: {}, metros: {}, states: {} };
+  const geo: Geo = { counties: {}, metros: {}, states: {}, nationalShares: null };
   if (!data) return geo;
   for (const c of data.counties) {
     geo.counties[c.fips] = {
@@ -367,6 +387,15 @@ export function buildGeo(data: WorldData | null): Geo {
       imputed: c.imputed,
     };
   }
+  // National employment-weighted sector mix.
+  const shares = emptySectors(0);
+  let totalEmp = 0;
+  for (const c of data.counties) {
+    for (const s of SECTORS) shares[s] += (c.sectors[s] ?? 0) * c.employment;
+    totalEmp += c.employment;
+  }
+  if (totalEmp > 0) for (const s of SECTORS) shares[s] /= totalEmp;
+  geo.nationalShares = totalEmp > 0 ? shares : null;
   for (const m of data.metros) {
     geo.metros[m.cbsa] = {
       cbsa: m.cbsa,
@@ -428,6 +457,7 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
       salary: 0,
       taxRate: 0.3,
       dividendsReceived: 0,
+      dividendsGross: 0,
       salaryReceived: 0,
       stockSaleProceeds: 0,
       invested: 0,
@@ -512,11 +542,34 @@ export function createBank(world: World, spec: BankSpec): Bank {
     confidence: 1,
     uninsuredShare: 0.3,
     dividendPayout: 0.3,
+    dividendsPaid: 0,
     failedBankRecord: [],
+    branches: [],
+    franchise: { baseShare: 0, openedDay: world.day },
+    takeover: null,
   };
   world.banks[bank.id] = bank;
   world.bankOrder.push(bank.id);
+  if (bank.homeCounty) {
+    const county = world.geo.counties[bank.homeCounty];
+    const core = acct.checking + acct.savings + acct.mmda + acct.cd;
+    bank.branches.push({
+      id: nextId(world, 'br'),
+      county: bank.homeCounty,
+      openedDay: world.day,
+      deposits: core,
+      fixedCost: county ? branchFixedCost(county) : 0,
+    });
+    if (county && county.depositPool > 0) bank.franchise.baseShare = core / county.depositPool;
+  }
   return bank;
+}
+
+// A branch costs about six full-time salaries at the county's real wage
+// plus occupancy scaled the same way. Aggregation of real wages, not fiction.
+export function branchFixedCost(county: CountyState): number {
+  const annualWage = county.wage * 52;
+  return Math.round(annualWage * 6 * 1.35);
 }
 
 export function playerBank(world: World): Bank | null {

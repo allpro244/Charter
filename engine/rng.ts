@@ -92,3 +92,13 @@ export function pickWeighted<T>(r: Rng, items: readonly T[], weights: readonly n
 export function derive(seed: number, salt: number): Rng {
   return makeRng((Math.imul(seed, 0x85ebca6b) ^ Math.imul(salt + 1, 0xc2b2ae35)) >>> 0);
 }
+
+// FNV-1a. For deriving streams from names.
+export function hashString(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}

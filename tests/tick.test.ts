@@ -66,24 +66,34 @@ describe('tick', () => {
       securitiesAFS: 15_000_000,
     });
     const startEquity = totalEquity(bank.acct);
+    // Rivals reprice monthly with the Fed, so track the yield in force.
+    let expectedLoanInterest = 0;
+    let yieldInForce = bank.loanYield;
+    let daysInMonth = 0;
     for (let i = 0; i < 366; i++) {
       tick(world);
+      daysInMonth += 1;
       const a = bank.acct;
       expect(totalAssets(a)).toBe(totalLiabilities(a) + totalEquity(a));
+      if (isMonthEnd(world.day)) {
+        expectedLoanInterest += Math.round((70_000_000 * yieldInForce * daysInMonth) / 365);
+        yieldInForce = bank.loanYield;
+        daysInMonth = 0;
+      }
     }
     assertWorldBalanced(world);
     expect(bank.reports.length).toBe(4);
     const year = bank.is.lastYear;
     expect(year).not.toBeNull();
     expect(year!.days).toBe(365);
-    // Interest on loans over the year at the bank's yield, within rounding.
-    const expectedLoanInterest = 70_000_000 * bank.loanYield;
-    expect(Math.abs(year!.interestLoans - expectedLoanInterest)).toBeLessThan(200);
+    // Interest on loans over the year equals balance x rate x days/365, month by month.
+    expect(year!.interestLoans).toBe(expectedLoanInterest);
     // A plausible community bank earns something, and equity moved by exactly net income after tax.
     const ni = year!.interestLoans + year!.interestSecurities + year!.interestCash
       - (year!.interestChecking + year!.interestSavings + year!.interestMmda + year!.interestCd + year!.interestBrokered + year!.interestBorrowings)
       - (year!.salaries + year!.occupancy + year!.otherExpense + year!.assessment) - year!.tax;
-    expect(totalEquity(bank.acct) - startEquity).toBe(ni);
+    expect(totalEquity(bank.acct) - startEquity).toBe(ni - bank.dividendsPaid);
+    expect(bank.dividendsPaid).toBeGreaterThan(0);
     expect(bank.reports[3]!.roa).toBeGreaterThan(-0.02);
     expect(bank.reports[3]!.roa).toBeLessThan(0.03);
   });
