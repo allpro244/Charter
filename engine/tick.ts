@@ -15,6 +15,7 @@ import { failuresDaily } from './failure';
 import { loansDaily, loansMonthly } from './loans';
 import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
+import { rivalsMonthly, rivalsQuarterly } from './rivals';
 import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
 import {
   type Accounts,
@@ -224,6 +225,7 @@ function monthlyClose(ctx: Ctx): void {
     securitiesRunoff(world, b);
     markSecurities(world, b);
   }
+  rivalsMonthly(ctx);
   depositsMonthly(ctx);
   officersMonthly(ctx);
   wealthMonthly(ctx);
@@ -250,6 +252,7 @@ function quarterlyClose(ctx: Ctx): void {
   }
   wealthQuarterly(ctx);
   reviewQuarterly(ctx);
+  rivalsQuarterly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;

@@ -37,6 +37,7 @@ export function closeBank(ctx: Ctx, b: Bank): void {
   b.failedDay = world.day;
   b.closureDay = null;
   b.price = null;
+  world.failures.push({ day: world.day, state: b.state, assets, name: b.name });
   if (isPlayer) {
     const p = world.player;
     p.shares = 0;

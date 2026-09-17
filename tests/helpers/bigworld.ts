@@ -17,7 +17,7 @@ export function buildBigWorld(seed = 2024) {
     const assets = Math.round(randLogNormal(r, Math.log(300_000_000), 1.2));
     const capital = Math.round(assets * 0.1);
     const deposits = assets - capital;
-    createBank(world, {
+    const bank = createBank(world, {
       name: `Bank ${i + 1}`,
       kind: 'rival',
       state: states[randInt(r, 0, states.length - 1)] as string,
@@ -32,6 +32,11 @@ export function buildBigWorld(seed = 2024) {
       securitiesAFS: Math.round(assets * 0.15),
       securitiesHTM: Math.round(assets * 0.05),
     });
+    // No geography here: each bank's addressable market is a bank attribute
+    // sized so the bank holds a small share of it.
+    bank.franchise.pool = deposits * 40;
+    bank.franchise.baseShare = 1 / 40;
+    bank.franchise.targetShare = 1 / 40;
   }
   return world;
 }

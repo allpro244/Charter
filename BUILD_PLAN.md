@@ -60,11 +60,11 @@ Done: Fed +400bp shock produces outflow and unrealized loss in plausible bands; 
 Play gate: 30 minutes. Does funding pressure feel real?
 
 ## Phase 4: Economy and rivals
-- [ ] Regime-switching national cycle with banking-crisis recessions, yield curve, national sector indices, county condition from real exposure (D41), indefinite generator.
-- [ ] Rival banks in home state and neighbors as individuals, other states as aggregates (D42), matched to real FDIC counts, AI policy per D35.
-- [ ] Rivals price, poach, open branches against the player, fail.
-- [ ] Event stream: rival and market events, full density tuning.
-- [ ] UI: RIVALS (every call report), rivals on MAP, region shading.
+- [x] Regime-switching national cycle with banking-crisis recessions, yield curve, national sector indices, county condition from real exposure (D41), indefinite generator.
+- [x] Rival banks in home state and neighbors as individuals, other states as aggregates (D42), matched to real FDIC counts, AI policy per D35.
+- [x] Rivals price, poach, open branches against the player, fail.
+- [x] Event stream: rival and market events, full density tuning.
+- [x] UI: RIVALS (every call report), rivals on MAP, region shading.
 Done: failures cluster in recessions and spike in crises; player loses deposits to a rival that prices higher; a strong rival can put a passive player into decline; an energy shock hurts Houston and not Boston; perf passes with home state, neighbors, and 50 aggregates.
 Play gate: 30 minutes. Is a normal Tuesday interesting? Is a rival scary?
 

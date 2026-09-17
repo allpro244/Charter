@@ -70,10 +70,63 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   const target = isHome ? Math.max(b.franchise.targetShare, base) : ceiling;
   const share = Math.min(1, base + (target - base) * ramp);
   const distance = Math.exp(-br.distanceKm / 1500);
-  const fromShare = pool * share * distance;
+  const fromShare = br.competitiveTarget ?? pool * share * distance;
   const wageIndex = county ? Math.max(0.5, Math.min(2, county.wage / 1300)) : 1;
   const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1);
   return Math.round(Math.min(fromShare, perBranch));
+}
+
+// Attractiveness of a branch to depositors in its county: the rate sheet
+// against the market, years in the market, the bank's size (reputation),
+// and confidence. Pure, so it can be tested on its own.
+export function attractiveness(rateGap: number, years: number, assets: number, confidence: number): number {
+  const elasticity = calibration.depositRateElasticity.typical / 100;
+  return Math.exp(elasticity * 8 * (rateGap / 0.01) + 0.4 * Math.log(1 + Math.min(years, 30)) + 0.15 * Math.log(Math.max(assets, 1e6) / 1e8)) * Math.pow(Math.max(0.05, confidence), 2);
+}
+
+// Splits a county's simulated share of deposits among the branches there
+// by attractiveness. Returns a target per branch. Pure.
+export function splitCounty(pool: number, simulatedShare: number, branches: { attract: number }[]): number[] {
+  let sum = 0;
+  for (const b of branches) sum += b.attract;
+  if (sum <= 0) return branches.map(() => 0);
+  return branches.map((b) => Math.round((pool * simulatedShare * b.attract) / sum));
+}
+
+// Monthly: every county with more than one simulated branch is a contest.
+// The simulated share of the county pool is what those branches hold now
+// (it drifts with the winners' ramps), split by attractiveness.
+export function competeCounties(world: World): void {
+  const byCounty: Record<string, { bank: Bank; br: Branch }[]> = {};
+  for (const id of world.bankOrder) {
+    const b = world.banks[id] as Bank;
+    if (b.status !== 'open' && b.status !== 'closing') continue;
+    for (const br of b.branches) (byCounty[br.county] ??= []).push({ bank: b, br });
+  }
+  for (const [fips, list] of Object.entries(byCounty)) {
+    const county = world.geo.counties[fips];
+    if (!county || county.depositPool <= 0) continue;
+    if (list.length < 2) {
+      for (const x of list) x.br.competitiveTarget = null;
+      continue;
+    }
+    let held = 0;
+    let natural = 0;
+    const attract = list.map(({ bank, br }) => {
+      held += br.deposits;
+      br.competitiveTarget = null;
+      natural += branchTarget(world, bank, br);
+      const years = (world.day - br.openedDay) / 365;
+      return { attract: attractiveness(bankDepositRate(bank) - marketDepositRate(world), years, totalAssets(bank.acct), bank.confidence) };
+    });
+    // The contested pot: what the branches would hold on their own, capped
+    // by the county pool. Winners take from losers inside it.
+    const pot = Math.min(county.depositPool, Math.max(held, natural));
+    const targets = splitCounty(pot, 1, attract);
+    list.forEach((x, i) => {
+      x.br.competitiveTarget = targets[i] ?? null;
+    });
+  }
 }
 
 // Target by type for the whole bank: the sum over branches, then the
@@ -83,7 +136,7 @@ export function depositTargets(world: World, b: Bank): Record<DepositType, numbe
   for (const br of b.branches) base += branchTarget(world, b, br);
   // Without geography the bank's addressable pool stands in for its home
   // county (tests); the franchise is treated as the home branch.
-  if (b.branches.length === 0) base = b.franchise.pool > 0 ? branchTarget(world, b, { id: '', county: b.homeCounty ?? '', openedDay: b.franchise.openedDay, deposits: coreDeposits(b), fixedCost: 0, distanceKm: 0 }, true) : coreDeposits(b);
+  if (b.branches.length === 0) base = b.franchise.pool > 0 ? branchTarget(world, b, { id: '', county: b.homeCounty ?? '', openedDay: b.franchise.openedDay, deposits: coreDeposits(b), fixedCost: 0, distanceKm: 0, competitiveTarget: null }, true) : coreDeposits(b);
   const conf = Math.pow(Math.max(0, Math.min(1, b.confidence)), 3);
   const out = {} as Record<DepositType, number>;
   const elasticity = calibration.depositRateElasticity.typical / 100;
@@ -232,11 +285,13 @@ export function recentFailures(world: World, state: string, months: number): num
 export function depositsMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const ff = world.economy.fedFunds;
+  competeCounties(world);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (b.status === 'failed' || b.status === 'acquired') continue;
-    // Rivals follow the market by beta; the player sets the sheet by hand.
-    if (b.id !== world.playerBankId) {
+    // Banks without an AI follow the market by beta; rivals set their sheets
+    // in rivalsMonthly; the player sets the sheet by hand.
+    if (b.id !== world.playerBankId && !b.ai) {
       for (const t of DEPOSIT_TYPES) b.rates[t] = Math.max(0, Math.round(ff * calibration.depositBeta[t].typical * 10_000) / 10_000);
     }
     b.fhlbRate = ff + 0.003;
@@ -311,7 +366,7 @@ export function openBranch(ctx: Ctx, county: CountyState): Branch | null {
   const premises = Math.round(fixedCost * 1.0);
   if (b.acct.cash < premises) return null;
   post(b.acct, { cash: -premises, premises });
-  const br: Branch = { id: nextId(world, 'br'), county: county.fips, openedDay: world.day, deposits: 0, fixedCost, distanceKm: Math.round(distanceKm) };
+  const br: Branch = { id: nextId(world, 'br'), county: county.fips, openedDay: world.day, deposits: 0, fixedCost, distanceKm: Math.round(distanceKm), competitiveTarget: null };
   b.branches.push(br);
   emit(ctx, 'system', `Opened a branch in ${county.name}, ${county.state}: ${money(premises)} of premises, ${money(fixedCost)} a year to run, ${Math.round(distanceKm)} km from home`, { severity: 'good', bankId: b.id });
   return br;

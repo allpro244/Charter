@@ -44,10 +44,13 @@ export const TYPE: Record<LoanType, TypeParams> = {
 // Annual probability of moving one grade down, by grade 1 to 8 (grade 9 is
 // charged off), and of moving one grade up by grade 2 to 8. Through the
 // cycle; the stress factor moves them.
-const DOWN = [0.03, 0.05, 0.07, 0.10, 0.15, 0.32, 0.5, 0.75, 0];
+const DOWN = [0.03, 0.05, 0.07, 0.10, 0.15, 0.32, 0.35, 0.5, 0];
 const UP = [0, 0.10, 0.10, 0.10, 0.08, 0.2, 0.12, 0.05, 0];
-// Annual probability of reaching charge-off from each grade, used by the reserve.
+// Annual probability of default from each grade through the cycle. Scaled
+// by stress each month, this is the direct flow to charge-off; the one
+// notch moves above shape the criticized share around it.
 export const PD_BY_GRADE = [0.001, 0.002, 0.004, 0.008, 0.015, 0.05, 0.15, 0.4, 1];
+const PD_M = PD_BY_GRADE.map(monthly);
 
 const NONACCRUAL_GRADE = 7; // grades 7 to 9 do not accrue
 const G = GRADES; // local copy: hot loops must not read a module binding
@@ -223,16 +226,29 @@ export function refreshLoanYield(b: Bank): void {
 export function stressFor(world: World, b: Bank, t: LoanType): number {
   const e = world.economy;
   const p = TYPE[t];
-  let logS = 25 * (e.unemployment - 0.045);
-  if (p.sector) logS += -6 * sectorReturn12(e, p.sector);
-  else logS += -4 * (e.gdpGrowth - 0.02) * 3;
-  if (p.housing > 0) logS += -5 * p.housing * hpiReturn12(e);
+  // Asymmetric: rising unemployment hurts far more than low unemployment
+  // helps, and a booming sector or housing market only helps so much.
+  const uGap = e.unemployment - 0.045;
+  let logS = uGap > 0 ? 25 * uGap : 8 * uGap;
+  if (p.sector) logS += -6 * Math.min(0.05, sectorReturn12(e, p.sector));
+  else logS += -12 * Math.min(0.01, e.gdpGrowth - 0.02);
+  if (p.housing > 0) logS += -5 * p.housing * Math.min(0.04, hpiReturn12(e));
   if (p.local > 0 && b.homeCounty) {
     const c = world.geo.counties[b.homeCounty];
     if (c) logS += -5 * p.local * Math.log(c.condition / 100);
   }
-  if (e.crisis && e.regime === 'recession') logS += 0.3;
-  return Math.max(0.25, Math.min(12, Math.exp(logS)));
+  if (e.crisis && e.regime === 'recession') logS += 0.6;
+  // Underwriting quality, and concentration: a book heavy in one type
+  // moves together (SYSTEMS.md system 3).
+  logS += Math.log(b.riskTilt);
+  const loans = b.acct.loans;
+  if (loans > 0) {
+    let typeBal = 0;
+    for (const p of b.pools) if (p.type === t) typeBal += p.balance;
+    const share = typeBal / loans;
+    if (share > 0.25) logS += (share - 0.25) * 2;
+  }
+  return Math.max(0.6, Math.min(e.crisis ? 20 : 12, Math.exp(logS)));
 }
 
 // Interest for one pool over a month: performing balance x rate x days/365.
@@ -285,11 +301,14 @@ export function poolsMonthly(ctx: Ctx, b: Bank, days: number): void {
     for (let k = 0; k < G; k++) {
       const bal = g[k] as number;
       if (bal <= 0) continue;
-      const pDown = k < G - 1 ? Math.min(0.8, (DOWN_M[k] as number) * s) : 0;
+      const pDefault = k < G - 1 ? Math.min(0.5, (PD_M[k] as number) * s) : 0;
+      const pDown = k < G - 2 ? Math.min(0.8, (DOWN_M[k] as number) * s) : 0;
       const pUp = k > 0 ? Math.min(0.5, (UP_M[k] as number) * sInv) : 0;
-      const down = Math.round(bal * pDown);
-      const up = Math.round(bal * pUp);
-      next[k] = (next[k] as number) + bal - down - up;
+      const dflt = Math.round(bal * pDefault);
+      const down = Math.round((bal - dflt) * pDown);
+      const up = Math.round((bal - dflt) * pUp);
+      next[k] = (next[k] as number) + bal - dflt - down - up;
+      if (dflt > 0) next[G - 1] = (next[G - 1] as number) + dflt;
       if (down > 0) next[k + 1] = (next[k + 1] as number) + down;
       if (up > 0) next[k - 1] = (next[k - 1] as number) + up;
     }

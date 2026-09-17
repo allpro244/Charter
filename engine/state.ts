@@ -5,7 +5,7 @@ import { type Accounts, type DepositType, type IncomeStatement, emptyAccounts, e
 import { type Rng, derive, hashString, makeRng } from './rng';
 import { mixFor, seedPools } from './credit';
 import { seedLots } from './funding';
-import { SECTORS, type Sector, type WorldData } from '../data/types';
+import { type BankSeed, SECTORS, type Sector, type WorldData } from '../data/types';
 
 import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from './loantypes';
 export { GRADES, LOAN_TYPES, emptyByType };
@@ -141,6 +141,22 @@ export interface Bank {
   applications: { received: number; toDesk: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
   lifetimeChargeOffsByType: Record<LoanType, number>;
+  ai: AiPolicy | null; // rivals only
+  riskTilt: number; // underwriting quality: multiplies downgrade stress, 1 is average
+  forSale: boolean;
+  national: boolean; // present in every major metro
+  represents: number; // banks represented: 1, or the count inside an aggregate
+  weakQuarters: number; // consecutive quarters of losses or thin capital
+  underMonths: number; // consecutive months below adequately capitalized
+}
+
+// Rival AI (D35): how hard a bank pushes, in four numbers.
+export interface AiPolicy {
+  riskAppetite: number; // 0 to 1: loans to deposits, criticized share, growth
+  growthTarget: number; // annual loan growth sought
+  rateAggression: number; // -1 to 1: rate sheet against the market
+  acquisitive: number; // 0 to 1: bids on failed banks and whole banks
+  branchPush: number; // 0 to 1: opens branches against the player
 }
 
 export interface LossRecordState {
@@ -281,6 +297,7 @@ export interface Branch {
   deposits: number; // core deposits attributed to this branch
   fixedCost: number; // annual, dollars
   distanceKm: number; // from the home county
+  competitiveTarget: number | null; // set monthly by county competition
 }
 
 export type LotKind = 'afs' | 'htm';
@@ -478,6 +495,8 @@ export interface World {
   nextId: number;
   milestones: Milestone[];
   dataVintage: string | null;
+  bankSeeds: Record<string, BankSeed[]>; // real institution sizes by state, anonymized
+  failures: { day: number; state: string; assets: number; name: string }[]; // every failure in the world
 }
 
 export const FEED_CAP = 2000;
@@ -653,6 +672,8 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
     nextId: 0,
     milestones: [],
     dataVintage: data?.national.asOf ?? null,
+    bankSeeds: data?.banksByState ?? {},
+    failures: [],
   };
 }
 
@@ -753,6 +774,13 @@ export function createBank(world: World, spec: BankSpec): Bank {
     applications: { received: 0, toDesk: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
     losses: [],
     lifetimeChargeOffsByType: emptyByType(0),
+    ai: null,
+    riskTilt: 1,
+    forSale: false,
+    national: false,
+    represents: 1,
+    weakQuarters: 0,
+    underMonths: 0,
   };
   world.banks[bank.id] = bank;
   world.bankOrder.push(bank.id);
@@ -766,6 +794,7 @@ export function createBank(world: World, spec: BankSpec): Bank {
       deposits: core,
       fixedCost: county ? branchFixedCost(county) : 0,
       distanceKm: 0,
+      competitiveTarget: null,
     });
     if (county && county.depositPool > 0) {
       bank.franchise.baseShare = core / county.depositPool;

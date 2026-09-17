@@ -45,10 +45,15 @@ export function regulationMonthly(ctx: Ctx): void {
     const b = world.banks[id] as Bank;
     if (b.status === 'failed' || b.status === 'acquired') continue;
     const lev = leverageRatio(b.acct);
-    if (b.status === 'open' && lev <= PCA_CRITICAL) {
+    b.underMonths = lev < PCA_ADEQUATE ? b.underMonths + 1 : 0;
+    // Prompt corrective action: critically undercapitalized closes now; a
+    // bank that stays undercapitalized without recapitalizing is closed
+    // after a year (the capital restoration window has run out).
+    const prolonged = b.underMonths >= 12 && lev < PCA_SIGNIFICANT;
+    if (b.status === 'open' && (lev <= PCA_CRITICAL || prolonged)) {
       b.status = 'closing';
       b.closureDay = nextFriday(world.day);
-      emit(ctx, 'regulator', `${b.name} is critically undercapitalized at ${pct(lev)} leverage. Closure scheduled.`, {
+      emit(ctx, 'regulator', `${b.name} is ${prolonged && lev > PCA_CRITICAL ? 'undercapitalized with no restoration plan' : 'critically undercapitalized'} at ${pct(lev)} leverage. Closure scheduled.`, {
         severity: 'alert',
         bankId: b.id,
       });

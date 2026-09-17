@@ -190,7 +190,14 @@ function sectorStep(e: Economy, r: World['rng']): void {
 // index tilted by condition. (D41)
 export function countyStep(world: World): void {
   const e = world.economy;
+  // Deposit pools grow with nominal income: real growth plus inflation.
+  const nominal = 1 + (e.gdpGrowth + e.inflation) / 12;
+  for (const id of world.bankOrder) {
+    const b = world.banks[id];
+    if (b && b.franchise.pool > 0) b.franchise.pool = Math.round(b.franchise.pool * nominal);
+  }
   for (const c of Object.values(world.geo.counties)) {
+    c.depositPool = Math.round(c.depositPool * nominal);
     let local = 0;
     for (const s of SECTORS) local += (c.sectors[s] ?? 0) * e.sectorMomentum[s];
     c.condition *= Math.exp(local - e.nationalMomentum);

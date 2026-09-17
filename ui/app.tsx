@@ -17,6 +17,7 @@ import { StartPanel } from './start';
 import { LoansScreen } from './loans';
 import { QtrScreen } from './qtr';
 import { FundScreen } from './fund';
+import { RivalsScreen } from './rivals';
 import { OfficersScreen } from './off';
 import { openBranch } from '../engine/deposits';
 
@@ -323,9 +324,7 @@ export function App() {
         />
       )}
       {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk />}
-      {screen === 'RIVALS' && (
-        <p className="dim">{screen}: not built yet. See BUILD_PLAN.md.</p>
-      )}
+      {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} />}
       <footer className="keys">
         <span>f feed</span>
         <span>b balance sheet</span>

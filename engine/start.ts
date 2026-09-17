@@ -15,6 +15,7 @@ import { makeOfficer } from './officers';
 import { generateApplication, ccoReview } from './borrowers';
 import { inheritBook } from './loans';
 import { totalAssets } from './ledger';
+import { populateRivals } from './rivals';
 
 export function startableMetros(world: World): MetroState[] {
   return Object.values(world.geo.metros)
@@ -254,6 +255,7 @@ function attachPlayer(ctx: Ctx, bank: Bank, shares: number, paid: number): void 
   p.salary = defaultSalary(totalEquity(bank.acct) * 10);
   p.record.push({ bankId: bank.id, bankName: bank.name, from: world.day, to: null, outcome: 'running' });
   const st = world.geo.states[bank.state];
+  if (st && !st.expanded) populateRivals(world, bank.state);
   if (st) st.expanded = true;
 }
 
