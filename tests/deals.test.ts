@@ -11,6 +11,7 @@ import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../en
 import { randomPolicy } from '../engine/rivals';
 import { makeRng, randLogNormal } from '../engine/rng';
 import { type Bank, type World, createBank, createWorld } from '../engine/state';
+import { makeOfficer } from '../engine/officers';
 import { tick } from '../engine/tick';
 import { isYearEnd } from '../engine/time';
 
@@ -61,6 +62,8 @@ function player(world: World, assets: number): Bank {
   world.player.shares = Math.round(b.shares * 0.4);
   world.player.cash = 2_000_000;
   world.player.record.push({ bankId: b.id, bankName: b.name, from: 0, to: null, outcome: 'running' });
+  const r = makeRng(assets % 997);
+  for (const role of ['cco', 'cfo', 'clo'] as const) b.officers.push(makeOfficer(world, r, role, assets, 60));
   return b;
 }
 
@@ -120,6 +123,13 @@ describe('capital markets and deals', () => {
         }
       }
       if (!me.isPublic && canIpo(me).ok) ipo(ctx, me, Math.round(totalEquity(me.acct) * 0.2), Math.round(world.player.shares * 0.1));
+      // A growth bank raises equity to keep its cushion: private before the
+      // IPO, a secondary after.
+      if (d % 365 === 180 && me.status === 'open' && totalEquity(me.acct) / totalAssets(me.acct) < 0.09) {
+        const amount = Math.round(totalAssets(me.acct) * 0.03);
+        if (me.isPublic) secondary(ctx, me, amount);
+        else raiseCapital(ctx, me, amount, 0);
+      }
       if (me.status === 'failed') break;
     }
     // The bank may fail in a crisis like any other; the invariants held

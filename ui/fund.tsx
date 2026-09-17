@@ -7,6 +7,7 @@ import { DEFAULT_MIX, UNINSURED, bankDepositRate, closeBranch, coreDeposits, mar
 import { PRODUCT_LABEL, buySecurities, canRaiseBrokered, fhlbCapacity, borrowFhlb, raiseBrokered, repayBrokered, repayFhlb, sellSecurities, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
 import { DEPOSIT_TYPES, type DepositType, totalAssets, totalDeposits } from '../engine/ledger';
 import { type Bank, type LotKind, type Product, type World } from '../engine/state';
+import { SWAP_FLOOR, enterSwap, terminateSwap } from '../engine/regulation';
 import { formatDate } from '../engine/time';
 import { type Unit, dollars, num, pct, short, unitLabel } from './format';
 
@@ -186,6 +187,40 @@ export function FundScreen({ world, bank, unit, act }: Props) {
               ))}
               <button className="key" disabled={a.cash < step * 5} onClick={() => act((c) => buySecurities(c, bank, kind, product, step * 5, duration))}>buy {short(step * 5)}</button>
               <button className="key" disabled={a.cash < step * 25} onClick={() => act((c) => buySecurities(c, bank, kind, product, step * 25, duration))}>buy {short(step * 25)}</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>SWAPS (pay fixed, receive floating; hedge the securities book; from {short(SWAP_FLOOR)} of assets)</th>
+            <th className="num">notional {unitLabel(unit)}</th>
+            <th className="num">fixed</th>
+            <th className="num">tenor</th>
+            <th className="num">value</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {bank.swaps.map((s) => (
+            <tr key={s.id}>
+              <td>since {formatDate(s.startedDay)}</td>
+              <td className="num">{dollars(s.notional, unit)}</td>
+              <td className="num">{pct(s.fixed)}</td>
+              <td className="num">{s.tenor.toFixed(1)}y</td>
+              <td className={'num' + (s.value < 0 ? ' alert' : '')}>{dollars(s.value, unit)}</td>
+              <td><button className="key" onClick={() => act((c) => terminateSwap(c, bank, s.id))}>terminate</button></td>
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={6}>
+              {[2, 5, 10].map((t) => (
+                <button key={t} className="key" disabled={assets < SWAP_FLOOR || a.securitiesAFS + a.securitiesHTM < step * 5} onClick={() => act((c) => enterSwap(c, bank, step * 5, t))}>
+                  enter {t}y swap on {short(step * 5)}
+                </button>
+              ))}
+              {assets < SWAP_FLOOR && <span className="dim">swaps unlock at regional scale</span>}
             </td>
           </tr>
         </tbody>

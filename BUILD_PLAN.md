@@ -82,11 +82,11 @@ Done: $50M to $500B over a long run by acquisition and business lines without br
 Play gate: one hour. Does buying a failed bank feel like the best day of the game?
 
 ## Phase 6: Regulation
-- [ ] Full capital stack with buffers.
-- [ ] CAMELS exams with findings tied to book conditions.
-- [ ] Enforcement ladder to closure.
-- [ ] Size threshold rules.
-- [ ] Insurance assessments. Swaps.
+- [x] Full capital stack with buffers.
+- [x] CAMELS exams with findings tied to book conditions.
+- [x] Enforcement ladder to closure.
+- [x] Size threshold rules.
+- [x] Insurance assessments. Swaps.
 Done: bad CRE concentration gets a finding; ignoring it escalates; failed stress test blocks dividends.
 Play gate: 30 minutes. Is the examiner a fair opponent?
 

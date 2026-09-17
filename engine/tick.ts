@@ -36,7 +36,7 @@ import {
   totalEquity,
   tier1Capital,
 } from './ledger';
-import { regulationMonthly } from './regulation';
+import { assessmentRate, growthRestricted, regulationMonthly, stressTestAnnual } from './regulation';
 import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP } from './state';
 import { dateOf, daysInMonth, formatDate, isMonthEnd, isQuarterEnd, isYearEnd, quarterOf } from './time';
 import { wealthMonthly, wealthQuarterly } from './wealth';
@@ -97,6 +97,9 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
       return;
     case 'competing_bid':
       decideCompetingBid(ctx, pending, decision);
+      return;
+    case 'exam_result':
+    case 'enforcement':
       return;
     default:
       return;
@@ -232,7 +235,7 @@ function monthlyClose(ctx: Ctx): void {
     linesMonthly(ctx, b);
     // Rivals lend through pools. So does a player bank with no home county
     // (no applications can reach it), which only happens in tests.
-    if (b.id !== world.playerBankId || !b.homeCounty) originateToTarget(ctx, b);
+    if ((b.id !== world.playerBankId || !b.homeCounty) && !growthRestricted(b)) originateToTarget(ctx, b);
     refreshLoanYield(b);
   }
   economyMonthly(ctx);
@@ -284,13 +287,15 @@ function quarterlyClose(ctx: Ctx): void {
       linesYearEnd(b);
     }
   }
+  if (isYearEnd(world.day)) stressTestAnnual(ctx);
 }
 
-// FDIC insurance assessment, quarterly, on assets less tangible equity.
+// FDIC insurance assessment, quarterly, on assets less tangible equity,
+// at the risk based rate.
 function assess(b: Bank): void {
   const a = b.acct;
   const base = Math.max(0, totalAssets(a) - tier1Capital(a));
-  const x = Math.round((base * calibration.fdicAssessment.typical) / 10_000 / 4);
+  const x = Math.round((base * assessmentRate(b)) / 10_000 / 4);
   if (x > 0) {
     post(a, { cash: -x, retainedEarnings: -x });
     b.is.quarter.assessment += x;

@@ -168,9 +168,22 @@ function totalAssetsOf(a: Accounts): number {
   return a.cash + a.securitiesAFS + a.securitiesHTM + a.afsValuation + a.loans - a.allowance + a.interestReceivable + a.reo + a.premises + a.goodwill + a.otherAssets;
 }
 
+// Leverage after assuming a failed bank at fair value: the buyer's tier 1
+// over its assets plus the liabilities taken on. The FDIC only accepts
+// bids from banks that stay well capitalized.
+export function leverageAfterAssuming(buyer: Bank, liabilities: number, premium: number): number {
+  const tier1 = buyer.acct.commonStock + buyer.acct.retainedEarnings - buyer.acct.goodwill;
+  const assets = totalAssets(buyer.acct) - buyer.acct.goodwill + liabilities - premium;
+  return assets > 0 ? tier1 / assets : 0;
+}
+
+function liabilitiesOf(a: Accounts): number {
+  return a.checking + a.savings + a.mmda + a.cd + a.brokered + a.fhlb + a.fedFundsPurchased + a.subDebt + a.interestPayable + a.otherLiabilities;
+}
+
 // AI bidders for a failed bank: well capitalized rivals nearby with the
 // appetite and the size. Returns the best premium and the bidder.
-export function aiBids(world: World, failed: { state: string; deposits: number }, excludeId: string | null): { bidder: Bank; premium: number }[] {
+export function aiBids(world: World, failed: { state: string; deposits: number; liabilities: number }, excludeId: string | null): { bidder: Bank; premium: number }[] {
   const st = world.geo.states[failed.state];
   const nearby = new Set<string>([failed.state, ...(st?.neighbors ?? [])]);
   const out: { bidder: Bank; premium: number }[] = [];
@@ -179,9 +192,9 @@ export function aiBids(world: World, failed: { state: string; deposits: number }
     if (b.id === excludeId || b.status !== 'open' || b.kind !== 'rival' || !b.ai) continue;
     if (!nearby.has(b.state) && !b.national) continue;
     if (leverageRatio(b.acct) < PCA_WELL) continue;
-    if (totalAssets(b.acct) < failed.deposits * 1.5) continue;
     if (b.ai.acquisitive < 0.25) continue;
     const premium = Math.max(0, (calibration.assistedDepositPremium.typical / 100) * (0.5 + 2 * b.ai.acquisitive) * (world.economy.regime === 'recession' ? 0.5 : 1) + randNormal(world.rng, 0, 0.003));
+    if (leverageAfterAssuming(b, failed.liabilities, Math.round(failed.deposits * premium)) < PCA_WELL) continue;
     out.push({ bidder: b, premium });
   }
   return out.sort((x, y) => y.premium - x.premium);
@@ -190,10 +203,13 @@ export function aiBids(world: World, failed: { state: string; deposits: number }
 export function playerEligible(world: World, failed: Bank): boolean {
   const p = playerBank(world);
   if (!p || p.id === failed.id || p.status !== 'open') return false;
+  if (p.enforcement === 'consent' || p.enforcement === 'pca') return false;
   const st = world.geo.states[failed.state];
   const nearby = new Set<string>([failed.state, ...(st?.neighbors ?? [])]);
   if (!nearby.has(p.state) && !p.branches.some((br) => world.geo.counties[br.county]?.state === failed.state)) return false;
-  return leverageRatio(p.acct) >= PCA_WELL && totalAssets(p.acct) >= totalDeposits(failed.acct) * 0.5;
+  // Eligible only if the bank stays well capitalized after taking the
+  // failed bank's liabilities at the top bid the desk can make.
+  return leverageRatio(p.acct) >= PCA_WELL && leverageAfterAssuming(p, liabilitiesOf(failed.acct), Math.round(totalDeposits(failed.acct) * 0.03)) >= PCA_WELL;
 }
 
 // The Friday closure. Takes the snapshot, zeroes the failed bank, and
@@ -203,10 +219,12 @@ export function resolveFailure(ctx: Ctx, failed: Bank): void {
   const { world } = ctx;
   const snap = snapshot(world, failed);
   const deposits = totalDeposits(failed.acct);
+  const liabilities = liabilitiesOf(failed.acct);
+  const eligible = playerEligible(world, failed);
   zero(failed);
-  const bids = aiBids(world, { state: failed.state, deposits }, failed.id);
+  const bids = aiBids(world, { state: failed.state, deposits, liabilities }, failed.id);
   const best = bids[0];
-  if (playerEligible(world, failed) && deposits > 0) {
+  if (eligible && deposits > 0) {
     const p = playerBank(world) as Bank;
     const loss = snap.expectedLoss;
     addPending(ctx, {
@@ -317,6 +335,7 @@ export function makeOffer(ctx: Ctx, buyer: Bank, targetId: string, priceToBookOf
   const target = world.banks[targetId];
   if (!target || target.status !== 'open' || target.kind !== 'rival') return { ok: false, why: 'not for sale as an individual bank' };
   if (leverageRatio(buyer.acct) < PCA_WELL) return { ok: false, why: 'you must be well capitalized' };
+  if (buyer.enforcement === 'consent' || buyer.enforcement === 'pca') return { ok: false, why: 'no acquisitions under an enforcement order' };
   if (world.pending.some((p) => p.kind === 'acquisition_offer' || p.kind === 'competing_bid')) return { ok: false, why: 'a deal is already pending' };
   const book = tangibleEquity(target);
   const price = Math.round(book * priceToBookOffered);

@@ -210,7 +210,7 @@ export function repayFhlb(ctx: Ctx, b: Bank, amount: number): number {
 // Brokered deposits: rate-sensitive money at fed funds plus a spread. A
 // bank that is not well capitalized may not accept them (12 CFR 337.6).
 export function canRaiseBrokered(b: Bank): boolean {
-  return leverageOf(b) >= PCA_WELL;
+  return leverageOf(b) >= PCA_WELL && b.enforcement !== 'consent' && b.enforcement !== 'pca';
 }
 
 export function raiseBrokered(ctx: Ctx, b: Bank, amount: number): number {

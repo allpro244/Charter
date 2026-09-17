@@ -6,8 +6,9 @@ import { useState } from 'react';
 import type React from 'react';
 import { calibration, unverifiedBands, type Band } from '../data/calibration';
 import { type IncomeStatement, interestExpense, interestIncome, netIncome, netInterestIncome, noninterestExpense, pretaxIncome, totalAssets, totalDeposits, totalEquity, totalLiabilities, leverageRatio, tier1Capital } from '../engine/ledger';
-import { PCA_LABEL, pcaCategory } from '../engine/regulation';
+import { LADDER_LABEL, PCA_LABEL, capitalStack, creConcentration, liquidityCoverage, pcaCategory, THRESHOLD_SIFI, THRESHOLD_STRESS } from '../engine/regulation';
 import { type Bank, type Pending, type World, bookValuePerShare, playerNetWorth } from '../engine/state';
+import { totalAssets as totalAssetsOf } from '../engine/ledger';
 import { formatDate } from '../engine/time';
 import { playerStake } from '../engine/wealth';
 import { type Unit, dollars, num, pct, short, unitLabel } from './format';
@@ -83,6 +84,7 @@ export function BalanceSheetScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const lev = leverageRatio(a);
   return (
+    <div>
     <div className="cols">
       <table>
         <thead>
@@ -157,6 +159,70 @@ export function BalanceSheetScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
             <td>Book value per share</td>
             <td className="num">{bookValuePerShare(bank).toFixed(2)}</td>
           </tr>
+        </tbody>
+      </table>
+    </div>
+    <RegulationTables bank={bank} unit={unit} />
+    </div>
+  );
+}
+
+function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
+  const stack = capitalStack(bank);
+  const c = bank.camels;
+  const conc = creConcentration(bank);
+  const assets = totalAssetsOf(bank.acct);
+  const lcr = assets >= THRESHOLD_SIFI ? liquidityCoverage(bank) : null;
+  return (
+    <div className="cols">
+      <table>
+        <thead>
+          <tr>
+            <th>CAPITAL STACK {unitLabel(unit)}</th>
+            <th className="num">amount</th>
+            <th className="num">ratio</th>
+            <th className="num">minimum</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Risk weighted assets</td><td className="num">{dollars(stack.rwa, unit)}</td><td></td><td></td></tr>
+          <tr className={stack.cet1Ratio < 0.07 ? 'alert' : ''}><td>Common equity tier 1</td><td className="num">{dollars(stack.cet1, unit)}</td><td className="num">{pct(stack.cet1Ratio, 1)}</td><td className="num">4.5% + 2.5% buffer</td></tr>
+          <tr><td>Tier 1</td><td className="num">{dollars(stack.tier1, unit)}</td><td className="num">{pct(stack.tier1Ratio, 1)}</td><td className="num">6.0%</td></tr>
+          <tr><td>Tier 2 (allowance, sub debt)</td><td className="num">{dollars(stack.tier2, unit)}</td><td className="num">{pct(stack.totalRatio - stack.tier1Ratio, 1)}</td><td></td></tr>
+          <tr><td>Total capital</td><td className="num">{dollars(stack.total, unit)}</td><td className="num">{pct(stack.totalRatio, 1)}</td><td className="num">8.0%</td></tr>
+          <tr className={stack.leverage < 0.05 ? 'alert' : ''}><td>Leverage{stack.cblr ? ' (community bank leverage ratio elected)' : ''}</td><td></td><td className="num">{pct(stack.leverage, 1)}</td><td className="num">{stack.cblr ? '9.0%' : '4.0%'}</td></tr>
+          <tr className="total"><td>{PCA_LABEL[stack.category]}</td><td colSpan={3} className="num">payout limit {pct(stack.maxPayout, 0)} of earnings{stack.bufferShortfall > 0 ? `, buffer short by ${pct(stack.bufferShortfall, 1)}` : ''}</td></tr>
+          <tr className={conc.construction > 1 || conc.cre > 3 ? 'alert' : 'memo-row'}><td>CRE concentration: construction / non owner occupied</td><td colSpan={3} className="num">{pct(conc.construction, 0)} / {pct(conc.cre, 0)} of capital (guidance 100% / 300%)</td></tr>
+          {bank.stressTest && (
+            <tr className={bank.stressTest.passed ? 'memo-row' : 'alert'}><td>Stress test {formatDate(bank.stressTest.day)}</td><td className="num">{dollars(bank.stressTest.losses, unit)} losses</td><td colSpan={2} className="num">{bank.stressTest.passed ? 'passed' : 'failed: no dividends for a year'}, buffer {pct(bank.stressTest.buffer, 1)}</td></tr>
+          )}
+          {assets >= THRESHOLD_STRESS && !bank.stressTest && (
+            <tr className="memo-row"><td>Stress test</td><td colSpan={3} className="num">due at year end</td></tr>
+          )}
+          {lcr && (
+            <tr className={lcr.ratio < 1 ? 'alert' : 'memo-row'}><td>Liquidity coverage (SIFI)</td><td className="num">{dollars(lcr.hqla, unit)} liquid</td><td colSpan={2} className="num">{pct(lcr.ratio, 0)} of a month of stressed outflows</td></tr>
+          )}
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>SUPERVISION</th>
+            <th className="num">rating</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className={c.composite >= 3 ? 'alert' : ''}><td>CAMELS composite{c.lastExam !== null ? `, exam ${formatDate(c.lastExam)}` : ', not yet examined'}</td><td className="num">{c.lastExam !== null ? c.composite : ''}</td></tr>
+          <tr><td className="indent">Capital / Assets / Management</td><td className="num">{c.capital} / {c.assets} / {c.management}</td></tr>
+          <tr><td className="indent">Earnings / Liquidity / Sensitivity</td><td className="num">{c.earnings} / {c.liquidity} / {c.sensitivity}</td></tr>
+          <tr className={bank.enforcement !== 'none' ? 'alert' : ''}><td>Enforcement</td><td className="num">{LADDER_LABEL[bank.enforcement]}{bank.enforcementSince !== null ? ` since ${formatDate(bank.enforcementSince)}` : ''}</td></tr>
+          <tr><td>Next exam</td><td className="num">{formatDate(c.nextExam)}</td></tr>
+          {c.findings.filter((f) => !f.resolved).map((f) => (
+            <tr key={f.id} className="alert"><td className="indent">{f.component}: {f.text}</td><td className="num">{formatDate(f.day)}</td></tr>
+          ))}
+          {c.findings.filter((f) => !f.resolved).length === 0 && c.lastExam !== null && (
+            <tr><td className="indent dim">no open findings</td><td></td></tr>
+          )}
         </tbody>
       </table>
     </div>

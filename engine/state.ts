@@ -156,6 +156,50 @@ export interface Bank {
   lines: Lines;
   linesAssets: { msr: number; trading: number } | null; // what the lines hold in other assets
   acquiredNames: string[];
+  camels: Camels;
+  enforcement: Enforcement;
+  enforcementSince: number | null;
+  stressTest: { day: number; passed: boolean; losses: number; buffer: number } | null; // last annual stress test
+  swaps: Swap[];
+}
+
+export type Enforcement = 'none' | 'mou' | 'consent' | 'pca';
+
+export interface Finding {
+  id: string;
+  key: string; // component and topic, one open finding per key
+  day: number; // first raised
+  text: string; // refreshed at every exam while open
+  component: 'C' | 'A' | 'M' | 'E' | 'L' | 'S';
+  resolved: boolean;
+}
+
+export interface Camels {
+  capital: number; // 1 best to 5 worst
+  assets: number;
+  management: number;
+  earnings: number;
+  liquidity: number;
+  sensitivity: number;
+  composite: number;
+  lastExam: number | null;
+  nextExam: number;
+  findings: Finding[];
+}
+
+// Pay fixed, receive floating: a hedge against rising rates on the
+// securities book. Marked through AOCI as a cash flow hedge.
+export interface Swap {
+  id: string;
+  notional: number;
+  fixed: number; // annual rate paid
+  tenor: number; // years remaining
+  startedDay: number;
+  value: number; // last mark, dollars, in otherAssets (positive) or otherLiabilities (negative)
+}
+
+export function emptyCamels(day: number): Camels {
+  return { capital: 2, assets: 2, management: 2, earnings: 2, liquidity: 2, sensitivity: 2, composite: 2, lastExam: null, nextExam: day + 365, findings: [] };
 }
 
 export type LineKey = 'mortgage' | 'cards' | 'wealth' | 'ib';
@@ -831,6 +875,11 @@ export function createBank(world: World, spec: BankSpec): Bank {
     lines: emptyLines(),
     linesAssets: null,
     acquiredNames: [],
+    camels: emptyCamels(world.day),
+    enforcement: 'none',
+    enforcementSince: null,
+    stressTest: null,
+    swaps: [],
   };
   world.banks[bank.id] = bank;
   world.bankOrder.push(bank.id);

@@ -12,6 +12,7 @@ import { ccoSkill, cloAppetite, cloPricingEdge } from './officers';
 import { chance, pick, rand } from './rng';
 import { type Bank, type Decision, type LoanType, type Pending, type World, playerBank } from './state';
 import { money, pct } from './format';
+import { growthRestricted } from './regulation';
 
 const REGIME_DEMAND = { expansion: 1.1, late: 1.0, recession: 0.65, recovery: 0.9 } as const;
 
@@ -152,7 +153,7 @@ export function autoDecide(ctx: Ctx, b: Bank, app: Application, skill: number): 
   const terms = termsFrom(app);
   const check = policyCheck(b, app, terms);
   const errorRate = 0.04 + 0.28 * (1 - skill / 100);
-  let approve = check.pass;
+  let approve = check.pass && !growthRestricted(b);
   if (chance(world.rng, errorRate)) approve = !approve;
   if (approve) {
     fundLoan(ctx, b, app, terms, 'auto', check.pass ? 'within policy' : 'policy exception missed', false);
@@ -181,6 +182,11 @@ export function decideApplication(ctx: Ctx, pending: Pending, d: Decision): void
   if (!b || !app || b.status !== 'open') return;
   const desk = world.player;
   void desk;
+  if (growthRestricted(b) && d.choice !== 'd') {
+    b.applications.playerDeclined += 1;
+    emit(ctx, 'regulator', `Under the enforcement order the bank may not grow: ${app.borrower} declined`, { severity: 'alert', bankId: b.id });
+    return;
+  }
   switch (d.choice) {
     case 'a': {
       const terms = termsFrom(app);
