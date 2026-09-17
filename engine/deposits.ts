@@ -71,7 +71,10 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   const share = Math.min(1, base + (target - base) * ramp);
   const distance = Math.exp(-br.distanceKm / 1500);
   const fromShare = br.competitiveTarget ?? pool * share * distance;
-  const wageIndex = county ? Math.max(0.5, Math.min(2, county.wage / 1300)) : 1;
+  // Branch capacity applies to real branches on real counties. Without
+  // geography the franchise pool is the whole addressable market.
+  if (!county) return Math.round(fromShare);
+  const wageIndex = Math.max(0.5, Math.min(2, county.wage / 1300));
   const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1);
   return Math.round(Math.min(fromShare, perBranch));
 }
@@ -229,7 +232,7 @@ export function coverCash(ctx: Ctx, b: Bank): void {
     need -= ff;
   }
   if (need > 0) {
-    const drawn = borrowFhlb(ctx, b, Math.min(need, fhlbCapacity(b)));
+    const drawn = borrowFhlb(ctx, b, Math.min(need, fhlbCapacity(b)), true);
     need -= drawn;
   }
   if (need > 0) {
@@ -240,6 +243,7 @@ export function coverCash(ctx: Ctx, b: Bank): void {
       need -= proceeds;
     }
   }
+  const wasCalm = b.liquidityStress < 0.3;
   b.liquidityStress = Math.min(1, b.liquidityStress + 0.25);
   if (a.cash < 0) {
     // Still short: the bank cannot meet withdrawals.
@@ -250,7 +254,7 @@ export function coverCash(ctx: Ctx, b: Bank): void {
       b.closureDay = nextFriday(world.day);
       emit(ctx, 'regulator', `${b.name} could not meet ${money(shortfall)} of withdrawals. Regulators scheduled closure.`, { severity: 'alert', bankId: b.id });
     }
-  } else if (b.id === world.playerBankId) {
+  } else if (b.id === world.playerBankId && wasCalm) {
     emit(ctx, 'market', `${b.name} covered withdrawals with borrowings and securities sales`, { severity: 'alert', bankId: b.id });
   }
 }

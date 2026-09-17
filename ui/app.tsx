@@ -18,11 +18,13 @@ import { LoansScreen } from './loans';
 import { QtrScreen } from './qtr';
 import { FundScreen } from './fund';
 import { RivalsScreen } from './rivals';
+import { LinesScreen } from './lines';
+import { CapitalPanel } from './capital';
 import { OfficersScreen } from './off';
 import { openBranch } from '../engine/deposits';
 
-type Screen = 'FEED' | 'BS' | 'IS' | 'LOANS' | 'FUND' | 'OFF' | 'RIVALS' | 'ME' | 'QTR' | 'MAP' | 'DEBUG';
-const SCREEN_KEYS: Record<string, Screen> = { f: 'FEED', b: 'BS', i: 'IS', l: 'LOANS', u: 'FUND', o: 'OFF', r: 'RIVALS', w: 'ME', q: 'QTR', m: 'MAP', d: 'DEBUG' };
+type Screen = 'FEED' | 'BS' | 'IS' | 'LOANS' | 'FUND' | 'OFF' | 'RIVALS' | 'ME' | 'QTR' | 'LINES' | 'MAP' | 'DEBUG';
+const SCREEN_KEYS: Record<string, Screen> = { f: 'FEED', b: 'BS', i: 'IS', l: 'LOANS', u: 'FUND', o: 'OFF', r: 'RIVALS', w: 'ME', q: 'QTR', n: 'LINES', m: 'MAP', d: 'DEBUG' };
 // Days per real second. Speed 4 is D3's top speed: a year in two minutes.
 const SPEEDS = [0, 0.5, 1, 2, 3, 6];
 const SAVE_KEY = 'charter.save';
@@ -303,8 +305,10 @@ export function App() {
             setDividendPayout(world, (bank?.dividendPayout ?? 0) + d);
             refresh();
           }}
+          capital={bank ? <CapitalPanel world={world} bank={bank} act={act} /> : undefined}
         />
       )}
+      {screen === 'LINES' && bank && <LinesScreen world={world} bank={bank} unit={unit} act={act} />}
       {screen === 'LOANS' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
       {screen === 'FUND' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
       {screen === 'OFF' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
@@ -324,7 +328,7 @@ export function App() {
         />
       )}
       {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk />}
-      {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} />}
+      {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} act={act} />}
       <footer className="keys">
         <span>f feed</span>
         <span>b balance sheet</span>
@@ -335,6 +339,7 @@ export function App() {
         <span>r rivals</span>
         <span>w me</span>
         <span>q quarter</span>
+        <span>n lines</span>
         <span>m map{screen === 'MAP' ? ` (c shade: ${shade})` : ''}</span>
         <span>d debug</span>
         <span>space pause</span>

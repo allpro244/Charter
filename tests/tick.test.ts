@@ -92,7 +92,7 @@ describe('tick', () => {
     // A plausible community bank earns something, and equity moved by exactly net income after tax.
     const ni = year!.interestLoans + year!.interestSecurities + year!.interestCash
       - (year!.interestChecking + year!.interestSavings + year!.interestMmda + year!.interestCd + year!.interestBrokered + year!.interestBorrowings)
-      - year!.provision - (year!.salaries + year!.occupancy + year!.otherExpense + year!.assessment) - year!.tax;
+      - year!.provision + year!.feeIncome + year!.securitiesGains - (year!.salaries + year!.occupancy + year!.otherExpense + year!.assessment) - year!.tax;
     expect(totalEquity(bank.acct) - bank.acct.aoci - startEquity).toBe(ni - bank.dividendsPaid);
     expect(bank.dividendsPaid).toBeGreaterThan(0);
     expect(bank.reports[3]!.roa).toBeGreaterThan(-0.02);

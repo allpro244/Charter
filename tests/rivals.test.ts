@@ -21,35 +21,36 @@ describe('rivals', () => {
     for (const id of world.bankOrder) {
       const b = world.banks[id]!;
       b.ai = randomPolicy(r);
-      b.riskTilt = 0.6 + 0.9 * b.ai.riskAppetite;
+      b.riskTilt = 0.5 + 1.3 * b.ai.riskAppetite;
       tiltMix(b, b.ai.riskAppetite);
       b.loansToDeposits = 0.65 + 0.3 * b.ai.riskAppetite;
     }
-    const monthsBy = { expansion: 0, late: 0, recession: 0, recovery: 0 };
-    const failuresBy = { expansion: 0, late: 0, recession: 0, recovery: 0 };
-    let crisisMonths = 0;
-    let crisisFailures = 0;
-    let lastCount = 0;
+    // Failures lag the recession: the capital restoration window runs a
+    // year. A recession's window is its months plus the 24 after it.
+    const monthly: { recession: boolean; crisis: boolean }[] = [];
     for (let d = 0; d < 40 * 365; d++) {
       tick(world);
-      if (d % 30 === 29) {
-        const e = world.economy;
-        monthsBy[e.regime] += 1;
-        const now = world.failures.length;
-        failuresBy[e.regime] += now - lastCount;
-        if (e.regime === 'recession' && e.crisis) {
-          crisisMonths += 1;
-          crisisFailures += now - lastCount;
-        }
-        lastCount = now;
-      }
+      if (d % 30 === 29) monthly.push({ recession: world.economy.regime === 'recession', crisis: world.economy.regime === 'recession' && world.economy.crisis });
     }
-    const rate = (k: keyof typeof monthsBy) => (monthsBy[k] > 0 ? failuresBy[k] / monthsBy[k] : 0);
+    const inWindow = new Array<number>(monthly.length).fill(0); // 0 none, 1 normal, 2 crisis
+    for (let m = 0; m < monthly.length; m++) {
+      if (!monthly[m]!.recession) continue;
+      const kind = monthly[m]!.crisis ? 2 : 1;
+      for (let k = m; k < Math.min(monthly.length, m + 25); k++) inWindow[k] = Math.max(inWindow[k] ?? 0, kind);
+    }
+    const months = [0, 0, 0];
+    const failures = [0, 0, 0];
+    for (let m = 0; m < monthly.length; m++) months[inWindow[m] ?? 0] = (months[inWindow[m] ?? 0] ?? 0) + 1;
+    for (const f of world.failures) {
+      const m = Math.min(monthly.length - 1, Math.floor(f.day / 30));
+      failures[inWindow[m] ?? 0] = (failures[inWindow[m] ?? 0] ?? 0) + 1;
+    }
+    const rate = (k: number) => (months[k]! > 0 ? failures[k]! / months[k]! : 0);
     // eslint-disable-next-line no-console
-    console.log(`failures per month: expansion ${rate('expansion').toFixed(3)}, late ${rate('late').toFixed(3)}, recession ${rate('recession').toFixed(3)}, recovery ${rate('recovery').toFixed(3)}, crisis ${(crisisMonths > 0 ? crisisFailures / crisisMonths : 0).toFixed(3)}; total ${world.failures.length}`);
+    console.log(`failures per month: outside recessions ${rate(0).toFixed(3)}, in and after normal recessions ${rate(1).toFixed(3)}, in and after banking crises ${rate(2).toFixed(3)}; total ${world.failures.length}`);
     expect(world.failures.length).toBeGreaterThan(0);
-    expect(rate('recession') + rate('recovery')).toBeGreaterThan(rate('expansion') + rate('late'));
-    if (crisisMonths > 0) expect(crisisFailures / crisisMonths).toBeGreaterThanOrEqual(rate('recession'));
+    expect(Math.max(rate(1), rate(2))).toBeGreaterThan(rate(0));
+    if (months[2]! > 0 && months[1]! > 0) expect(rate(2)).toBeGreaterThanOrEqual(rate(1));
     for (const id of world.bankOrder) {
       const a = world.banks[id]!.acct;
       expect(totalAssets(a) - totalLiabilities(a) - totalEquity(a)).toBe(0);

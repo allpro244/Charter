@@ -190,11 +190,12 @@ export function fhlbCapacity(b: Bank): number {
   return Math.max(0, Math.round(0.6 * eligible + 0.9 * securities - b.acct.fhlb));
 }
 
-export function borrowFhlb(ctx: Ctx, b: Bank, amount: number): number {
+export function borrowFhlb(ctx: Ctx, b: Bank, amount: number, quiet = false): number {
   amount = Math.min(Math.round(amount), fhlbCapacity(b));
   if (amount <= 0) return 0;
   post(b.acct, { cash: amount, fhlb: amount });
-  emit(ctx, 'system', `Drew ${money(amount)} of FHLB advances at ${pct(b.fhlbRate)}`, { bankId: b.id });
+  // Automatic draws to cover withdrawals only show when they are large.
+  if (!quiet || amount > 0.01 * totalAssets(b.acct)) emit(ctx, 'system', `Drew ${money(amount)} of FHLB advances at ${pct(b.fhlbRate)}`, { bankId: b.id });
   return amount;
 }
 

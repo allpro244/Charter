@@ -64,7 +64,7 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
   });
   bank.ai = ai;
   bank.national = opts.national ?? false;
-  bank.riskTilt = 0.6 + 0.9 * ai.riskAppetite;
+  bank.riskTilt = 0.5 + 1.3 * ai.riskAppetite;
   // Appetite tilts the book toward construction and investor CRE, where
   // the money is made in expansions and lost in busts.
   tiltMix(bank, ai.riskAppetite);
@@ -84,7 +84,7 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
 
 export function tiltMix(bank: Bank, appetite: number): void {
   const m = bank.loanMix;
-  const extra = 0.3 * Math.max(0, appetite - 0.4);
+  const extra = 0.6 * Math.max(0, appetite - 0.4);
   if (extra <= 0) return;
   const from = (['resi', 'ci', 'cre_oo', 'consumer'] as const).filter((t) => m[t] > 0);
   const take = extra / Math.max(1, from.length);

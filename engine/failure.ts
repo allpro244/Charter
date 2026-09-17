@@ -4,6 +4,7 @@
 // Phase 5 adds the weekend purchase and assumption by a rival.
 
 import { type Ctx, addPending, emit, milestone } from './ctx';
+import { resolveFailure } from './deals';
 import { type Account, type Accounts, post, totalAssets, totalDeposits, totalEquity } from './ledger';
 import { type Bank } from './state';
 import { money } from './format';
@@ -28,16 +29,20 @@ export function closeBank(ctx: Ctx, b: Bank): void {
     severity: 'alert',
     bankId: b.id,
   });
-  // The receivership takes everything. Posting the negation of every balance
-  // is balanced because the identity held before it.
-  const entry: Partial<Accounts> = {};
-  for (const k of Object.keys(a) as Account[]) if (a[k] !== 0) entry[k] = -a[k];
-  post(a, entry);
   b.status = 'failed';
   b.failedDay = world.day;
   b.closureDay = null;
   b.price = null;
   world.failures.push({ day: world.day, state: b.state, assets, name: b.name });
+  // The receivership takes everything, then sells the deposits and assets
+  // over the weekend to the best bidder (v2). With no bidder the FDIC pays
+  // insured depositors and liquidates.
+  if (deposits > 0 && b.kind !== 'aggregate') resolveFailure(ctx, b);
+  else {
+    const entry: Partial<Accounts> = {};
+    for (const k of Object.keys(a) as Account[]) if (a[k] !== 0) entry[k] = -a[k];
+    post(a, entry);
+  }
   if (isPlayer) {
     const p = world.player;
     p.shares = 0;

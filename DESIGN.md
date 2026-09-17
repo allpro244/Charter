@@ -109,6 +109,7 @@ Locked design decisions. Add a new numbered entry to change one; do not edit old
 | D41 | Regional economies are derived, not authored. Each county's exposure to a national sector index (energy, ag, manufacturing, tech, finance, healthcare, government, tourism, construction, logistics) is its real employment share in that sector. A regional shock is a sector shock times local exposure | The Permian is oily because the data says so, not because a file says "Permian: oil." |
 | D42 | Rival scoping by geography. Banks in the player's home state and neighboring states are simulated individually (pools). Banks in every other state are one aggregate per state until the player enters it, at which point they expand into individual banks from the aggregate | Keeps the US-wide world under the performance budget. Aggregation, not fiction: state aggregates carry real total assets, deposits, and bank counts from FDIC data. |
 | D43 | Borrower generation uses local data. Borrower types, incomes, collateral values, and sector mix are drawn from the county's real income distribution, home prices, and industry shares | A dentist in Manhattan and a dentist in Odessa are different loans. |
+| D44 | Business lines (D26) live on their own screen, LINES, key n. Each line shows its P&L, its balance sheet footprint, and its on/off switch with the setup cost. Capital actions (raise, IPO, buyback, secondary, share sales, holding company) live on ME. Deals live on RIVALS: every bank row has an offer key, and auctions arrive as pending decisions | Adds one screen to the v1 list in Part 3. |
 
 ## Open questions (decide when the phase arrives)
 - Relationship book cap: 500 loans, or scaled to bank size?
@@ -136,4 +137,4 @@ The desk is a terminal, not a dashboard. Reference points: a Bloomberg terminal,
 - No em dashes or en dashes.
 
 ## Screens (v1)
-FEED, BS (balance sheet), IS (income), LOANS (book, pools, policy, dial), FUND (deposits, rates, borrowings, securities), OFF (officers), RIVALS (every bank's call report), ME (personal wealth), QTR (earnings review), MAP, DEBUG (calibration flags, seed, tick).
+FEED, BS (balance sheet), IS (income), LOANS (book, pools, policy, dial), FUND (deposits, rates, borrowings, securities), OFF (officers), RIVALS (every bank's call report, deals), ME (personal wealth, capital actions), QTR (earnings review), LINES (business lines, D44), MAP, DEBUG (calibration flags, seed, tick).

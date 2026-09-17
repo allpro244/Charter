@@ -6,6 +6,7 @@
 
 import { calibration } from '../data/calibration';
 import type { Sector } from '../data/types';
+import { lossShareRecovery } from './deals';
 import { type Ctx, emit } from './ctx';
 import { hpiReturn12, sectorReturn12 } from './economy';
 import { post } from './ledger';
@@ -23,6 +24,7 @@ export interface TypeParams {
   spread: number; // over the base rate
   base: 'ff' | 'y2' | 'y10';
   downScale: number; // multiplier on downgrade probabilities
+  crisisCap: number; // most the stress factor can reach: 2009 peak against normal
   sector: Sector | null; // sector index that drives stress
   housing: number; // weight of home prices in stress
   local: number; // weight of county condition in stress
@@ -31,14 +33,15 @@ export interface TypeParams {
 }
 
 export const TYPE: Record<LoanType, TypeParams> = {
-  ci: { term: 60, balloon: null, cpr: 0.15, lgd: 0.4, spread: 0.025, base: 'ff', downScale: 1.0, sector: null, housing: 0, local: 0.5, avgSize: 350_000, label: 'C&I' },
-  cre_oo: { term: 300, balloon: 120, cpr: 0.06, lgd: 0.3, spread: 0.022, base: 'y10', downScale: 0.6, sector: 'construction', housing: 0.3, local: 1.0, avgSize: 1_200_000, label: 'CRE owner occupied' },
-  cre_inv: { term: 300, balloon: 120, cpr: 0.06, lgd: 0.35, spread: 0.026, base: 'y10', downScale: 0.75, sector: 'construction', housing: 0.5, local: 1.0, avgSize: 2_500_000, label: 'CRE investor' },
-  construction: { term: 24, balloon: null, cpr: 0.15, lgd: 0.45, spread: 0.035, base: 'ff', downScale: 1.3, sector: 'construction', housing: 1.0, local: 1.0, avgSize: 3_000_000, label: 'Construction' },
-  resi: { term: 360, balloon: null, cpr: 0.08, lgd: 0.2, spread: 0.018, base: 'y10', downScale: 0.5, sector: null, housing: 1.2, local: 0.6, avgSize: 300_000, label: '1-4 family' },
-  consumer: { term: 60, balloon: null, cpr: 0.15, lgd: 0.65, spread: 0.06, base: 'ff', downScale: 2.6, sector: null, housing: 0, local: 0.6, avgSize: 25_000, label: 'Consumer' },
-  ag: { term: 84, balloon: null, cpr: 0.08, lgd: 0.3, spread: 0.025, base: 'ff', downScale: 0.6, sector: 'agriculture', housing: 0, local: 0.3, avgSize: 400_000, label: 'Agriculture' },
-  energy: { term: 60, balloon: null, cpr: 0.12, lgd: 0.5, spread: 0.04, base: 'ff', downScale: 1.4, sector: 'energy', housing: 0, local: 0.3, avgSize: 4_000_000, label: 'Oil and gas' },
+  ci: { term: 60, balloon: null, cpr: 0.15, lgd: 0.4, spread: 0.025, base: 'ff', downScale: 1.0, crisisCap: 8, sector: null, housing: 0, local: 0.5, avgSize: 350_000, label: 'C&I' },
+  cre_oo: { term: 300, balloon: 120, cpr: 0.06, lgd: 0.3, spread: 0.022, base: 'y10', downScale: 0.6, crisisCap: 8, sector: 'construction', housing: 0.3, local: 1.0, avgSize: 1_200_000, label: 'CRE owner occupied' },
+  cre_inv: { term: 300, balloon: 120, cpr: 0.06, lgd: 0.35, spread: 0.026, base: 'y10', downScale: 0.75, crisisCap: 12, sector: 'construction', housing: 0.5, local: 1.0, avgSize: 2_500_000, label: 'CRE investor' },
+  construction: { term: 24, balloon: null, cpr: 0.15, lgd: 0.45, spread: 0.035, base: 'ff', downScale: 1.3, crisisCap: 25, sector: 'construction', housing: 1.0, local: 1.0, avgSize: 3_000_000, label: 'Construction' },
+  resi: { term: 360, balloon: null, cpr: 0.08, lgd: 0.2, spread: 0.018, base: 'y10', downScale: 0.5, crisisCap: 8, sector: null, housing: 1.2, local: 0.6, avgSize: 300_000, label: '1-4 family' },
+  consumer: { term: 60, balloon: null, cpr: 0.15, lgd: 0.65, spread: 0.06, base: 'ff', downScale: 2.6, crisisCap: 6, sector: null, housing: 0, local: 0.6, avgSize: 25_000, label: 'Consumer' },
+  ag: { term: 84, balloon: null, cpr: 0.08, lgd: 0.3, spread: 0.025, base: 'ff', downScale: 0.6, crisisCap: 6, sector: 'agriculture', housing: 0, local: 0.3, avgSize: 400_000, label: 'Agriculture' },
+  energy: { term: 60, balloon: null, cpr: 0.12, lgd: 0.5, spread: 0.04, base: 'ff', downScale: 1.4, crisisCap: 12, sector: 'energy', housing: 0, local: 0.3, avgSize: 4_000_000, label: 'Oil and gas' },
+  cards: { term: 36, balloon: null, cpr: 0.3, lgd: 0.85, spread: 0.14, base: 'ff', downScale: 2.5, crisisCap: 4, sector: null, housing: 0, local: 0.3, avgSize: 5_000, label: 'Credit cards' },
 };
 
 // Annual probability of moving one grade down, by grade 1 to 8 (grade 9 is
@@ -121,6 +124,7 @@ export function mixFor(county: CountyState | undefined): Record<LoanType, number
     cre_inv: rest * 0.22,
     resi: rest * 0.22,
     consumer: rest * 0.08,
+    cards: 0,
   };
   return mix;
 }
@@ -237,7 +241,8 @@ export function stressFor(world: World, b: Bank, t: LoanType): number {
     const c = world.geo.counties[b.homeCounty];
     if (c) logS += -5 * p.local * Math.log(c.condition / 100);
   }
-  if (e.crisis && e.regime === 'recession') logS += 0.6;
+  if (e.crisis && e.regime === 'recession') logS += 0.8;
+  if (e.crisis && e.regime === 'recovery' && e.monthsSinceRecession < 12) logS += 0.4;
   // Underwriting quality, and concentration: a book heavy in one type
   // moves together (SYSTEMS.md system 3).
   logS += Math.log(b.riskTilt);
@@ -248,7 +253,7 @@ export function stressFor(world: World, b: Bank, t: LoanType): number {
     const share = typeBal / loans;
     if (share > 0.25) logS += (share - 0.25) * 2;
   }
-  return Math.max(0.6, Math.min(e.crisis ? 20 : 12, Math.exp(logS)));
+  return Math.max(0.6, Math.min(p.crisisCap, Math.exp(logS)));
 }
 
 // Interest for one pool over a month: performing balance x rate x days/365.
@@ -349,6 +354,13 @@ export function poolsMonthly(ctx: Ctx, b: Bank, days: number): void {
   if (principal > 0) post(a, { cash: principal, loans: -principal });
   if (recoveries > 0) post(a, { cash: recoveries, loans: -recoveries });
   if (chargeOffs > 0) chargeOff(b, chargeOffs);
+  if (chargeOffs > 0 && b.lossShare) {
+    const reimb = lossShareRecovery(b, chargeOffs);
+    if (reimb > 0) {
+      post(a, { cash: reimb, retainedEarnings: reimb });
+      b.is.month.recoveries += reimb;
+    }
+  }
   if (chargeOffs > 0 && b.id === world.playerBankId && chargeOffs > 0.0005 * Math.max(1, a.loans)) {
     emit(ctx, 'borrower', `Pooled charge-offs of ${money(chargeOffs)} this month`, { severity: 'alert', bankId: b.id });
   }

@@ -38,7 +38,28 @@ export const calibration = {
     consumer: hand(0.5, 6.0, 2.0, 'percent per year', 'FDIC QBP, RI-B consumer'),
     ag: hand(0.02, 2.0, 0.15, 'percent per year', 'FDIC QBP, RI-B agriculture'),
     energy: hand(0.1, 8.0, 1.0, 'percent per year', 'FDIC QBP, RI-B C&I (oil and gas subset)'),
+    cards: hand(2.0, 11.0, 3.5, 'percent per year', 'FDIC QBP, RI-B credit cards'),
   },
+  // Deals. Price to tangible book for whole bank deals by cycle, and the
+  // deposit premium paid in FDIC assisted deals.
+  dealPriceToBook: {
+    expansion: hand(120, 200, 150, 'percent of tangible book', 'S&P Global bank M&A, 2010 to 2023'),
+    recession: hand(60, 120, 85, 'percent of tangible book', 'S&P Global bank M&A, 2008 to 2010'),
+  },
+  assistedDepositPremium: hand(0, 5, 1.0, 'percent of deposits assumed', 'FDIC purchase and assumption results, 2008 to 2023'),
+  acquiredDepositAttrition: hand(3, 20, 8, 'percent of acquired deposits in the first year', 'Bank M&A studies, deposit runoff after closing'),
+  integrationCost: hand(1, 4, 2, 'percent of target assets, one time', 'Bank merger announcements, one time merger charges'),
+  // Business lines.
+  mortgageGainOnSale: hand(100, 300, 180, 'basis points of volume', 'MBA quarterly mortgage banking profitability'),
+  cardInterchange: hand(150, 300, 220, 'basis points of purchase volume', 'Fed interchange fee studies, credit cards'),
+  wealthFeeRate: hand(50, 100, 70, 'basis points of AUM per year', 'Wealth management fee surveys'),
+  ibFeeToAssets: hand(2, 10, 5, 'basis points of assets per year', 'Investment banking fees at universal banks vs assets'),
+  // Stock market. Bank price to tangible book by cycle.
+  bankPriceToBook: {
+    expansion: hand(110, 220, 150, 'percent of tangible book', 'KBW bank index price to tangible book, 2010 onward'),
+    recession: hand(50, 110, 80, 'percent of tangible book', 'KBW bank index price to tangible book, 2008 to 2009, 2020, 2023'),
+  },
+  costOfEquity: hand(8, 13, 10, 'percent per year', 'Bank cost of equity estimates, CAPM'),
   // Return on average assets by asset size bucket, percent per year.
   roa: {
     under1b: hand(-1.0, 1.6, 1.0, 'percent per year', 'FDIC QBP table III-A'),

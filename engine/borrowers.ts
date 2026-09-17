@@ -41,7 +41,7 @@ const BUSINESS: Record<Sector, string[]> = {
 const MARGIN: Record<Sector, number> = { energy: 0.2, agriculture: 0.15, manufacturing: 0.12, tech: 0.18, finance: 0.25, healthcare: 0.15, government: 0.1, tourism: 0.1, construction: 0.08, logistics: 0.07, other: 0.1 };
 
 // Base log-odds of annual default for a median loan of each type.
-const BASE_Z: Record<LoanType, number> = { ci: -4.2, cre_oo: -4.6, cre_inv: -4.5, construction: -3.9, resi: -4.8, consumer: -3.5, ag: -4.6, energy: -3.7 };
+const BASE_Z: Record<LoanType, number> = { ci: -4.2, cre_oo: -4.6, cre_inv: -4.5, construction: -3.9, resi: -4.8, consumer: -3.5, ag: -4.6, energy: -3.7, cards: -3.2 };
 
 export function businessName(r: Rng, sector: Sector, county: CountyState): string {
   const town = county.name.replace(/ (County|Parish|Borough|Census Area|Municipality|city)$/i, '');
@@ -138,6 +138,7 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
       termMonths = 360;
       break;
     }
+    case 'cards':
     case 'consumer': {
       collateralValue = Math.round((12_000 + 55_000 * rand(r)) * Math.max(0.6, Math.min(1.6, localWage / 60_000)));
       ltv = 0.8 + 0.35 * rand(r);
@@ -295,6 +296,8 @@ export function lgdFor(type: LoanType, ltv: number): number {
       return Math.max(0.05, Math.min(0.9, 1 - 0.72 / Math.max(0.3, ltv) + 0.06 + (type === 'construction' ? 0.12 : 0)));
     case 'consumer':
       return Math.max(0.3, Math.min(0.9, 0.45 + 0.5 * Math.max(0, ltv - 0.9)));
+    case 'cards':
+      return 0.85;
     case 'energy':
       return Math.max(0.2, Math.min(0.85, 0.3 + 0.7 * Math.max(0, ltv - 0.5)));
     case 'ci':

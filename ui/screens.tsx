@@ -3,6 +3,7 @@
 // there is something beneath it.
 
 import { useState } from 'react';
+import type React from 'react';
 import { calibration, unverifiedBands, type Band } from '../data/calibration';
 import { type IncomeStatement, interestExpense, interestIncome, netIncome, netInterestIncome, noninterestExpense, pretaxIncome, totalAssets, totalDeposits, totalEquity, totalLiabilities, leverageRatio, tier1Capital } from '../engine/ledger';
 import { PCA_LABEL, pcaCategory } from '../engine/regulation';
@@ -268,7 +269,7 @@ export function ReportsTable({ bank, unit }: { bank: Bank; unit: Unit }) {
   );
 }
 
-export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary: (delta: number) => void; onPayout: (delta: number) => void }) {
+export function MeScreen({ world, onSalary, onPayout, capital }: { world: World; onSalary: (delta: number) => void; onPayout: (delta: number) => void; capital?: React.ReactNode }) {
   const p = world.player;
   const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
   const stake = playerStake(world);
@@ -399,6 +400,7 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
           <button className="key" onClick={() => onPayout(-0.1)}>[ payout</button>
           <button className="key" onClick={() => onPayout(0.1)}>] payout</button>
         </div>
+        {capital}
       </div>
     </div>
   );

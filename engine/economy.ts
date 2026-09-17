@@ -87,6 +87,7 @@ function step(e: Economy, r: World['rng'], ctx: Ctx): void {
   if (next !== prev) {
     e.regime = next;
     e.regimeMonths = 0;
+    if (next === 'expansion') e.crisis = false;
     if (next === 'recession') {
       e.crisis = chance(r, calibration.bankingCrisisShare.typical);
       e.recessions.push({ startMonth: e.month, endMonth: null, crisis: e.crisis });
@@ -140,7 +141,7 @@ function nationalStep(e: Economy, r: World['rng'], ctx: Ctx): void {
   const crisisPull = e.crisis && e.regime === 'recession' ? 1 : 0;
   const gdpTarget = p.gdp - 0.015 * crisisPull;
   e.gdpGrowth += 0.25 * (gdpTarget - e.gdpGrowth) + randNormal(r, 0, 0.004);
-  const uTarget = p.unemployment + 0.02 * crisisPull;
+  const uTarget = p.unemployment + 0.03 * crisisPull;
   const prevU = e.unemployment;
   e.unemployment += (e.regime === 'recession' ? 0.15 : 0.06) * (uTarget - e.unemployment) + randNormal(r, 0, 0.0008);
   e.unemployment = Math.max(0.025, e.unemployment);
@@ -149,7 +150,7 @@ function nationalStep(e: Economy, r: World['rng'], ctx: Ctx): void {
   }
   e.inflation += 0.1 * (p.inflation - e.inflation) + randNormal(r, 0, 0.0015);
   e.inflation = Math.max(-0.01, e.inflation);
-  const hpiMonthly = (p.hpiGrowth - 0.07 * crisisPull) / 12 + randNormal(r, 0, 0.004);
+  const hpiMonthly = (p.hpiGrowth - 0.1 * crisisPull) / 12 + randNormal(r, 0, 0.004);
   e.hpi *= 1 + hpiMonthly;
   e.hpiGrowth = e.hpiGrowth * (11 / 12) + hpiMonthly;
   if (e.month % 12 === 11) {

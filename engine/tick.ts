@@ -16,6 +16,9 @@ import { loansDaily, loansMonthly } from './loans';
 import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
 import { rivalsMonthly, rivalsQuarterly } from './rivals';
+import { stockMonthly } from './capital';
+import { dealsMonthly, decideAuction, decideCompetingBid, decideOffer, expireDeals } from './deals';
+import { feesMonthly, linesMonthly, linesYearEnd } from './lines';
 import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
 import {
   type Accounts,
@@ -86,6 +89,15 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
     case 'rate_prompt':
       decideRatePrompt(ctx, pending, decision);
       return;
+    case 'assisted_auction':
+      decideAuction(ctx, pending, decision);
+      return;
+    case 'acquisition_offer':
+      decideOffer(ctx, pending, decision);
+      return;
+    case 'competing_bid':
+      decideCompetingBid(ctx, pending, decision);
+      return;
     default:
       return;
   }
@@ -121,6 +133,7 @@ function daily(ctx: Ctx): void {
   const player = world.playerBankId ? world.banks[world.playerBankId] : undefined;
   if (player && isLive(player)) loansDaily(ctx, player);
   failuresDaily(ctx);
+  expireDeals(ctx);
 }
 
 const DAYS_IN_YEAR = 365;
@@ -213,9 +226,13 @@ function monthlyClose(ctx: Ctx): void {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
     accrueMonth(ctx, b);
+    feesMonthly(ctx, b);
     if (b.id === world.playerBankId) loansMonthly(ctx, b, days, b.losses);
     poolsMonthly(ctx, b, days);
-    if (b.id !== world.playerBankId) originateToTarget(ctx, b);
+    linesMonthly(ctx, b);
+    // Rivals lend through pools. So does a player bank with no home county
+    // (no applications can reach it), which only happens in tests.
+    if (b.id !== world.playerBankId || !b.homeCounty) originateToTarget(ctx, b);
     refreshLoanYield(b);
   }
   economyMonthly(ctx);
@@ -226,6 +243,8 @@ function monthlyClose(ctx: Ctx): void {
     markSecurities(world, b);
   }
   rivalsMonthly(ctx);
+  dealsMonthly(ctx);
+  stockMonthly(ctx);
   depositsMonthly(ctx);
   officersMonthly(ctx);
   wealthMonthly(ctx);
@@ -262,6 +281,7 @@ function quarterlyClose(ctx: Ctx): void {
     if (isYearEnd(world.day)) {
       b.is.lastYear = b.is.year;
       b.is.year = emptyIS();
+      linesYearEnd(b);
     }
   }
 }

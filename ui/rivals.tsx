@@ -3,13 +3,64 @@
 // quarters and its book by type.
 
 import { useState } from 'react';
+import { tangibleEquity } from '../engine/capital';
 import { TYPE, bookByType } from '../engine/credit';
+import type { Ctx } from '../engine/ctx';
+import { dealCapacity, makeOffer, reservationPriceToBook } from '../engine/deals';
 import { rivalReport } from '../engine/rivals';
-import { type World } from '../engine/state';
-import { type Unit, dollars, num, pct, unitLabel } from './format';
+import { type Bank, type World } from '../engine/state';
+import { type Unit, dollars, num, pct, short, unitLabel } from './format';
 import { ReportsTable } from './screens';
 
-export function RivalsScreen({ world, unit }: { world: World; unit: Unit }) {
+function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; target: Bank; act: (fn: (ctx: Ctx) => void) => void }) {
+  const [pb, setPb] = useState(Math.round(reservationPriceToBook(world, target) * 100) / 100);
+  const [stock, setStock] = useState(0);
+  const [last, setLast] = useState('');
+  const book = tangibleEquity(target);
+  const cap = dealCapacity(buyer);
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>OFFER FOR {target.name.toUpperCase()}</th>
+          <th className="num">tangible book {short(book)}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Price to tangible book (boards ask about {reservationPriceToBook(world, target).toFixed(2)}x in this cycle)</td>
+          <td className="num">
+            <input type="number" step={0.05} min={0.3} max={3} value={pb} onChange={(e) => setPb(Number(e.target.value))} /> = {short(Math.round(book * pb))}
+          </td>
+          <td>
+            <button className="key" onClick={() => act((ctx) => setLast(makeOffer(ctx, buyer, target.id, pb, stock).why))}>offer</button>
+          </td>
+        </tr>
+        <tr>
+          <td>Stock share of the price (needs a holding company)</td>
+          <td className="num">
+            {[0, 0.25, 0.5, 0.75, 1].map((x) => (
+              <button key={x} className={'key' + (stock === x ? ' on' : '')} onClick={() => setStock(x)} disabled={x > 0 && !cap.stock}>
+                {pct(x, 0)}
+              </button>
+            ))}
+          </td>
+          <td className="dim">cash you can spend: {short(cap.cash)}</td>
+        </tr>
+        {last && (
+          <tr>
+            <td colSpan={3} className="dim">
+              {last}
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; act?: (fn: (ctx: Ctx) => void) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const [showAggregates, setShowAggregates] = useState(false);
   const rows = world.bankOrder
@@ -50,7 +101,7 @@ export function RivalsScreen({ world, unit }: { world: World; unit: Unit }) {
           {shown.map((r) => {
             const bank = world.banks[r.id]!;
             return (
-              <RivalRows key={r.id} r={r} bank={bank} world={world} unit={unit} open={open === r.id} toggle={() => setOpen(open === r.id ? null : r.id)} />
+              <RivalRows key={r.id} r={r} bank={bank} world={world} unit={unit} open={open === r.id} toggle={() => setOpen(open === r.id ? null : r.id)} act={act} />
             );
           })}
         </tbody>
@@ -59,8 +110,9 @@ export function RivalsScreen({ world, unit }: { world: World; unit: Unit }) {
   );
 }
 
-function RivalRows({ r, bank, world, unit, open, toggle }: { r: ReturnType<typeof rivalReport>; bank: World['banks'][string]; world: World; unit: Unit; open: boolean; toggle: () => void }) {
+function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<typeof rivalReport>; bank: World['banks'][string]; world: World; unit: Unit; open: boolean; toggle: () => void; act?: (fn: (ctx: Ctx) => void) => void }) {
   const cls = r.status === 'failed' ? 'row alert' : r.status === 'closing' ? 'row alert' : 'row';
+  const player = world.playerBankId ? world.banks[world.playerBankId] : undefined;
   return (
     <>
       <tr className={cls} onClick={toggle}>
@@ -117,7 +169,10 @@ function RivalRows({ r, bank, world, unit, open, toggle }: { r: ReturnType<typeo
                 </tbody>
               </table>
             </div>
-            <p className="dim">{world.geo.counties[bank.homeCounty ?? '']?.name ?? ''}</p>
+            {player && act && bank.kind === 'rival' && bank.status === 'open' && <OfferRow world={world} buyer={player} target={bank} act={act} />}
+            {bank.kind === 'aggregate' && bank.status === 'open' && (
+              <p className="dim">An aggregate. Open a branch in this state or buy a bank there to see its banks individually (D42).</p>
+            )}
           </td>
         </tr>
       )}

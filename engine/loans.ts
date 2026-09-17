@@ -284,7 +284,7 @@ function regrade(world: World, b: Bank, l: Loan): void {
 }
 
 function baseFor(type: LoanType): number {
-  return { ci: -4.2, cre_oo: -4.6, cre_inv: -4.5, construction: -3.9, resi: -4.8, consumer: -3.5, ag: -4.6, energy: -3.7 }[type];
+  return { ci: -4.2, cre_oo: -4.6, cre_inv: -4.5, construction: -3.9, resi: -4.8, consumer: -3.5, ag: -4.6, energy: -3.7, cards: -3.2 }[type];
 }
 
 // Foreclosure or charge-off. Real estate goes to REO at liquidation value

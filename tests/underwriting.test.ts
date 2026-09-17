@@ -91,8 +91,8 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
         const metro = startableMetros(world)[0]!;
         const bank = startCharter({ world, events: [] }, { mode: 'charter', cbsa: metro.cbsa, name: 'U', invest: 2_000_000 });
         setDial(world, 100_000_000, 7);
-        if (disciplined) setPolicy(world, { minDscr: 1.5, maxLtv: { ci: 0.65, cre_oo: 0.65, cre_inv: 0.65, construction: 0.65, resi: 0.65, consumer: 0.65, ag: 0.65, energy: 0.65 } });
-        else setPolicy(world, { minDscr: 0, maxLeverage: 100, maxLtv: { ci: 2, cre_oo: 2, cre_inv: 2, construction: 2, resi: 2, consumer: 2, ag: 2, energy: 2 }, sectorCap: 1, maxSize: 1e12 });
+        if (disciplined) setPolicy(world, { minDscr: 1.5, maxLtv: { ci: 0.65, cre_oo: 0.65, cre_inv: 0.65, construction: 0.65, resi: 0.65, consumer: 0.65, ag: 0.65, energy: 0.65, cards: 0.65 } });
+        else setPolicy(world, { minDscr: 0, maxLeverage: 100, maxLtv: { ci: 2, cre_oo: 2, cre_inv: 2, construction: 2, resi: 2, consumer: 2, ag: 2, energy: 2, cards: 2 }, sectorCap: 1, maxSize: 1e12 });
         for (let d = 0; d < 6 * 365; d++) tick(world);
         const co = LOAN_TYPES.reduce((x, t) => x + bank.lifetimeChargeOffsByType[t], 0);
         const orig = LOAN_TYPES.reduce((x, t) => x + bank.originationsByType[t], 0) + bank.acct.loans;

@@ -47,7 +47,7 @@ function run(seed: number, banks: number, years: number): Run {
   for (const id of world.bankOrder) {
     const b = world.banks[id]!;
     if (Number(id.slice(1)) % 2 === 0) {
-      b.loanMix = { ci: 0.2, cre_oo: 0.15, cre_inv: 0.15, construction: 0.1, resi: 0.15, consumer: 0.05, ag: 0.1, energy: 0.1 };
+      b.loanMix = { ci: 0.2, cre_oo: 0.15, cre_inv: 0.15, construction: 0.1, resi: 0.15, consumer: 0.05, ag: 0.1, energy: 0.1, cards: 0 };
     }
   }
   const chargeOffs = emptyByType(0);
@@ -86,7 +86,10 @@ describe('credit, pooled book', () => {
 
   for (const t of LOAN_TYPES) {
     const band = calibration.chargeOffRate[t];
-    it(tag(band.verified, `${TYPE[t].label} net charge-offs over ${YEARS} years across ${SEEDS} seeds are inside the FDIC band (${band.low} to ${band.high}% per year)`), () => {
+    const held = runs.some((x) => x.balanceYears[t] > 0);
+    // Cards exist only when the cards line is on; the band is checked in
+    // tests/deals.test.ts where a bank runs the line.
+    it.skipIf(!held)(tag(band.verified, `${TYPE[t].label} net charge-offs over ${YEARS} years across ${SEEDS} seeds are inside the FDIC band (${band.low} to ${band.high}% per year)`), () => {
       expect(rate[t]).toBeGreaterThanOrEqual(band.low);
       expect(rate[t]).toBeLessThanOrEqual(band.high);
     });
@@ -135,7 +138,7 @@ describe('credit, pooled book', () => {
     const worldB = createWorld(seed);
     const mk = (world: ReturnType<typeof createWorld>, energy: number) => {
       const b = createBank(world, { name: 'E', kind: 'rival', state: 'TX', capital: 25_000_000, deposits: { checking: 120_000_000, savings: 100_000_000 }, loans: 0, securitiesAFS: 20_000_000 });
-      b.loanMix = { ci: 0.3 - energy * 0.3, cre_oo: 0.15, cre_inv: 0.15, construction: 0.05, resi: 0.2, consumer: 0.05, ag: 0.1 - energy * 0.1, energy };
+      b.loanMix = { ci: 0.3 - energy * 0.3, cre_oo: 0.15, cre_inv: 0.15, construction: 0.05, resi: 0.2, consumer: 0.05, ag: 0.1 - energy * 0.1, energy, cards: 0 };
       // Seed the book by hand with the chosen mix.
       b.acct.loans = 180_000_000;
       b.acct.cash -= 180_000_000;

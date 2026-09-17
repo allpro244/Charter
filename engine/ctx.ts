@@ -27,8 +27,8 @@ export function emit(
   return item;
 }
 
-export function addPending(ctx: Ctx, p: Omit<Pending, 'id' | 'day'>): Pending {
-  const item: Pending = { ...p, id: nextId(ctx.world, 'p'), day: ctx.world.day };
+export function addPending(ctx: Ctx, p: Omit<Pending, 'id' | 'day' | 'expires'> & { expires?: number | null }): Pending {
+  const item: Pending = { ...p, expires: p.expires ?? null, id: nextId(ctx.world, 'p'), day: ctx.world.day };
   ctx.world.pending.push(item);
   return item;
 }

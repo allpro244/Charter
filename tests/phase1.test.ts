@@ -72,7 +72,8 @@ describe('phase 1: ledger, wealth, feed', () => {
     const retained = () => totalEquity(bank.acct) - bank.acct.aoci;
     let equityBefore = retained();
     let quarters = 0;
-    for (let d = 0; d < 365; d++) {
+    // Three years: a seed may open in a banking crisis with no profitable quarter.
+    for (let d = 0; d < 3 * 365; d++) {
       const cashBefore = world.player.cash;
       const grossBefore = world.player.dividendsGross;
       const paidBefore = bank.dividendsPaid;
@@ -93,9 +94,9 @@ describe('phase 1: ledger, wealth, feed', () => {
         equityBefore = retained();
       }
     }
-    expect(quarters).toBeGreaterThanOrEqual(3);
+    expect(quarters).toBeGreaterThanOrEqual(4);
     expect(playerNetWorth(world)).toBeGreaterThan(1_000_000);
-    expect(world.player.netWorthHistory.length).toBe(12);
+    expect(world.player.netWorthHistory.length).toBe(36);
   });
 
   it('salary is a bank expense and reaches the player after tax', () => {
@@ -150,12 +151,12 @@ describe('phase 1: ledger, wealth, feed', () => {
     expect(world.playerBankId).toBeNull();
     expect(world.player.cash).toBeGreaterThan(500_000); // salary arrived before the end
     expect(world.player.record[0]!.outcome).toBe('failed');
-    expect(world.pending.length).toBe(1);
-    expect(world.pending[0]!.kind).toBe('failure');
+    const failurePending = world.pending.filter((p) => p.kind === 'failure');
+    expect(failurePending.length).toBe(1);
     expect(totalAssets(bank.acct)).toBe(0);
-    // Acknowledge clears the queue.
-    tick(world, [{ pendingId: world.pending[0]!.id, choice: 'k' }]);
-    expect(world.pending.length).toBe(0);
+    // Acknowledge clears it.
+    tick(world, [{ pendingId: failurePending[0]!.id, choice: 'k' }]);
+    expect(world.pending.filter((p) => p.kind === 'failure').length).toBe(0);
     const alert = world.feed.find((f) => f.source === 'regulator' && /closed by its regulator/.test(f.text));
     expect(alert).toBeDefined();
   });

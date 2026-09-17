@@ -69,15 +69,15 @@ Done: failures cluster in recessions and spike in crises; player loses deposits 
 Play gate: 30 minutes. Is a normal Tuesday interesting? Is a rival scary?
 
 ## Phase 5: Capital markets and M&A
-- [ ] Private raises with passive investors; dilution.
-- [ ] IPO at size floor; stock price; dividends, buybacks, secondaries; player stock sales.
-- [ ] Holding company.
-- [ ] FDIC assisted auctions with loss share and the Friday-to-Monday sequence; rival competing bids.
-- [ ] Whole bank deals: offer, due diligence, price, cash/stock mix, purchase accounting, integration cost, attrition, approval time.
-- [ ] Failure sequence v2: rival buys player's deposits; record follows.
-- [ ] Out-of-state expansion: entering a state expands its aggregate into individual banks (D42), out-of-state deals.
-- [ ] Business lines in order: mortgage, cards, wealth, investment banking and trading. Each with a real P&L at its threshold.
-- [ ] Event stream: regulator and deal events.
+- [x] Private raises with passive investors; dilution.
+- [x] IPO at size floor; stock price; dividends, buybacks, secondaries; player stock sales.
+- [x] Holding company.
+- [x] FDIC assisted auctions with loss share and the Friday-to-Monday sequence; rival competing bids.
+- [x] Whole bank deals: offer, due diligence, price, cash/stock mix, purchase accounting, integration cost, attrition, approval time.
+- [x] Failure sequence v2: rival buys player's deposits; record follows.
+- [x] Out-of-state expansion: entering a state expands its aggregate into individual banks (D42), out-of-state deals.
+- [x] Business lines in order: mortgage, cards, wealth, investment banking and trading. Each with a real P&L at its threshold.
+- [x] Event stream: regulator and deal events.
 Done: $50M to $500B over a long run by acquisition and business lines without breaking any invariant; crisis-year deals measurably cheaper; state expansion conserves totals; perf passes with 10 states expanded.
 Play gate: one hour. Does buying a failed bank feel like the best day of the game?
 

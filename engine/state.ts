@@ -148,6 +148,34 @@ export interface Bank {
   represents: number; // banks represented: 1, or the count inside an aggregate
   weakQuarters: number; // consecutive quarters of losses or thin capital
   underMonths: number; // consecutive months below adequately capitalized
+  holdingCompany: boolean;
+  priceHistory: { day: number; price: number }[]; // public banks
+  marketCapAtIpo: number | null;
+  integration: { remaining: number; perQuarter: number; deposits: number; until: number }[]; // deals being absorbed
+  lossShare: { balance: number; share: number; until: number } | null; // FDIC loss share on acquired assets
+  lines: Lines;
+  linesAssets: { msr: number; trading: number } | null; // what the lines hold in other assets
+  acquiredNames: string[];
+}
+
+export type LineKey = 'mortgage' | 'cards' | 'wealth' | 'ib';
+
+export interface Line {
+  on: boolean;
+  startedDay: number | null;
+  // Balance sheet footprint and trailing results, dollars.
+  balance: number; // MSR for mortgage, receivables for cards, AUM for wealth, trading book for ib
+  ytdRevenue: number;
+  ytdCost: number;
+  lastYearRevenue: number;
+  lastYearCost: number;
+}
+
+export type Lines = Record<LineKey, Line>;
+
+export function emptyLines(): Lines {
+  const mk = (): Line => ({ on: false, startedDay: null, balance: 0, ytdRevenue: 0, ytdCost: 0, lastYearRevenue: 0, lastYearCost: 0 });
+  return { mortgage: mk(), cards: mk(), wealth: mk(), ib: mk() };
 }
 
 // Rival AI (D35): how hard a bank pushes, in four numbers.
@@ -279,12 +307,12 @@ export interface QuarterReview {
 
 export function defaultPolicy(): LoanPolicy {
   return {
-    maxLtv: { ci: 0.8, cre_oo: 0.8, cre_inv: 0.75, construction: 0.8, resi: 0.9, consumer: 1.0, ag: 0.7, energy: 0.65 },
+    maxLtv: { ci: 0.8, cre_oo: 0.8, cre_inv: 0.75, construction: 0.8, resi: 0.9, consumer: 1.0, ag: 0.7, energy: 0.65, cards: 1.0 },
     minDscr: 1.2,
     maxLeverage: 4,
     requireGuarantor: false,
     maxSize: 5_000_000,
-    allowed: { ci: true, cre_oo: true, cre_inv: true, construction: true, resi: true, consumer: true, ag: true, energy: true },
+    allowed: { ci: true, cre_oo: true, cre_inv: true, construction: true, resi: true, consumer: true, ag: true, energy: true, cards: false },
     sectorCap: 0.35,
     version: 1,
   };
@@ -461,6 +489,7 @@ export interface Pending {
   id: string;
   day: number;
   kind: PendingKind;
+  expires: number | null; // day after which the item resolves itself (auctions close Monday)
   bankId: string | null;
   title: string;
   lines: string[]; // the body, one line each, terminal style
@@ -497,6 +526,18 @@ export interface World {
   dataVintage: string | null;
   bankSeeds: Record<string, BankSeed[]>; // real institution sizes by state, anonymized
   failures: { day: number; state: string; assets: number; name: string }[]; // every failure in the world
+  deals: DealRecord[]; // closed deals, for the record
+}
+
+export interface DealRecord {
+  day: number;
+  kind: 'assisted' | 'whole' | 'rival';
+  buyer: string;
+  target: string;
+  assets: number;
+  price: number;
+  priceToBook: number | null;
+  regime: Regime;
 }
 
 export const FEED_CAP = 2000;
@@ -674,6 +715,7 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
     dataVintage: data?.national.asOf ?? null,
     bankSeeds: data?.banksByState ?? {},
     failures: [],
+    deals: [],
   };
 }
 
@@ -781,6 +823,14 @@ export function createBank(world: World, spec: BankSpec): Bank {
     represents: 1,
     weakQuarters: 0,
     underMonths: 0,
+    holdingCompany: false,
+    priceHistory: [],
+    marketCapAtIpo: null,
+    integration: [],
+    lossShare: null,
+    lines: emptyLines(),
+    linesAssets: null,
+    acquiredNames: [],
   };
   world.banks[bank.id] = bank;
   world.bankOrder.push(bank.id);
