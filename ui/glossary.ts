@@ -74,4 +74,9 @@ export const TERMS: Record<string, string> = {
   'gain on sale': 'The profit from originating a mortgage and selling it to Fannie Mae or Freddie Mac instead of holding it.',
   interchange: 'The fee a card issuer earns on every purchase.',
   'basis point': 'One hundredth of a percent. Twenty five basis points is a quarter of a percent.',
+  'loss environment': 'How much worse than a normal year loans of this type are going bad right now, from unemployment, home prices, the sector and your county. 1x is normal; 2x is a bad year; the 2009 peak was 4x to 25x depending on the type.',
+  'expected loss': 'What the loans you hold in this type should lose over the next year at today\'s stress: the chance each grade defaults, times what a default costs.',
+  'margin after losses': 'The market rate less what your deposits cost less the expected loss. What is left pays the running costs and the shareholders.',
+  'inverted curve': 'Short rates above long rates. Banks borrow short and lend long, so an inverted curve squeezes margins, and a recession has followed every one within two years.',
+  'cost of money': 'The average rate you pay on deposits and borrowings. Every loan has to earn more than this plus its losses.',
 };

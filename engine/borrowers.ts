@@ -8,6 +8,7 @@ import { TYPE, baseRate } from './credit';
 import { sectorReturn12 } from './economy';
 import { type Rng, chance, pick, pickWeighted, rand, randInt, randLogNormal, randNormal } from './rng';
 import { type Bank, type CountyState, type LoanType, type Memo, type World } from './state';
+import { LOAN_TYPES } from './loantypes';
 import { money } from './format';
 
 export interface Application {
@@ -73,23 +74,59 @@ export function drawIncome(r: Rng, county: CountyState): number {
 
 function loanTypeFor(r: Rng, sector: Sector, b: Bank): LoanType {
   const allowed = (t: LoanType) => b.policy.allowed[t];
-  let choices: [LoanType, number][];
-  switch (sector) {
-    case 'energy':
-      choices = [['energy', 0.6], ['ci', 0.3], ['cre_oo', 0.1]];
-      break;
-    case 'agriculture':
-      choices = [['ag', 0.8], ['ci', 0.2]];
-      break;
-    case 'construction':
-      choices = [['construction', 0.45], ['cre_inv', 0.3], ['ci', 0.25]];
-      break;
-    default:
-      choices = [['ci', 0.55], ['cre_oo', 0.32], ['cre_inv', 0.13]];
-  }
+  const choices = typeChoices(sector);
   const ok = choices.filter(([t]) => allowed(t));
   if (ok.length === 0) return 'ci';
   return pickWeighted(r, ok.map((c) => c[0]), ok.map((c) => c[1]));
+}
+
+// The share of a county's applications by loan type under the bank's
+// policy: the same draw generateApplication makes, as probabilities. Cards
+// never walk in; they come from the card line.
+export function demandMix(county: CountyState, b: Bank): Record<LoanType, number> {
+  const out = {} as Record<LoanType, number>;
+  for (const t of LOAN_TYPES) out[t] = 0;
+  const allowed = b.policy.allowed;
+  // Households: 40% of applications.
+  const household = 0.4;
+  let resi = allowed.resi ? 0.62 : 0;
+  let consumer = 1 - resi;
+  if (!allowed.consumer && allowed.resi) {
+    resi = 1;
+    consumer = 0;
+  }
+  out.resi += household * resi;
+  out.consumer += household * consumer;
+  // Businesses: the county's sector mix with government damped, then the
+  // type each sector borrows for.
+  const weights = SECTORS.map((s) => (s === 'government' ? 0.2 : 1) * (county.sectors[s] ?? 0));
+  const total = weights.reduce((a, w) => a + w, 0);
+  if (total <= 0) return out;
+  SECTORS.forEach((sector, i) => {
+    const pSector = ((weights[i] ?? 0) / total) * (1 - household);
+    if (pSector <= 0) return;
+    const choices = typeChoices(sector).filter(([t]) => allowed[t]);
+    if (choices.length === 0) {
+      out.ci += pSector;
+      return;
+    }
+    const w = choices.reduce((a, c) => a + c[1], 0);
+    for (const [t, x] of choices) out[t] += (pSector * x) / w;
+  });
+  return out;
+}
+
+function typeChoices(sector: Sector): [LoanType, number][] {
+  switch (sector) {
+    case 'energy':
+      return [['energy', 0.6], ['ci', 0.3], ['cre_oo', 0.1]];
+    case 'agriculture':
+      return [['ag', 0.8], ['ci', 0.2]];
+    case 'construction':
+      return [['construction', 0.45], ['cre_inv', 0.3], ['ci', 0.25]];
+    default:
+      return [['ci', 0.55], ['cre_oo', 0.32], ['cre_inv', 0.13]];
+  }
 }
 
 // One application from a county. The county decides who walks in.

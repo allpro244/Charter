@@ -11,10 +11,11 @@ import { fundLoan, type FundTerms } from './loans';
 import { ccoSkill, cloAppetite, cloPricingEdge } from './officers';
 import { chance, pick, rand } from './rng';
 import { type Bank, type Decision, type LoanType, type Pending, type World, playerBank } from './state';
+import { LOAN_TYPES, emptyByType } from './loantypes';
 import { money, pct } from './format';
 import { growthRestricted } from './regulation';
 
-const REGIME_DEMAND = { expansion: 1.1, late: 1.0, recession: 0.65, recovery: 0.9 } as const;
+export const REGIME_DEMAND = { expansion: 1.1, late: 1.0, recession: 0.65, recovery: 0.9 } as const;
 
 function poisson(world: World, lambda: number): number {
   const L = Math.exp(-lambda);
@@ -32,6 +33,26 @@ export function arrivalRate(world: World, b: Bank): number {
   const size = Math.max(0.5, Math.min(3, Math.pow(Math.max(assets, 1) / 100_000_000, 0.3)));
   const branches = Math.max(1, b.branches.length);
   return (0.25 + 0.3 * branches) * REGIME_DEMAND[world.economy.regime] * size * b.originationAppetite * cloAppetite(b);
+}
+
+// Your rate against the market moves who walks in: every 25 basis points
+// under market brings about the calibrated share more borrowers of that
+// type, every 25 over sends the same share away. Smooth, symmetric.
+export function demandMultiplier(b: Bank, t: LoanType): number {
+  const offset = b.pricing ? (b.pricing[t] ?? 0) : 0;
+  if (offset === 0) return 1;
+  const k = Math.log(1 + calibration.loanRateElasticity.typical / 100) / 0.0025;
+  return Math.exp(-k * offset);
+}
+
+export const PRICING_MIN = -0.02;
+export const PRICING_MAX = 0.03;
+
+export function setPricing(world: World, t: LoanType, offset: number): void {
+  const b = playerBank(world);
+  if (!b) return;
+  if (!b.pricing) b.pricing = emptyByType(0);
+  b.pricing[t] = Math.max(PRICING_MIN, Math.min(PRICING_MAX, Math.round(offset * 10_000) / 10_000));
 }
 
 export function aboveDial(b: Bank, app: Application): boolean {
@@ -95,7 +116,12 @@ export function applicationsDaily(ctx: Ctx): void {
   const { world } = ctx;
   const b = playerBank(world);
   if (!b || b.status !== 'open' || !b.homeCounty) return;
-  const n = poisson(world, arrivalRate(world, b));
+  // Pricing under market on any type raises the arrival rate to the best
+  // multiplier; each application then stays with the odds of its own type
+  // against that best, so every type arrives at exactly its own rate.
+  let best = 1;
+  for (const t of LOAN_TYPES) best = Math.max(best, demandMultiplier(b, t));
+  const n = poisson(world, arrivalRate(world, b) * best);
   if (n === 0) return;
   const skill = ccoSkill(b);
   const forPlayer: Application[] = [];
@@ -104,9 +130,14 @@ export function applicationsDaily(ctx: Ctx): void {
     const county = world.geo.counties[branch ? branch.county : b.homeCounty];
     if (!county) continue;
     const app = generateApplication(world, b, county, world.rng);
-    app.memo.rate = Math.round((app.memo.rate + cloPricingEdge(b)) * 10_000) / 10_000;
+    const m = demandMultiplier(b, app.type);
+    if (m < best && !chance(world.rng, m / best)) continue;
+    const offset = b.pricing ? (b.pricing[app.type] ?? 0) : 0;
+    app.memo.rate = Math.round((app.memo.rate + cloPricingEdge(b) + offset) * 10_000) / 10_000;
     ccoReview(app, b, skill, world.rng);
     b.applications.received += 1;
+    if (!b.applicationsByType) b.applicationsByType = emptyByType(0);
+    b.applicationsByType[app.type] += 1;
     if (aboveDial(b, app)) forPlayer.push(app);
     else autoDecide(ctx, b, app, skill);
   }

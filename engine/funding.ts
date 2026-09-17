@@ -39,7 +39,7 @@ export function fairFraction(world: World, lot: Lot): number {
 }
 
 // Execution cost from the CFO: a weak CFO pays more of the bid-ask.
-function executionCost(b: Bank): number {
+export function executionCost(b: Bank): number {
   const cfo = officer(b, 'cfo');
   const skill = cfo?.skill ?? 35;
   return 0.0015 * (1 - skill / 100);

@@ -249,7 +249,7 @@ function SparkPanel({ label, value, values }: { label: string; value: string; va
 export function EconomyPanel({ world }: { world: World }) {
   const e = world.economy;
   return (
-    <table>
+    <table className="wrap">
       <thead>
         <tr>
           <th>
@@ -263,7 +263,7 @@ export function EconomyPanel({ world }: { world: World }) {
           <td>Cycle</td>
           <td className="num">
             {e.regime === 'late' ? 'late cycle' : e.regime}
-            {e.crisis && e.regime === 'recession' ? ' (banking crisis)' : ''}
+            {e.crisis && e.regime === 'recession' ? ', banking crisis' : ''}
           </td>
         </tr>
         <tr>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { totalAssets, totalEquity, totalLiabilities } from '../engine/ledger';
+import { netIncome, totalAssets, totalEquity, totalLiabilities } from '../engine/ledger';
 import { createBank, createWorld } from '../engine/state';
 import { assertWorldBalanced, tick } from '../engine/tick';
 import { dateOf, dayOf, daysInMonth, formatDate, isMonthEnd, isQuarterEnd, monthIndex } from '../engine/time';
@@ -66,6 +66,7 @@ describe('tick', () => {
       loans: 70_000_000,
       securitiesAFS: 15_000_000,
     });
+    world.playerBankId = bank.id;
     // Retained earnings move by net income less dividends. AOCI moves with
     // the securities mark and is outside net income.
     const startEquity = totalEquity(bank.acct) - bank.acct.aoci;
@@ -84,6 +85,12 @@ describe('tick', () => {
     }
     assertWorldBalanced(world);
     expect(bank.reports.length).toBe(4);
+    // The player's bank keeps every closed quarter's statement, one per call report, and they agree on profit.
+    expect(bank.quarterHistory.length).toBe(4);
+    for (let i = 0; i < 4; i++) {
+      expect(bank.quarterHistory[i]!.quarter).toBe(bank.reports[i]!.quarter);
+      expect(netIncome(bank.quarterHistory[i]!.is)).toBeCloseTo(bank.reports[i]!.netIncome, 6);
+    }
     const year = bank.is.lastYear;
     expect(year).not.toBeNull();
     expect(year!.days).toBe(365);

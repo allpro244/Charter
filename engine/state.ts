@@ -109,6 +109,7 @@ export interface Bank {
   price: number | null; // per share, public banks only
   bookValueAtLastClose: number;
   reports: CallReport[];
+  quarterHistory: { quarter: string; is: IncomeStatement }[]; // every closed quarter's income statement, player's bank only
   confidence: number; // 0 to 1, depositor confidence
   uninsuredShare: number; // ratio of deposits above the insurance limit
   dividendPayout: number; // ratio of quarterly earnings paid out (rivals set by AI, player by choice)
@@ -138,6 +139,8 @@ export interface Bank {
   chargeOffsByType: Record<LoanType, number>; // quarter to date
   recoveriesByType: Record<LoanType, number>; // quarter to date
   originationsByType: Record<LoanType, number>; // year to date
+  applicationsByType: Record<LoanType, number>; // year to date, received
+  pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
@@ -941,9 +944,12 @@ export function createBank(world: World, spec: BankSpec): Bank {
     chargeOffsByType: emptyByType(0),
     recoveriesByType: emptyByType(0),
     originationsByType: emptyByType(0),
+    applicationsByType: emptyByType(0),
+    pricing: emptyByType(0),
     originationAppetite: 1,
     applications: { received: 0, toDesk: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
     losses: [],
+    quarterHistory: [],
     lifetimeChargeOffsByType: emptyByType(0),
     ai: null,
     riskTilt: 1,

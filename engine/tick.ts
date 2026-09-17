@@ -289,12 +289,17 @@ function quarterlyClose(ctx: Ctx): void {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
     b.reports.push(callReport(world, b));
+    if (b.id === world.playerBankId) {
+      const { y, q } = quarterOf(world.day);
+      (b.quarterHistory ??= []).push({ quarter: `${y}Q${q}`, is: b.is.quarter });
+    }
     b.is.lastQuarter = b.is.quarter;
     b.is.quarter = emptyIS();
     if (isYearEnd(world.day)) {
       b.is.lastYear = b.is.year;
       b.is.year = emptyIS();
       b.originationsByType = emptyByType(0);
+      b.applicationsByType = emptyByType(0);
       linesYearEnd(b);
     }
   }

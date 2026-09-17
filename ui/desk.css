@@ -245,9 +245,17 @@ th,
 td {
   padding: 6px 12px;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
   vertical-align: top;
   border-bottom: 1px solid var(--line);
+}
+
+/* Words wrap so a table never pushes the page wider than the window.
+   Numbers never break in the middle. */
+td.num,
+td.when,
+td.nowrap {
+  white-space: nowrap;
 }
 
 thead th {
@@ -520,9 +528,28 @@ kbd {
 /* The feed and its side column. */
 .feed-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
   gap: 16px;
   align-items: start;
+}
+
+/* Nothing in either column may push the page wider than the window. */
+.feed-grid > * {
+  min-width: 0;
+}
+
+.feed-grid table {
+  table-layout: auto;
+}
+
+.feed-grid td,
+.feed-grid th {
+  white-space: normal;
+}
+
+.feed-grid td.num,
+.feed-grid th.num {
+  white-space: nowrap;
 }
 
 table.feed td {

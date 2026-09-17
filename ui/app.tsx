@@ -21,13 +21,15 @@ import { FundScreen } from './fund';
 import { OfficersScreen } from './off';
 import { OverviewScreen } from './overview';
 import { EarningsScreen } from './earnings';
+import { EconomyScreen } from './economy';
 import { MarketScreen } from './market';
 import { openBranch } from '../engine/deposits';
 
-type Screen = 'OVERVIEW' | 'LENDING' | 'MONEY' | 'EARNINGS' | 'PEOPLE' | 'MARKET' | 'MAP' | 'YOU' | 'DEBUG';
+type Screen = 'OVERVIEW' | 'LENDING' | 'ECONOMY' | 'MONEY' | 'EARNINGS' | 'PEOPLE' | 'MARKET' | 'MAP' | 'YOU' | 'DEBUG';
 const SCREENS: { id: Screen; label: string; key: string }[] = [
   { id: 'OVERVIEW', label: 'Overview', key: 'o' },
   { id: 'LENDING', label: 'Lending', key: 'l' },
+  { id: 'ECONOMY', label: 'Economy', key: 'c' },
   { id: 'MONEY', label: 'Money', key: 'f' },
   { id: 'EARNINGS', label: 'Earnings', key: 'e' },
   { id: 'PEOPLE', label: 'People', key: 'p' },
@@ -475,6 +477,7 @@ export function App() {
           />
         )}
         {screen === 'LENDING' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
+        {screen === 'ECONOMY' && bank && <EconomyScreen world={world} bank={bank} onGo={(tab) => setScreen(tab as Screen)} />}
         {screen === 'MONEY' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
         {screen === 'EARNINGS' && bank && <EarningsScreen bank={bank} unit={unit} />}
         {screen === 'PEOPLE' && bank && <OfficersScreen world={world} bank={bank} act={act} />}

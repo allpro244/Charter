@@ -235,6 +235,25 @@ export function refreshLoanYield(b: Bank): void {
 // move, home prices for housing-linked types, and the home county's
 // condition (D41). Multiplicative, clamped.
 export function stressFor(world: World, b: Bank, t: LoanType): number {
+  const macro = macroStressFor(world, b, t);
+  // The bank's own underwriting quality and concentration are not: a book
+  // heavy in one type moves together (SYSTEMS.md system 3), and one bank
+  // loses three times what its neighbor does in the same year.
+  let own = Math.log(b.riskTilt);
+  const loans = b.acct.loans;
+  if (loans > 0) {
+    let typeBal = 0;
+    for (const p of b.pools) if (p.type === t) typeBal += p.balance;
+    const share = typeBal / loans;
+    if (share > 0.25) own += (share - 0.25) * 2;
+  }
+  return macro * Math.exp(own);
+}
+
+// The environment's part of the stress: everything in it is on the desk
+// (unemployment, sector moves, home prices, the home county, the crisis).
+// 1 is a normal year; the type's crisis cap is its 2009 peak.
+export function macroStressFor(world: World, b: Bank, t: LoanType): number {
   const e = world.economy;
   const p = TYPE[t];
   // Asymmetric: rising unemployment hurts far more than low unemployment
@@ -253,19 +272,36 @@ export function stressFor(world: World, b: Bank, t: LoanType): number {
   if (e.crisis && e.regime === 'recession') logS += 0.8;
   if (e.crisis && e.regime === 'recovery') logS += 0.8 * Math.max(0, 1 - e.monthsSinceRecession / 36);
   // The environment is clamped to the type's 2009 peak against normal.
-  const macro = Math.max(0.6, Math.min(p.crisisCap, Math.exp(logS)));
-  // The bank's own underwriting quality and concentration are not: a book
-  // heavy in one type moves together (SYSTEMS.md system 3), and one bank
-  // loses three times what its neighbor does in the same year.
-  let own = Math.log(b.riskTilt);
-  const loans = b.acct.loans;
-  if (loans > 0) {
-    let typeBal = 0;
-    for (const p of b.pools) if (p.type === t) typeBal += p.balance;
-    const share = typeBal / loans;
-    if (share > 0.25) own += (share - 0.25) * 2;
+  return Math.max(0.6, Math.min(p.crisisCap, Math.exp(logS)));
+}
+
+// Annual default probability of one grade under a stress factor, the same
+// shaping the monthly migration uses.
+export function stressedPd(grade: number, s: number): number {
+  const k = Math.max(0, Math.min(GRADES - 1, grade - 1));
+  const sk = k < 3 ? s : Math.pow(s, STRESS_POWER[k] as number);
+  return Math.min(0.25 * 12, (PD_BY_GRADE[k] as number) * sk);
+}
+
+// Expected annual loss on a bank's book of one type at today's stress, as
+// a share of balance: default probability by grade times the type's loss
+// given default. With no balance in the type, the answer is for a fresh
+// grade 4 loan, the typical new origination.
+export function expectedLossRate(world: World, b: Bank, t: LoanType): number {
+  const s = stressFor(world, b, t);
+  const lgd = TYPE[t].lgd;
+  let bal = 0;
+  let loss = 0;
+  for (const p of b.pools) {
+    if (p.type !== t) continue;
+    for (let k = 0; k < GRADES - 1; k++) {
+      const x = p.grades[k] ?? 0;
+      bal += x;
+      loss += x * stressedPd(k + 1, s);
+    }
   }
-  return macro * Math.exp(own);
+  if (bal <= 0) return stressedPd(4, s) * lgd;
+  return (loss / bal) * lgd;
 }
 
 // Interest for one pool over a month: performing balance x rate x days/365.

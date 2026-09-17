@@ -77,7 +77,7 @@ export function reviewQuarterly(ctx: Ctx): void {
       if (b.reviews.length > 400) b.reviews.shift();
       const assets = b.acct.cash + b.acct.loans - b.acct.allowance + b.acct.securitiesAFS + b.acct.securitiesHTM + b.acct.afsValuation + b.acct.reo + b.acct.interestReceivable + b.acct.premises + b.acct.goodwill + b.acct.otherAssets;
       const roa = assets > 0 ? (review.netIncome * 4) / assets : 0;
-      emit(ctx, 'system', `${review.quarter} closed: net income ${money(review.netIncome)}, ROA ${pct(roa)}, provision ${money(review.provision)}, charge-offs ${money(b.is.quarter.chargeOffs)}. See the Quarter tab for the review.`, {
+      emit(ctx, 'system', `${review.quarter} closed: net income ${money(review.netIncome)}, ROA ${pct(roa)}, provision ${money(review.provision)}, charge-offs ${money(b.is.quarter.chargeOffs)}. See the Earnings tab for the review.`, {
         severity: review.netIncome >= 0 ? 'good' : 'alert',
         bankId: b.id,
       });

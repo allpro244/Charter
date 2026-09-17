@@ -8,7 +8,9 @@ import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
 import { newPlayer, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
 import { tick } from '../engine/tick';
-import { setDial, setPolicy } from '../engine/underwriting';
+import { demandMultiplier, setDial, setPolicy, setPricing } from '../engine/underwriting';
+import { createBank } from '../engine/state';
+import { calibration } from '../data/calibration';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
 
 const SEEDS = process.env.CHARTER_FULL ? 50 : 20;
@@ -124,5 +126,54 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
       expect(a.truePd).toBe(pd);
     }
     expect(flagsHigh).toBeGreaterThan(flagsLow);
+  });
+});
+
+describe('the rate sheet', () => {
+  it('pricing under market brings borrowers in by the calibrated share, over market sends them away, market is one', () => {
+    const world = createWorld(11);
+    const bank = createBank(world, { name: 'P', kind: 'rival', state: 'TX', capital: 5_000_000, deposits: { checking: 40_000_000 }, loans: 30_000_000 });
+    world.playerBankId = bank.id;
+    expect(demandMultiplier(bank, 'ci')).toBe(1);
+    setPricing(world, 'ci', -0.0025);
+    const per25 = calibration.loanRateElasticity.typical / 100;
+    expect(demandMultiplier(bank, 'ci')).toBeCloseTo(1 + per25, 6);
+    setPricing(world, 'ci', 0.0025);
+    expect(demandMultiplier(bank, 'ci')).toBeCloseTo(1 / (1 + per25), 6);
+    // Clamped to the sheet's range and rounded to a basis point.
+    setPricing(world, 'resi', -0.5);
+    expect(bank.pricing.resi).toBe(-0.02);
+    setPricing(world, 'resi', 0.00123);
+    expect(bank.pricing.resi).toBe(0.0012);
+  });
+
+  it.skipIf(!hasFixtures())('a cheaper C&I rate brings more C&I borrowers and no other type over a year, and every memo carries the offset', () => {
+    const run = (offset: number) => {
+      const data = loadFixtures();
+      const world = createWorld(21, data);
+      newPlayer(world);
+      const metro = startableMetros(world)[0]!;
+      const ctx = { world, events: [] };
+      const bank = startCharter(ctx, { mode: 'charter', cbsa: metro.cbsa, name: 'R', invest: 2_000_000 });
+      setPricing(world, 'ci', offset);
+      setDial(world, 0, 0);
+      let rateCheck = true;
+      for (let d = 0; d < 360; d++) {
+        tick(world);
+        for (const p of world.pending) {
+          if (p.kind === 'loan_application') {
+            const app = p.data.app as { type: string; memo: { rate: number } };
+            if (app.type === 'ci' && offset !== 0 && app.memo.rate <= 0) rateCheck = false;
+          }
+        }
+        world.pending = [];
+      }
+      return { ci: bank.applicationsByType.ci, resi: bank.applicationsByType.resi, rateCheck };
+    };
+    const base = run(0);
+    const cheap = run(-0.01);
+    expect(cheap.rateCheck).toBe(true);
+    expect(cheap.ci).toBeGreaterThan(base.ci * 1.15);
+    expect(Math.abs(cheap.resi - base.resi)).toBeLessThan(Math.max(10, base.resi * 0.35));
   });
 });

@@ -3,14 +3,15 @@
 // basis point at a time; every amount can be typed.
 
 import { useState } from 'react';
+import { calibration } from '../data/calibration';
 import type { Ctx } from '../engine/ctx';
 import { DEFAULT_MIX, UNINSURED, bankDepositRate, closeBranch, coreDeposits, marketDepositRate, marketRate, setRate } from '../engine/deposits';
-import { PRODUCT_LABEL, buySecurities, canRaiseBrokered, fhlbCapacity, borrowFhlb, raiseBrokered, repayBrokered, repayFhlb, sellSecurities, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
+import { PRODUCT_LABEL, PRODUCT_SPREAD, buySecurities, canRaiseBrokered, executionCost, fhlbCapacity, borrowFhlb, marketYield, raiseBrokered, repayBrokered, repayFhlb, sellSecurities, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
 import { DEPOSIT_TYPES, type DepositType, totalAssets, totalDeposits } from '../engine/ledger';
 import { type Bank, type LotKind, type Product, type World } from '../engine/state';
 import { SWAP_FLOOR, enterSwap, terminateSwap } from '../engine/regulation';
 import { formatDate } from '../engine/time';
-import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
+import { type Unit, dollars, num, pct, unitLabel, usd } from './format';
 import { AmountField, Stepper, Term } from './parts';
 import { CapitalPanel } from './capital';
 import { BalanceSheetScreen } from './screens';
@@ -257,7 +258,7 @@ function Deposits({ world, bank, unit, act }: Props) {
   );
 }
 
-function Bonds({ bank, unit, act }: Props) {
+function Bonds({ world, bank, unit, act }: Props) {
   const a = bank.acct;
   const assets = totalAssets(a);
   const step = Math.max(100_000, Math.round((assets * 0.01) / 100_000) * 100_000);
@@ -265,22 +266,144 @@ function Bonds({ bank, unit, act }: Props) {
   const [kind, setKind] = useState<LotKind>('afs');
   const [product, setProduct] = useState<Product>('treasury');
   const [duration, setDuration] = useState(3);
+  const e = world.economy;
+  const cashYield = Math.max(0, e.fedFunds + calibration.cashYieldVsFedFunds.typical / 10_000);
+  const yieldOf = (p: Product, d: number) => marketYield(world, d) + PRODUCT_SPREAD[p];
+  const y = yieldOf(product, duration);
+  const fee = Math.round(amount * executionCost(bank));
+  const pickup = y - cashYield;
+  const hit = amount * duration * 0.01;
+  const bookCost = a.securitiesAFS + a.securitiesHTM;
+  const bookFair = bank.lots.reduce((s, l) => s + l.fair, 0);
+  const bookYield = bookCost > 0 ? (a.securitiesAFS * bank.afsYield + a.securitiesHTM * bank.htmYield) / bookCost : 0;
+  const bookDuration = bookCost > 0 ? (a.securitiesAFS * bank.afsDuration + a.securitiesHTM * bank.htmDuration) / bookCost : 0;
   return (
     <div>
       <p className="hint">
-        Idle cash earns the overnight rate; bonds earn more and carry rate risk. <Term k="available for sale">Available for sale</Term> bonds can be sold but swing with the market; <Term k="held to maturity">held to maturity</Term> bonds stay at cost and stay put.
+        Idle cash earns the overnight rate. A bond locks money up for a term and pays more; the longer the term, the more it pays and the more its price moves when rates move. Pick a yield on the sheet, choose a book, and the panel shows exactly what you get before you buy.
       </p>
+      <div className="cols">
+        <table>
+          <thead>
+            <tr>
+              <th>Rates today</th>
+              {PRODUCTS.map((p) => (
+                <th key={p} className="num">
+                  <Term k={PRODUCT_LABEL[p]}>{PRODUCT_LABEL[p]}</Term>
+                </th>
+              ))}
+              <th className="num">if rates rise 1 point</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Cash, overnight</td>
+              <td className="num" colSpan={3}>
+                {pct(cashYield)}
+              </td>
+              <td className="num">no change</td>
+            </tr>
+            {TERMS.map((d) => (
+              <tr key={d}>
+                <td>{d} year{d > 1 ? 's' : ''}</td>
+                {PRODUCTS.map((p) => (
+                  <td key={p} className="num">
+                    <button className={'btn small' + (product === p && duration === d ? ' on' : '')} onClick={() => { setProduct(p); setDuration(d); }} title={`${d} year ${PRODUCT_LABEL[p]}: pick this yield`}>
+                      {pct(yieldOf(p, d))}
+                    </button>
+                  </td>
+                ))}
+                <td className="num alert">({pct(d * 0.01, 0)} of price)</td>
+              </tr>
+            ))}
+            <tr className="memo-row">
+              <td colSpan={5}>
+                A yield is what a bond bought today pays every year until it matures. Treasuries are the safest and pay the least; agencies pay {Math.round(PRODUCT_SPREAD.agency * 10_000)} basis points more; agency mortgage bonds pay {Math.round(PRODUCT_SPREAD.mbs * 10_000)} more but pay off early when rates fall. The last column is roughly how much of the price a one point rise in rates takes away.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="wrap">
+          <thead>
+            <tr>
+              <th colSpan={2}>Your pick</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Amount</td>
+              <td>
+                <AmountField value={amount} onChange={setAmount} presets={[step, step * 5, step * 25]} label="" />
+              </td>
+            </tr>
+            <tr>
+              <td>Book</td>
+              <td>
+                <div className="seg">
+                  <button className={kind === 'afs' ? 'on' : ''} onClick={() => setKind('afs')}>
+                    Available for sale
+                  </button>
+                  <button className={kind === 'htm' ? 'on' : ''} onClick={() => setKind('htm')}>
+                    Held to maturity
+                  </button>
+                </div>
+                <div className="dim">{kind === 'afs' ? 'Can be sold any day. Its price swings show up in equity every month.' : 'Cannot be sold. Carried at cost, so price swings stay off the books.'}</div>
+              </td>
+            </tr>
+            <tr>
+              <td>Bond</td>
+              <td>
+                {duration} year <Term k={PRODUCT_LABEL[product]}>{PRODUCT_LABEL[product]}</Term>
+              </td>
+            </tr>
+            <tr className="total">
+              <td>Yield</td>
+              <td className="num">{pct(y)}</td>
+            </tr>
+            <tr>
+              <td>Earns a year</td>
+              <td className="num">{usd(amount * y)}</td>
+            </tr>
+            <tr>
+              <td>Pickup over leaving it in cash</td>
+              <td className={'num' + (pickup < 0 ? ' alert' : ' positive')}>
+                {pickup >= 0 ? '+' : ''}
+                {(pickup * 100).toFixed(2)} pts, {usd(amount * pickup)} a year
+              </td>
+            </tr>
+            <tr>
+              <td>If rates rise 1 point</td>
+              <td className="num alert">
+                ({usd(hit)}) of value, {kind === 'afs' ? 'taken from equity' : 'noted but not booked'}
+              </td>
+            </tr>
+            <tr>
+              <td>Dealer fee</td>
+              <td className="num">{usd(fee)}</td>
+            </tr>
+            <tr>
+              <td colSpan={2}>
+                <button className="btn primary" disabled={a.cash < amount || amount <= 0} onClick={() => act((c) => buySecurities(c, bank, kind, product, amount, duration), `Bought ${usd(amount)} of ${duration} year ${PRODUCT_LABEL[product]} at ${pct(y)}`)}>
+                  Buy {usd(amount)} of {duration} year {PRODUCT_LABEL[product]} at {pct(y)}
+                </button>
+                {a.cash < amount && <span className="dim"> Not enough cash: {usd(a.cash)} on hand.</span>}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <table>
         <thead>
           <tr>
-            <th>Bonds {unitLabel(unit)}</th>
+            <th>Bonds you hold {unitLabel(unit)}</th>
             <th>book</th>
             <th className="num">cost</th>
             <th className="num">worth today</th>
             <th className="num">
               <Term k="unrealized loss">unrealized</Term>
             </th>
-            <th className="num">coupon</th>
+            <th className="num">yield</th>
+            <th className="num">earns a year</th>
             <th className="num">
               <Term k="duration">duration</Term>
             </th>
@@ -292,18 +415,19 @@ function Bonds({ bank, unit, act }: Props) {
           {bank.lots.map((l) => (
             <tr key={l.id} className={l.fair < l.cost * 0.9 ? 'alert' : ''}>
               <td>
-                <Term k={PRODUCT_LABEL[l.product]}>{PRODUCT_LABEL[l.product]}</Term>
+                {Math.round(l.duration)} year <Term k={PRODUCT_LABEL[l.product]}>{PRODUCT_LABEL[l.product]}</Term>
               </td>
-              <td>{l.kind.toUpperCase()}</td>
+              <td>{l.kind === 'afs' ? 'for sale' : 'to maturity'}</td>
               <td className="num">{dollars(l.cost, unit)}</td>
               <td className="num">{dollars(l.fair, unit)}</td>
-              <td className="num">{dollars(l.fair - l.cost, unit)}</td>
+              <td className={'num' + (l.fair < l.cost ? ' alert' : '')}>{dollars(l.fair - l.cost, unit)}</td>
               <td className="num">{pct(l.coupon)}</td>
+              <td className="num">{dollars(l.cost * l.coupon, unit)}</td>
               <td className="num">{l.duration.toFixed(1)}y</td>
               <td className="num">{formatDate(l.purchasedDay)}</td>
               <td>
                 {l.kind === 'afs' && (
-                  <button className="btn small" onClick={() => act((c) => sellSecurities(c, bank, l.id, Math.min(l.cost, amount)))}>
+                  <button className="btn small" onClick={() => act((c) => sellSecurities(c, bank, l.id, Math.min(l.cost, amount)), `Sold ${usd(Math.min(l.cost, amount))} of ${PRODUCT_LABEL[l.product]}`)}>
                     Sell {usd(Math.min(l.cost, amount))}
                   </button>
                 )}
@@ -312,45 +436,29 @@ function Bonds({ bank, unit, act }: Props) {
           ))}
           {bank.lots.length === 0 && (
             <tr>
-              <td colSpan={9} className="empty">
-                No bonds held.
+              <td colSpan={10} className="empty">
+                No bonds held. Everything beyond the loans sits in cash at {pct(cashYield)}.
               </td>
+            </tr>
+          )}
+          {bank.lots.length > 0 && (
+            <tr className="total">
+              <td>All bonds</td>
+              <td></td>
+              <td className="num">{dollars(bookCost, unit)}</td>
+              <td className="num">{dollars(bookFair, unit)}</td>
+              <td className={'num' + (bookFair < bookCost ? ' alert' : '')}>{dollars(bookFair - bookCost, unit)}</td>
+              <td className="num">{pct(bookYield)}</td>
+              <td className="num">{dollars(bookCost * bookYield, unit)}</td>
+              <td className="num">{bookDuration.toFixed(1)}y</td>
+              <td colSpan={2}></td>
             </tr>
           )}
         </tbody>
       </table>
-      <div className="toolbar">
-        <AmountField value={amount} onChange={setAmount} presets={[step, step * 5, step * 25]} label="Amount" />
-        <span className="seg-label">Buy</span>
-        <div className="seg">
-          <button className={kind === 'afs' ? 'on' : ''} onClick={() => setKind('afs')} title="available for sale: marked to market, can be sold">
-            AFS
-          </button>
-          <button className={kind === 'htm' ? 'on' : ''} onClick={() => setKind('htm')} title="held to maturity: carried at cost, cannot be sold">
-            HTM
-          </button>
-        </div>
-        <div className="seg">
-          {(['treasury', 'agency', 'mbs'] as Product[]).map((p) => (
-            <button key={p} className={product === p ? 'on' : ''} onClick={() => setProduct(p)}>
-              {PRODUCT_LABEL[p]}
-            </button>
-          ))}
-        </div>
-        <div className="seg">
-          {[1, 3, 5, 7, 10].map((d) => (
-            <button key={d} className={duration === d ? 'on' : ''} onClick={() => setDuration(d)}>
-              {d} year
-            </button>
-          ))}
-        </div>
-        <button className="btn primary" disabled={a.cash < amount} onClick={() => act((c) => buySecurities(c, bank, kind, product, amount, duration))}>
-          Buy {usd(amount)}
-        </button>
-      </div>
       {assets < SWAP_FLOOR ? (
         <p className="hint">
-          <Term k="swaps">Swaps</Term> to hedge the bond book unlock at {short(SWAP_FLOOR)} of assets.
+          <Term k="swaps">Swaps</Term> to hedge the bond book unlock at {usd(SWAP_FLOOR)} of assets.
         </p>
       ) : (
         <table>
@@ -396,3 +504,6 @@ function Bonds({ bank, unit, act }: Props) {
     </div>
   );
 }
+
+const TERMS = [1, 2, 3, 5, 7, 10];
+const PRODUCTS: Product[] = ['treasury', 'agency', 'mbs'];

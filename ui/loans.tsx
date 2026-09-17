@@ -5,13 +5,15 @@
 
 import { useMemo, useState } from 'react';
 import { TYPE, bookByType } from '../engine/credit';
-import { GRADES } from '../engine/loantypes';
-import { LOAN_TYPES } from '../engine/loantypes';
+import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from '../engine/loantypes';
 import { derive, hashString, rand, randNormal } from '../engine/rng';
 import { type Bank, type Loan, type Pool, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { decidedText } from '../engine/loans';
-import { setDial, setPolicy, setTypeAllowed } from '../engine/underwriting';
+import { PRICING_MAX, PRICING_MIN, demandMultiplier, setDial, setPolicy, setPricing, setTypeAllowed } from '../engine/underwriting';
+import { baseRate } from '../engine/credit';
+import { bankDepositRate } from '../engine/deposits';
+import { calibration } from '../data/calibration';
 import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
 import { AmountField, Stepper, Term } from './parts';
 
@@ -22,7 +24,7 @@ interface Props {
   refresh: () => void;
 }
 
-type Tab = 'book' | 'policy' | 'pools';
+type Tab = 'book' | 'sheet' | 'policy' | 'pools';
 
 export function LoansScreen({ world, bank, unit, refresh }: Props) {
   const [tab, setTab] = useState<Tab>('book');
@@ -37,6 +39,9 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
         <div className="seg">
           <button className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
             Your book
+          </button>
+          <button className={tab === 'sheet' ? 'on' : ''} onClick={() => setTab('sheet')}>
+            Rate sheet
           </button>
           <button className={tab === 'policy' ? 'on' : ''} onClick={() => setTab('policy')}>
             Policy and dial
@@ -115,6 +120,7 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
       </table>
       {tab === 'book' && <Book bank={bank} unit={unit} openLoan={openLoan} setOpenLoan={setOpenLoan} />}
       {tab === 'pools' && <Pools world={world} bank={bank} unit={unit} openPool={openPool} setOpenPool={setOpenPool} />}
+      {tab === 'sheet' && <RateSheet world={world} bank={bank} refresh={refresh} />}
       {tab === 'policy' && <Policy world={world} bank={bank} refresh={refresh} />}
     </div>
   );
@@ -456,6 +462,75 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// The rate sheet: your rate against the market for every type, one basis
+// point at a time. Under market brings borrowers in and gives up yield;
+// over market sends them to rivals and keeps it.
+function RateSheet({ world, bank, refresh }: { world: World; bank: Bank; refresh: () => void }) {
+  const pricing = bank.pricing ?? emptyByType(0);
+  const received = bank.applicationsByType ?? emptyByType(0);
+  const cost = bankDepositRate(bank);
+  const per25 = calibration.loanRateElasticity.typical;
+  const set = (t: LoanType, v: number) => {
+    setPricing(world, t, v);
+    refresh();
+  };
+  return (
+    <div>
+      <p className="hint">
+        What you charge against the market, by loan type. Every 25 basis points under the market brings about {per25}% more borrowers of that type through the door; every 25 over sends that many away. The market rate moves with the Fed and the curve; your offset stays where you put it. Your deposits cost {pct(cost)} today.
+      </p>
+      <table className="wrap">
+        <thead>
+          <tr>
+            <th>Rate sheet</th>
+            <th className="num">market today</th>
+            <th>your offset</th>
+            <th className="num">your rate</th>
+            <th className="num">borrowers</th>
+            <th className="num">walked in this year</th>
+            <th className="num">booked this year</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {LOAN_TYPES.filter((t) => t !== 'cards').map((t) => {
+            const market = baseRate(world, t);
+            const off = pricing[t] ?? 0;
+            const m = demandMultiplier(bank, t);
+            return (
+              <tr key={t} className={bank.policy.allowed[t] ? '' : 'dim'}>
+                <td>
+                  <Term k={TYPE[t].label}>{TYPE[t].label}</Term>
+                </td>
+                <td className="num">{pct(market)}</td>
+                <td>
+                  <Stepper value={off} steps={[{ d: 0.0001, label: '1bp' }, { d: 0.0025, label: '25bp' }]} fmt={(v) => `${v > 0 ? '+' : v < 0 ? '-' : ''}${Math.round(Math.abs(v) * 10_000)}bp`} onChange={(v) => set(t, v)} min={PRICING_MIN} max={PRICING_MAX} />
+                </td>
+                <td className="num">{pct(market + off)}</td>
+                <td className={'num ' + (m > 1.001 ? 'positive' : m < 0.999 ? 'alert' : '')}>{m > 1.001 ? `+${((m - 1) * 100).toFixed(0)}%` : m < 0.999 ? `(${((1 - m) * 100).toFixed(0)}%)` : 'market'}</td>
+                <td className="num">{num(received[t] ?? 0)}</td>
+                <td className="num">{usd(bank.originationsByType[t] ?? 0)}</td>
+                <td>
+                  {off !== 0 && (
+                    <button className="btn small" onClick={() => set(t, 0)}>
+                      Match market
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          <tr className="memo-row">
+            <td colSpan={8}>
+              Your rate is the market rate plus your offset; each borrower then pays their own premium for grade and term on top, as the memo shows. Credit cards price on the card line, not here. Turning a type off on Policy and dial stops it entirely; pricing it high keeps the door open for the borrowers who will pay.
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
