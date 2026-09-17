@@ -1,17 +1,20 @@
-// The core screens and the shell's pieces: the top bar with the clock,
-// the feed with its side column, decisions as cards or a dialog, the
-// balance sheet, income, You, help, debug. Panels are titled tables;
-// every number is drillable where there is something beneath it.
+// The shell's pieces and the core screens: the top bar with the clock,
+// the feed list, decisions as cards or a dock with their plain-words
+// preview, the balance sheet in three questions, the income statement,
+// You, help, debug. Panels are titled tables; every number is drillable
+// where there is something beneath it.
 
 import { useState } from 'react';
 import type React from 'react';
 import { calibration, unverifiedBands, type Band } from '../data/calibration';
 import { type IncomeStatement, interestExpense, interestIncome, netIncome, netInterestIncome, noninterestExpense, pretaxIncome, totalAssets, totalDeposits, totalEquity, totalLiabilities, leverageRatio, tier1Capital } from '../engine/ledger';
 import { LADDER_LABEL, PCA_LABEL, capitalStack, creConcentration, liquidityCoverage, pcaCategory, THRESHOLD_SIFI, THRESHOLD_STRESS } from '../engine/regulation';
-import { type Bank, type Pending, type World, bookValuePerShare, playerNetWorth } from '../engine/state';
+import { type Bank, type FeedItem, type Pending, type World, bookValuePerShare, playerNetWorth } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { playerStake } from '../engine/wealth';
-import { type Unit, dollars, num, pct, short, unitLabel } from './format';
+import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
+import { Pill, Stepper, Term } from './parts';
+import { previewFor } from './preview';
 
 // Days per real second by speed. Speed 4 is D3's top speed: a year in
 // two minutes. Speed 5 is for skipping ahead.
@@ -48,10 +51,10 @@ export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp 
         <div className="topstats">
           <div className="stat">
             <span className="k">Assets</span>
-            <span className="v">{short(assets)}</span>
+            <span className="v">{usd(assets)}</span>
           </div>
           <div className="stat">
-            <span className="k">Leverage</span>
+            <span className="k">Capital</span>
             <span className={'v' + (lev < 0.05 ? ' bad' : '')}>
               {pct(lev, 1)} <span className={'pill ' + pill}>{cat === 'well' ? 'well capitalized' : cat ? PCA_LABEL[cat] : ''}</span>
             </span>
@@ -62,7 +65,7 @@ export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp 
           </div>
           <div className="stat">
             <span className="k">Net worth</span>
-            <span className="v">{short(playerNetWorth(world))}</span>
+            <span className="v">{usd(playerNetWorth(world))}</span>
           </div>
         </div>
       )}
@@ -89,136 +92,48 @@ const SOURCE_LABEL: Record<string, string> = {
   deal: 'deal',
 };
 
-export function FeedScreen({
-  world,
-  speed,
-  onPlay,
-  onDecide,
-  cards,
-  advisorOn,
-  onToggleAdvisor,
-  onDismiss,
-}: {
-  world: World;
-  speed: number;
-  onPlay: () => void;
-  onDecide: (p: Pending, key: string) => void;
-  cards: { key: string; text: string }[];
-  advisorOn: boolean;
-  onToggleAdvisor: () => void;
-  onDismiss: (key: string) => void;
-}) {
-  const items = world.feed.slice(-300).reverse();
-  const waiting = world.pending.filter((p) => !p.blocking);
-  const e = world.economy;
+export function FeedList({ items, speed, onPlay }: { items: FeedItem[]; speed: number; onPlay: () => void }) {
   return (
-    <div className="feed-grid">
-      <div>
-        <p className="hint">Everything that happens to your bank, newest first. A decision that needs you stops the clock and opens a dialog; offers wait beside the feed.</p>
-        <table className="feed">
-          <thead>
-            <tr>
-              <th>Feed</th>
-              <th>source</th>
-              <th>what happened</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((f) => (
-              <tr key={f.id} className={f.severity === 'alert' ? 'alert' : f.severity === 'good' ? 'positive' : ''}>
-                <td className="num when">{formatDate(f.day)}</td>
-                <td>
-                  <span className="chip">{SOURCE_LABEL[f.source] ?? f.source}</span>
-                </td>
-                <td>
-                  <span className={'dot' + (f.severity === 'alert' ? ' alert' : f.severity === 'good' ? ' good' : '')} />
-                  {f.text}
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={3} className="empty">
-                  Nothing has happened yet.{' '}
-                  {speed === 0 && (
-                    <button className="btn primary" onClick={onPlay}>
-                      Press Play to start the clock
-                    </button>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <aside>
-        {waiting.length > 0 && <div className="side-title">Waiting for you</div>}
-        {waiting.map((p) => (
-          <DecisionCard key={p.id} p={p} onDecide={onDecide} />
+    <table className="feed">
+      <thead>
+        <tr>
+          <th>Feed</th>
+          <th>source</th>
+          <th>what happened</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((f) => (
+          <tr key={f.id} className={f.severity === 'alert' ? 'alert' : f.severity === 'good' ? 'positive' : ''}>
+            <td className="num when">{formatDate(f.day)}</td>
+            <td>
+              <span className="chip">{SOURCE_LABEL[f.source] ?? f.source}</span>
+            </td>
+            <td>
+              <span className={'dot' + (f.severity === 'alert' ? ' alert' : f.severity === 'good' ? ' good' : '')} />
+              {f.text}
+            </td>
+          </tr>
         ))}
-        <div className="side-title">
-          Advisor
-          <button className="btn small" onClick={onToggleAdvisor}>
-            {advisorOn ? 'hide' : 'show'}
-          </button>
-        </div>
-        {advisorOn && cards.length === 0 && <p className="hint">Nothing to flag right now.</p>}
-        {advisorOn &&
-          cards.map((c) => (
-            <div key={c.key} className="advice">
-              <p>{c.text}</p>
-              <button className="btn small" onClick={() => onDismiss(c.key)} title="dismiss for 90 days">
-                dismiss
-              </button>
-            </div>
-          ))}
-        <table>
-          <thead>
-            <tr>
-              <th>Economy</th>
-              <th className="num">now</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Cycle</td>
-              <td className="num">
-                {e.regime === 'late' ? 'late cycle' : e.regime}
-                {e.crisis && e.regime === 'recession' ? ' (banking crisis)' : ''}
-              </td>
-            </tr>
-            <tr>
-              <td>Fed funds</td>
-              <td className="num">{pct(e.fedFunds)}</td>
-            </tr>
-            <tr>
-              <td>10 year Treasury</td>
-              <td className="num">{pct(e.curve.y10)}</td>
-            </tr>
-            <tr>
-              <td>Unemployment</td>
-              <td className="num">{pct(e.unemployment, 1)}</td>
-            </tr>
-            <tr>
-              <td>Inflation</td>
-              <td className="num">{pct(e.inflation, 1)}</td>
-            </tr>
-            <tr>
-              <td>Home prices, 12 months</td>
-              <td className={'num' + (e.hpiGrowth < 0 ? ' alert' : '')}>{pct(e.hpiGrowth, 1)}</td>
-            </tr>
-            <tr>
-              <td>Oil</td>
-              <td className="num">${e.oil.toFixed(0)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </aside>
-    </div>
+        {items.length === 0 && (
+          <tr>
+            <td colSpan={3} className="empty">
+              Nothing has happened yet.{' '}
+              {speed === 0 && (
+                <button className="btn primary" onClick={onPlay}>
+                  Press Play to start the clock
+                </button>
+              )}
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   );
 }
 
-function DecisionBody({ p, onDecide }: { p: Pending; onDecide: (p: Pending, key: string) => void }) {
+function DecisionBody({ world, p, onDecide }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void }) {
+  const preview = previewFor(world, p);
   return (
     <>
       <div className="when">{formatDate(p.day)}</div>
@@ -228,6 +143,14 @@ function DecisionBody({ p, onDecide }: { p: Pending; onDecide: (p: Pending, key:
           <p key={i}>{l}</p>
         ))}
       </div>
+      {preview.length > 0 && (
+        <div className="preview">
+          <div className="preview-title">What this means</div>
+          {preview.map((l, i) => (
+            <p key={i}>{l}</p>
+          ))}
+        </div>
+      )}
       <div className="options">
         {p.options.map((o) => (
           <button key={o.key} className="btn option" onClick={() => onDecide(p, o.key)}>
@@ -240,17 +163,17 @@ function DecisionBody({ p, onDecide }: { p: Pending; onDecide: (p: Pending, key:
   );
 }
 
-export function DecisionCard({ p, onDecide }: { p: Pending; onDecide: (p: Pending, key: string) => void }) {
+export function DecisionCard({ world, p, onDecide }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void }) {
   return (
     <div className="decision">
-      <DecisionBody p={p} onDecide={onDecide} />
+      <DecisionBody world={world} p={p} onDecide={onDecide} />
     </div>
   );
 }
 
 // A decision that stops the clock docks under the tabs on every screen, so
 // the player can look at the book or the balance sheet before answering.
-export function DecisionDock({ p, more, onDecide }: { p: Pending; more: number; onDecide: (p: Pending, key: string) => void }) {
+export function DecisionDock({ world, p, more, onDecide }: { world: World; p: Pending; more: number; onDecide: (p: Pending, key: string) => void }) {
   return (
     <div className="dock" role="dialog" aria-label={p.title}>
       <div className="dock-inner">
@@ -258,19 +181,16 @@ export function DecisionDock({ p, more, onDecide }: { p: Pending; more: number; 
           Decision{more > 0 ? ` (${more} more waiting)` : ''}
           <span className="dim"> The clock is stopped until you answer. The other tabs still work.</span>
         </div>
-        <DecisionBody p={p} onDecide={onDecide} />
+        <DecisionBody world={world} p={p} onDecide={onDecide} />
       </div>
     </div>
   );
 }
 
-function Line({ label, value, unit, bold, indent, onClick, open }: { label: string; value: number; unit: Unit; bold?: boolean; indent?: boolean; onClick?: () => void; open?: boolean }) {
+function Line({ label, value, unit, bold, indent, dim }: { label: React.ReactNode; value: number; unit: Unit; bold?: boolean; indent?: boolean; dim?: boolean }) {
   return (
-    <tr className={(bold ? 'total' : '') + (onClick ? ' row' : '')} onClick={onClick}>
-      <td className={indent ? 'indent' : ''}>
-        {onClick && <span className="chev">{open ? '▾' : '▸'}</span>}
-        {label}
-      </td>
+    <tr className={(bold ? 'total' : '') + (dim ? ' memo-row' : '')}>
+      <td className={indent ? 'indent' : ''}>{label}</td>
       <td className="num">{dollars(value, unit)}</td>
     </tr>
   );
@@ -278,90 +198,124 @@ function Line({ label, value, unit, bold, indent, onClick, open }: { label: stri
 
 export function BalanceSheetScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const a = bank.acct;
-  const [open, setOpen] = useState<Record<string, boolean>>({ loans: false, deposits: true, securities: true });
-  const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const [all, setAll] = useState(false);
+  const [regs, setRegs] = useState(false);
   const lev = leverageRatio(a);
+  const cat = pcaCategory(lev);
+  const borrowings = a.fhlb + a.fedFundsPurchased + a.subDebt;
   return (
     <div>
-      <p className="hint">What the bank owns and owes, and how the regulators score its capital. Click a line with a triangle to open it.</p>
+      <p className="hint">
+        What the bank owns, what it owes, and what is left for shareholders.{' '}
+        <button className="btn small" onClick={() => setAll((v) => !v)}>
+          {all ? 'Fewer lines' : 'Show every line'}
+        </button>
+      </p>
       <div className="cols">
-        <table>
+        <table className="wrap">
           <thead>
             <tr>
-              <th>Assets</th>
+              <th>What you own</th>
               <th className="num">{unitLabel(unit)}</th>
             </tr>
           </thead>
           <tbody>
-            <Line label="Cash and due from banks" value={a.cash} unit={unit} />
-            <Line label="Securities" value={a.securitiesAFS + a.securitiesHTM + a.afsValuation} unit={unit} onClick={() => toggle('securities')} open={open.securities} />
-            {open.securities && (
+            <Line label="Cash" value={a.cash} unit={unit} />
+            <Line label={<Term k="available for sale">Bonds</Term>} value={a.securitiesAFS + a.securitiesHTM + a.afsValuation} unit={unit} />
+            {all && (
               <>
-                <Line label="Available for sale, at cost" value={a.securitiesAFS} unit={unit} indent />
-                <Line label="AFS fair value adjustment" value={a.afsValuation} unit={unit} indent />
-                <Line label="Held to maturity, at cost" value={a.securitiesHTM} unit={unit} indent />
+                <Line label={<Term k="available for sale">Available for sale, at cost</Term>} value={a.securitiesAFS} unit={unit} indent />
+                <Line label={<Term k="unrealized loss">Market value adjustment</Term>} value={a.afsValuation} unit={unit} indent />
+                <Line label={<Term k="held to maturity">Held to maturity, at cost</Term>} value={a.securitiesHTM} unit={unit} indent />
               </>
             )}
-            <Line label="Loans, gross" value={a.loans} unit={unit} />
-            <Line label="Allowance for credit losses" value={-a.allowance} unit={unit} indent />
-            <Line label="Loans, net" value={a.loans - a.allowance} unit={unit} bold />
-            <Line label="Interest receivable" value={a.interestReceivable} unit={unit} />
-            <Line label="Other real estate owned" value={a.reo} unit={unit} />
-            <Line label="Premises and equipment" value={a.premises} unit={unit} />
-            <Line label="Goodwill" value={a.goodwill} unit={unit} />
-            <Line label="Other assets" value={a.otherAssets} unit={unit} />
-            <Line label="Total assets" value={totalAssets(a)} unit={unit} bold />
+            <Line label="Loans, after the cushion for losses" value={a.loans - a.allowance} unit={unit} />
+            {all && (
+              <>
+                <Line label="Loans, gross" value={a.loans} unit={unit} indent />
+                <Line label={<Term k="allowance">Cushion for losses (allowance)</Term>} value={-a.allowance} unit={unit} indent />
+                <Line label="Interest owed to you" value={a.interestReceivable} unit={unit} />
+                <Line label="Foreclosed property" value={a.reo} unit={unit} />
+                <Line label="Buildings and equipment" value={a.premises} unit={unit} />
+                <Line label={<Term k="goodwill">Goodwill from acquisitions</Term>} value={a.goodwill} unit={unit} />
+                <Line label="Other" value={a.otherAssets} unit={unit} />
+              </>
+            )}
+            {!all && a.interestReceivable + a.reo + a.premises + a.goodwill + a.otherAssets !== 0 && <Line label="Everything else" value={a.interestReceivable + a.reo + a.premises + a.goodwill + a.otherAssets} unit={unit} />}
+            <Line label={<Term k="assets">Total assets</Term>} value={totalAssets(a)} unit={unit} bold />
           </tbody>
         </table>
-        <table>
+        <table className="wrap">
           <thead>
             <tr>
-              <th>Liabilities and equity</th>
+              <th>What you owe</th>
               <th className="num">{unitLabel(unit)}</th>
             </tr>
           </thead>
           <tbody>
-            <Line label="Deposits" value={totalDeposits(a)} unit={unit} onClick={() => toggle('deposits')} open={open.deposits} />
-            {open.deposits && (
+            <Line label="Deposits" value={totalDeposits(a)} unit={unit} />
+            {all && (
               <>
-                <Line label="Checking" value={a.checking} unit={unit} indent />
-                <Line label="Savings" value={a.savings} unit={unit} indent />
-                <Line label="Money market" value={a.mmda} unit={unit} indent />
-                <Line label="Certificates of deposit" value={a.cd} unit={unit} indent />
-                <Line label="Brokered" value={a.brokered} unit={unit} indent />
+                <Line label={<Term k="Checking">Checking</Term>} value={a.checking} unit={unit} indent />
+                <Line label={<Term k="Savings">Savings</Term>} value={a.savings} unit={unit} indent />
+                <Line label={<Term k="Money market">Money market</Term>} value={a.mmda} unit={unit} indent />
+                <Line label={<Term k="Certificates">Certificates of deposit</Term>} value={a.cd} unit={unit} indent />
+                <Line label={<Term k="Brokered">Brokered</Term>} value={a.brokered} unit={unit} indent />
               </>
             )}
-            <Line label="FHLB advances" value={a.fhlb} unit={unit} />
-            <Line label="Fed funds purchased" value={a.fedFundsPurchased} unit={unit} />
-            <Line label="Subordinated debt" value={a.subDebt} unit={unit} />
-            <Line label="Interest payable" value={a.interestPayable} unit={unit} />
-            <Line label="Other liabilities" value={a.otherLiabilities} unit={unit} />
-            <Line label="Total liabilities" value={totalLiabilities(a)} unit={unit} bold />
-            <Line label="Common stock and surplus" value={a.commonStock} unit={unit} />
-            <Line label="Retained earnings" value={a.retainedEarnings} unit={unit} />
-            <Line label="Accumulated other comprehensive income" value={a.aoci} unit={unit} />
-            <Line label="Total equity" value={totalEquity(a)} unit={unit} bold />
-            <Line label="Total liabilities and equity" value={totalLiabilities(a) + totalEquity(a)} unit={unit} bold />
+            <Line label="Borrowings" value={borrowings} unit={unit} />
+            {all && (
+              <>
+                <Line label={<Term k="FHLB advances">Home Loan Bank advances</Term>} value={a.fhlb} unit={unit} indent />
+                <Line label={<Term k="fed funds purchased">Overnight borrowing</Term>} value={a.fedFundsPurchased} unit={unit} indent />
+                <Line label={<Term k="subordinated debt">Subordinated debt</Term>} value={a.subDebt} unit={unit} indent />
+                <Line label="Interest you owe" value={a.interestPayable} unit={unit} />
+                <Line label="Other" value={a.otherLiabilities} unit={unit} />
+              </>
+            )}
+            {!all && a.interestPayable + a.otherLiabilities !== 0 && <Line label="Everything else" value={a.interestPayable + a.otherLiabilities} unit={unit} />}
+            <Line label={<Term k="liabilities">Total owed</Term>} value={totalLiabilities(a)} unit={unit} bold />
+            <tr>
+              <th colSpan={2} className="subhead">
+                What is left for shareholders
+              </th>
+            </tr>
+            <Line label="Money shareholders put in" value={a.commonStock} unit={unit} />
+            <Line label="Profits kept in the bank" value={a.retainedEarnings} unit={unit} />
+            {(all || a.aoci !== 0) && <Line label={<Term k="AOCI">Unrealized swings on bonds (AOCI)</Term>} value={a.aoci} unit={unit} />}
+            <Line label={<Term k="equity">Capital (total equity)</Term>} value={totalEquity(a)} unit={unit} bold />
             <tr className="memo-row">
-              <td>Tier 1 capital</td>
+              <td>
+                <Term k="leverage ratio">Leverage ratio</Term>
+              </td>
+              <td className="num">
+                {pct(lev)} <Pill tone={cat === 'well' ? 'good' : cat === 'adequate' ? 'warn' : 'bad'}>{cat === 'well' ? 'well capitalized' : PCA_LABEL[cat]}</Pill>
+              </td>
+            </tr>
+            <tr className="memo-row">
+              <td>
+                <Term k="tier 1 capital">Tier 1 capital</Term>
+              </td>
               <td className="num">{dollars(tier1Capital(a), unit)}</td>
             </tr>
-            <tr className={'memo-row' + (lev < 0.05 ? ' alert' : '')}>
-              <td>Leverage ratio, {PCA_LABEL[pcaCategory(lev)]}</td>
-              <td className="num">{pct(lev)}</td>
-            </tr>
             <tr className="memo-row">
-              <td>Shares outstanding</td>
-              <td className="num">{num(bank.shares)}</td>
-            </tr>
-            <tr className="memo-row">
-              <td>Book value per share</td>
-              <td className="num">{bookValuePerShare(bank).toFixed(2)}</td>
+              <td>
+                Shares outstanding and <Term k="book value">book value per share</Term>
+              </td>
+              <td className="num">
+                {num(bank.shares)} at {bookValuePerShare(bank).toFixed(2)}
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <RegulationTables bank={bank} unit={unit} />
+      <p className="hint">
+        <button className="btn small" onClick={() => setRegs((v) => !v)}>
+          {regs ? 'Hide' : 'Show'} the regulators&apos; view
+        </button>{' '}
+        the capital ratios the examiners measure, the CAMELS rating, and any open findings.
+      </p>
+      {regs && <RegulationTables bank={bank} unit={unit} />}
     </div>
   );
 }
@@ -374,7 +328,7 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
   const lcr = assets >= THRESHOLD_SIFI ? liquidityCoverage(bank) : null;
   return (
     <div className="cols">
-      <table>
+      <table className="wrap">
         <thead>
           <tr>
             <th>Capital stack {unitLabel(unit)}</th>
@@ -385,19 +339,25 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
         </thead>
         <tbody>
           <tr>
-            <td>Risk weighted assets</td>
+            <td>
+              <Term k="risk-weighted assets">Risk weighted assets</Term>
+            </td>
             <td className="num">{dollars(stack.rwa, unit)}</td>
             <td></td>
             <td></td>
           </tr>
           <tr className={stack.cet1Ratio < 0.07 ? 'alert' : ''}>
-            <td>Common equity tier 1</td>
+            <td>
+              <Term k="CET1">Common equity tier 1</Term>
+            </td>
             <td className="num">{dollars(stack.cet1, unit)}</td>
             <td className="num">{pct(stack.cet1Ratio, 1)}</td>
             <td className="num">4.5% + 2.5% buffer</td>
           </tr>
           <tr>
-            <td>Tier 1</td>
+            <td>
+              <Term k="tier 1 capital">Tier 1</Term>
+            </td>
             <td className="num">{dollars(stack.tier1, unit)}</td>
             <td className="num">{pct(stack.tier1Ratio, 1)}</td>
             <td className="num">6.0%</td>
@@ -415,28 +375,35 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
             <td className="num">8.0%</td>
           </tr>
           <tr className={stack.leverage < 0.05 ? 'alert' : ''}>
-            <td>Leverage{stack.cblr ? ' (community bank leverage ratio elected)' : ''}</td>
+            <td>
+              <Term k="leverage ratio">Leverage</Term>
+              {stack.cblr ? ' (community bank leverage ratio elected)' : ''}
+            </td>
             <td></td>
             <td className="num">{pct(stack.leverage, 1)}</td>
             <td className="num">{stack.cblr ? '9.0%' : '4.0%'}</td>
           </tr>
           <tr className="total">
             <td>
-              <span className={'pill ' + (stack.category === 'well' ? 'good' : stack.category === 'adequate' ? 'warn' : 'bad')}>{PCA_LABEL[stack.category]}</span>
+              <Pill tone={stack.category === 'well' ? 'good' : stack.category === 'adequate' ? 'warn' : 'bad'}>{PCA_LABEL[stack.category]}</Pill>
             </td>
             <td colSpan={3} className="num">
               payout limit {pct(stack.maxPayout, 0)} of earnings{stack.bufferShortfall > 0 ? `, buffer short by ${pct(stack.bufferShortfall, 1)}` : ''}
             </td>
           </tr>
           <tr className={conc.construction > 1 || conc.cre > 3 ? 'alert' : 'memo-row'}>
-            <td>CRE concentration: construction / non owner occupied</td>
+            <td>
+              <Term k="CRE concentration">Real estate concentration</Term>: construction / investor
+            </td>
             <td colSpan={3} className="num">
               {pct(conc.construction, 0)} / {pct(conc.cre, 0)} of capital (guidance 100% / 300%)
             </td>
           </tr>
           {bank.stressTest && (
             <tr className={bank.stressTest.passed ? 'memo-row' : 'alert'}>
-              <td>Stress test {formatDate(bank.stressTest.day)}</td>
+              <td>
+                <Term k="stress test">Stress test</Term> {formatDate(bank.stressTest.day)}
+              </td>
               <td className="num">{dollars(bank.stressTest.losses, unit)} losses</td>
               <td colSpan={2} className="num">
                 {bank.stressTest.passed ? 'passed' : 'failed: no dividends for a year'}, buffer {pct(bank.stressTest.buffer, 1)}
@@ -462,7 +429,7 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
           )}
         </tbody>
       </table>
-      <table>
+      <table className="wrap">
         <thead>
           <tr>
             <th>Supervision</th>
@@ -471,7 +438,9 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
         </thead>
         <tbody>
           <tr className={c.composite >= 3 ? 'alert' : ''}>
-            <td>CAMELS composite{c.lastExam !== null ? `, exam ${formatDate(c.lastExam)}` : ', not yet examined'}</td>
+            <td>
+              <Term k="CAMELS">CAMELS</Term> composite{c.lastExam !== null ? `, exam ${formatDate(c.lastExam)}` : ', not yet examined'}
+            </td>
             <td className="num">{c.lastExam !== null ? c.composite : ''}</td>
           </tr>
           <tr>
@@ -519,31 +488,31 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
   );
 }
 
-const IS_LINES: { label: string; get: (s: IncomeStatement) => number; bold?: boolean; indent?: boolean }[] = [
+const IS_LINES: { label: React.ReactNode; get: (s: IncomeStatement) => number; bold?: boolean; indent?: boolean }[] = [
   { label: 'Interest on loans', get: (s) => s.interestLoans, indent: true },
-  { label: 'Interest on securities', get: (s) => s.interestSecurities, indent: true },
+  { label: 'Interest on bonds', get: (s) => s.interestSecurities, indent: true },
   { label: 'Interest on cash', get: (s) => s.interestCash, indent: true },
-  { label: 'Total interest income', get: interestIncome, bold: true },
-  { label: 'Checking', get: (s) => s.interestChecking, indent: true },
-  { label: 'Savings', get: (s) => s.interestSavings, indent: true },
-  { label: 'Money market', get: (s) => s.interestMmda, indent: true },
-  { label: 'Certificates', get: (s) => s.interestCd, indent: true },
-  { label: 'Brokered', get: (s) => s.interestBrokered, indent: true },
-  { label: 'Borrowings', get: (s) => s.interestBorrowings, indent: true },
-  { label: 'Total interest expense', get: interestExpense, bold: true },
-  { label: 'Net interest income', get: netInterestIncome, bold: true },
-  { label: 'Provision for credit losses', get: (s) => s.provision },
-  { label: 'Fee income', get: (s) => s.feeIncome },
-  { label: 'Securities gains (losses)', get: (s) => s.securitiesGains },
+  { label: 'Total interest earned', get: interestIncome, bold: true },
+  { label: 'Paid on checking', get: (s) => s.interestChecking, indent: true },
+  { label: 'Paid on savings', get: (s) => s.interestSavings, indent: true },
+  { label: 'Paid on money market', get: (s) => s.interestMmda, indent: true },
+  { label: 'Paid on certificates', get: (s) => s.interestCd, indent: true },
+  { label: 'Paid on brokered', get: (s) => s.interestBrokered, indent: true },
+  { label: 'Paid on borrowings', get: (s) => s.interestBorrowings, indent: true },
+  { label: 'Total interest paid', get: interestExpense, bold: true },
+  { label: <Term k="net interest margin">Net interest income</Term>, get: netInterestIncome, bold: true },
+  { label: <Term k="provision">Set aside for loans going bad (provision)</Term>, get: (s) => s.provision },
+  { label: 'Fees', get: (s) => s.feeIncome },
+  { label: 'Gains and losses on bonds sold', get: (s) => s.securitiesGains },
   { label: 'Salaries and benefits', get: (s) => s.salaries, indent: true },
-  { label: 'Occupancy', get: (s) => s.occupancy, indent: true },
-  { label: 'Other expense', get: (s) => s.otherExpense, indent: true },
-  { label: 'FDIC assessment', get: (s) => s.assessment, indent: true },
-  { label: 'Total noninterest expense', get: noninterestExpense, bold: true },
-  { label: 'Pretax income', get: pretaxIncome, bold: true },
+  { label: 'Buildings', get: (s) => s.occupancy, indent: true },
+  { label: 'Other costs', get: (s) => s.otherExpense, indent: true },
+  { label: <Term k="FDIC assessment">Deposit insurance</Term>, get: (s) => s.assessment, indent: true },
+  { label: 'Total running costs', get: noninterestExpense, bold: true },
+  { label: 'Profit before tax', get: pretaxIncome, bold: true },
   { label: 'Income tax', get: (s) => s.tax },
-  { label: 'Net income', get: netIncome, bold: true },
-  { label: 'Memo: net charge-offs', get: (s) => s.chargeOffs - s.recoveries },
+  { label: 'Profit', get: netIncome, bold: true },
+  { label: <Term k="charge-off">Memo: loans written off, net</Term>, get: (s) => s.chargeOffs - s.recoveries },
   { label: 'Memo: days', get: (s) => s.days },
 ];
 
@@ -557,11 +526,10 @@ export function IncomeScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   ];
   return (
     <div>
-      <p className="hint">Where the money comes from and where it goes: this month, this quarter, this year. The call report below is the quarterly record.</p>
-      <table>
+      <table className="wrap">
         <thead>
           <tr>
-            <th>Income {unitLabel(unit)}</th>
+            <th>Income statement {unitLabel(unit)}</th>
             {cols.map((c) => (
               <th key={c.label} className="num">
                 {c.label}
@@ -570,8 +538,8 @@ export function IncomeScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
           </tr>
         </thead>
         <tbody>
-          {IS_LINES.map((l) => (
-            <tr key={l.label} className={l.bold ? 'total' : ''}>
+          {IS_LINES.map((l, i) => (
+            <tr key={i} className={l.bold ? 'total' : ''}>
               <td className={l.indent ? 'indent' : ''}>{l.label}</td>
               {cols.map((c) => (
                 <td key={c.label} className="num">
@@ -594,16 +562,24 @@ export function ReportsTable({ bank, unit }: { bank: Bank; unit: Unit }) {
     <table>
       <thead>
         <tr>
-          <th>Call report</th>
+          <th>
+            <Term k="call report">Call report</Term>
+          </th>
           <th className="num">assets</th>
           <th className="num">loans</th>
           <th className="num">deposits</th>
           <th className="num">equity</th>
           <th className="num">leverage</th>
-          <th className="num">net income</th>
-          <th className="num">ROA</th>
-          <th className="num">NIM</th>
-          <th className="num">NCO</th>
+          <th className="num">profit</th>
+          <th className="num">
+            <Term k="return on assets">ROA</Term>
+          </th>
+          <th className="num">
+            <Term k="net interest margin">NIM</Term>
+          </th>
+          <th className="num">
+            <Term k="net charge-offs">NCO</Term>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -626,7 +602,7 @@ export function ReportsTable({ bank, unit }: { bank: Bank; unit: Unit }) {
   );
 }
 
-export function MeScreen({ world, onSalary, onPayout, capital }: { world: World; onSalary: (delta: number) => void; onPayout: (delta: number) => void; capital?: React.ReactNode }) {
+export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary: (annual: number) => void; onPayout: (ratio: number) => void }) {
   const p = world.player;
   const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
   const stake = playerStake(world);
@@ -634,10 +610,12 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
   const stakeValue = bank ? Math.round(p.shares * perShare) : 0;
   return (
     <div>
-      <p className="hint">Your own money: salary, dividends, your stake in the bank, and the capital actions that change it. Net worth is the score.</p>
+      <p className="hint">
+        Your own money: salary, dividends and your stake in the bank. <Term k="net worth">Net worth</Term> is the score. Raising capital, selling shares and going public live under Money, balance sheet and capital.
+      </p>
       <div className="cols">
         <div>
-          <table>
+          <table className="wrap">
             <thead>
               <tr>
                 <th>Personal</th>
@@ -662,7 +640,7 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
                 <td></td>
               </tr>
               <tr>
-                <td>{bank?.isPublic ? 'Market value per share' : 'Book value per share'}</td>
+                <td>{bank?.isPublic ? 'Market value per share' : <Term k="book value">Book value per share</Term>}</td>
                 <td className="num">{perShare.toFixed(2)}</td>
                 <td></td>
               </tr>
@@ -680,21 +658,15 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
                 <td>Salary, annual</td>
                 <td className="num">{num(p.salary)}</td>
                 <td>
-                  <div className="seg">
-                    <button onClick={() => onSalary(-10_000)}>- 10K</button>
-                    <button onClick={() => onSalary(10_000)}>+ 10K</button>
-                  </div>
+                  <Stepper value={p.salary} steps={[{ d: 1_000, label: '1K' }, { d: 10_000, label: '10K' }]} fmt={(v) => usd(v)} onChange={onSalary} min={0} max={1e8} />
                 </td>
               </tr>
               <tr>
-                <td>Dividend payout, share of quarterly earnings</td>
-                <td className="num">{bank ? pct(bank.dividendPayout, 0) : ''}</td>
                 <td>
-                  <div className="seg">
-                    <button onClick={() => onPayout(-0.1)}>- 10%</button>
-                    <button onClick={() => onPayout(0.1)}>+ 10%</button>
-                  </div>
+                  <Term k="dividends">Dividend payout</Term>, share of quarterly profit
                 </td>
+                <td className="num">{bank ? pct(bank.dividendPayout, 0) : ''}</td>
+                <td>{bank && <Stepper value={bank.dividendPayout} steps={[{ d: 0.01, label: '1%' }, { d: 0.1, label: '10%' }]} fmt={(v) => pct(v, 0)} onChange={onPayout} min={0} max={1} />}</td>
               </tr>
               <tr>
                 <td>Tax rate, flat</td>
@@ -738,6 +710,8 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
               </tr>
             </tbody>
           </table>
+        </div>
+        <div>
           <table>
             <thead>
               <tr>
@@ -758,7 +732,7 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
               ))}
             </tbody>
           </table>
-          <table>
+          <table className="wrap">
             <thead>
               <tr>
                 <th>Milestones</th>
@@ -785,7 +759,6 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
             </tbody>
           </table>
         </div>
-        <div>{capital}</div>
       </div>
     </div>
   );
@@ -798,35 +771,38 @@ export function Sparkline({ values, width = 320, height = 28 }: { values: number
   const span = max - min || 1;
   const pts = values.map((v, i) => `${((i / (values.length - 1)) * width).toFixed(1)},${(height - ((v - min) / span) * (height - 2) - 1).toFixed(1)}`);
   return (
-    <svg width={width} height={height} className="spark">
+    <svg width={width} height={height} className="spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
       <polyline points={pts.join(' ')} />
     </svg>
   );
 }
 
-export function HelpModal({ onClose, onNewWorld }: { onClose: () => void; onNewWorld: () => void }) {
+export function HelpModal({ onClose, onNewWorld, onDebug }: { onClose: () => void; onNewWorld: () => void; onDebug: () => void }) {
   const rows: [string, string][] = [
-    ['Tabs at the top', 'every screen; the letter beside a tab is its key'],
-    ['Play and Pause, or space', 'start and stop the clock'],
-    ['Slow to Max, or keys 1 to 5', 'half a day, one, two, three or six days per second (Faster is a year in two minutes)'],
-    ['Decision buttons, or the key shown on them', 'answer a loan, an exam, an offer, an auction'],
+    ['Overview', 'five gauges: capital, cash, loans, profit, growth; profit in plain words; what to do next'],
+    ['Lending', 'your book with a health bar per loan type; the written policy and the dial; the pools'],
+    ['Money', 'deposit rates a basis point at a time, cash and borrowing, bonds, the balance sheet and capital actions'],
+    ['Earnings', 'the income statement, and where every dollar of the last quarter came from'],
+    ['People', 'your three officers and this month’s candidates'],
+    ['Market', 'every other bank, offers to buy them, business lines, and the world abroad'],
+    ['Map', 'real counties; hover for numbers, open branches'],
+    ['You', 'salary, dividends, your stake, your record'],
+    ['Play and Pause, or space', 'start and stop the clock; Slow to Max, or keys 1 to 5, set the speed'],
+    ['Decision buttons, or the key shown on them', 'answer a loan, an exam, an offer. Every decision says what it means first'],
+    ['Underlined words', 'hover for a plain explanation'],
     ['Save, or s', 'save in this browser; the game also saves every year end'],
-    ['Click a row', 'open a loan, a pool, a rival, a total'],
-    ['Map', 'hover a county for its numbers, click Open a branch'],
-    ['You screen', 'salary and payout with the buttons, or + - [ ]'],
-    ['Advisor', 'dismiss a card for 90 days; hide or show them all'],
-    ['Escape', 'close this'],
+    ['Letters beside the tabs', 'keyboard shortcuts; Escape closes this'],
   ];
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-label="Help" onClick={(e) => e.stopPropagation()}>
         <h2>How to play</h2>
-        <p className="hint">You are the CEO and controlling shareholder. Grow the bank, keep it capitalized, keep the depositors calm, and outlast the cycle. Everything is a click; the keys are shortcuts.</p>
+        <p className="hint">You are the CEO and controlling shareholder. Take deposits, make good loans, keep enough capital, keep depositors calm, and outlast the cycle. Everything is a click; the keys are shortcuts.</p>
         <table className="help-rows wrap">
           <thead>
             <tr>
-              <th>Control</th>
-              <th>does</th>
+              <th>Where</th>
+              <th>what</th>
             </tr>
           </thead>
           <tbody>
@@ -839,6 +815,9 @@ export function HelpModal({ onClose, onNewWorld }: { onClose: () => void; onNewW
           </tbody>
         </table>
         <div className="modal-foot">
+          <button className="btn" onClick={onDebug}>
+            Debug screen
+          </button>
           <button className="btn danger" onClick={onNewWorld}>
             Start a new world
           </button>
@@ -960,7 +939,13 @@ export function DebugScreen({ world, tickMs, manifest, dataOk, onExport, onImpor
             <tbody>
               <tr>
                 <td>Export the world to a file</td>
-                <td>{onExport && <button className="btn" onClick={onExport}>Export save</button>}</td>
+                <td>
+                  {onExport && (
+                    <button className="btn" onClick={onExport}>
+                      Export save
+                    </button>
+                  )}
+                </td>
               </tr>
               <tr>
                 <td>Load a world from a file</td>
@@ -968,7 +953,13 @@ export function DebugScreen({ world, tickMs, manifest, dataOk, onExport, onImpor
               </tr>
               <tr>
                 <td>Throw this world away</td>
-                <td>{onNewWorld && <button className="btn danger" onClick={onNewWorld}>Start a new world</button>}</td>
+                <td>
+                  {onNewWorld && (
+                    <button className="btn danger" onClick={onNewWorld}>
+                      Start a new world
+                    </button>
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -1014,3 +1005,5 @@ export function DebugScreen({ world, tickMs, manifest, dataOk, onExport, onImpor
     </div>
   );
 }
+
+export { short };

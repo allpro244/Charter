@@ -59,3 +59,9 @@ export function short(x: number): string {
   else s = abs.toFixed(0);
   return x < 0 ? `(${s})` : s;
 }
+
+// Dollars for the summary layers: $12.3M, $540K, ($1.2M) when negative.
+export function usd(x: number): string {
+  const s = short(Math.abs(x));
+  return x < 0 ? `($${s})` : `$${s}`;
+}

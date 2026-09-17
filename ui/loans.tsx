@@ -1,17 +1,19 @@
-// LOANS: the relationship book, the pools, the written policy, the dial.
-// Every pool drills to a sample of representative loans generated on
-// demand from its distribution (D29), never stored.
+// Lending: the book by type with a health bar, then the relationship
+// book, the written policy and the dial, and the pools for the player
+// who wants the grade buckets. Every pool drills to a sample of
+// representative loans generated on demand (D29), never stored.
 
 import { useMemo, useState } from 'react';
 import { TYPE, bookByType } from '../engine/credit';
 import { GRADES } from '../engine/loantypes';
-import { LOAN_TYPES, type LoanType } from '../engine/loantypes';
+import { LOAN_TYPES } from '../engine/loantypes';
 import { derive, hashString, rand, randNormal } from '../engine/rng';
 import { type Bank, type Loan, type Pool, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { decidedText } from '../engine/loans';
 import { setDial, setPolicy, setTypeAllowed } from '../engine/underwriting';
-import { type Unit, dollars, num, pct, short, unitLabel } from './format';
+import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
+import { AmountField, Stepper, Term } from './parts';
 
 interface Props {
   world: World;
@@ -20,7 +22,7 @@ interface Props {
   refresh: () => void;
 }
 
-type Tab = 'book' | 'pools' | 'policy';
+type Tab = 'book' | 'policy' | 'pools';
 
 export function LoansScreen({ world, bank, unit, refresh }: Props) {
   const [tab, setTab] = useState<Tab>('book');
@@ -30,12 +32,18 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
   const total = rows.reduce((s, r) => s + r.balance, 0);
   return (
     <div>
-      <p className="hint">The loans on your books by type, then the detail: the relationship book you decide loan by loan, the pooled book, and the written policy and dial that decide which loans reach your desk.</p>
+      <p className="hint">The loans on your books by type, with a health bar showing the share graded weak. Below: the loans you decide one by one, the written policy and dial that decide the rest, and the pools for the detail.</p>
       <div className="toolbar">
         <div className="seg">
-          <button className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>Relationship book</button>
-          <button className={tab === 'pools' ? 'on' : ''} onClick={() => setTab('pools')}>Pools</button>
-          <button className={tab === 'policy' ? 'on' : ''} onClick={() => setTab('policy')}>Policy and dial</button>
+          <button className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
+            Your book
+          </button>
+          <button className={tab === 'policy' ? 'on' : ''} onClick={() => setTab('policy')}>
+            Policy and dial
+          </button>
+          <button className={tab === 'pools' ? 'on' : ''} onClick={() => setTab('pools')}>
+            Pools (details)
+          </button>
         </div>
       </div>
       <table>
@@ -44,45 +52,63 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
             <th>Book by type {unitLabel(unit)}</th>
             <th className="num">balance</th>
             <th className="num">share</th>
-            <th className="num">loans</th>
-            <th className="num">yield</th>
-            <th className="num">criticized</th>
-            <th className="num">nonaccrual</th>
-            <th className="num">YTD originations</th>
-            <th className="num">lifetime charge-offs</th>
+            <th className="num">
+              <Term k="yield">yield</Term>
+            </th>
+            <th>
+              <Term k="criticized">health</Term>
+            </th>
+            <th className="num">weak</th>
+            <th className="num">
+              <Term k="nonaccrual">not paying</Term>
+            </th>
+            <th className="num">
+              <Term k="charge-off">lost to date</Term>
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.type}>
-              <td>{r.label}</td>
-              <td className="num">{dollars(r.balance, unit)}</td>
-              <td className="num">{pct(total > 0 ? r.balance / total : 0, 1)}</td>
-              <td className="num">{num(r.count)}</td>
-              <td className="num">{pct(r.yield)}</td>
-              <td className={'num' + (r.balance > 0 && r.criticized / r.balance > 0.1 ? ' alert' : '')}>{pct(r.balance > 0 ? r.criticized / r.balance : 0, 1)}</td>
-              <td className="num">{pct(r.balance > 0 ? r.nonaccrual / r.balance : 0, 1)}</td>
-              <td className="num">{dollars(bank.originationsByType[r.type], unit)}</td>
-              <td className="num">{dollars(bank.lifetimeChargeOffsByType[r.type], unit)}</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const weak = r.balance > 0 ? r.criticized / r.balance : 0;
+            return (
+              <tr key={r.type}>
+                <td>
+                  <Term k={r.label}>{r.label}</Term>
+                </td>
+                <td className="num">{dollars(r.balance, unit)}</td>
+                <td className="num">{pct(total > 0 ? r.balance / total : 0, 1)}</td>
+                <td className="num">{pct(r.yield)}</td>
+                <td>
+                  <HealthBar share={weak} />
+                </td>
+                <td className={'num' + (weak > 0.08 ? ' alert' : '')}>{pct(weak, 1)}</td>
+                <td className="num">{pct(r.balance > 0 ? r.nonaccrual / r.balance : 0, 1)}</td>
+                <td className="num">{dollars(bank.lifetimeChargeOffsByType[r.type], unit)}</td>
+              </tr>
+            );
+          })}
           <tr className="total">
-            <td>Total loans</td>
+            <td>All loans</td>
             <td className="num">{dollars(bank.acct.loans, unit)}</td>
             <td className="num">100.0%</td>
-            <td className="num">{num(rows.reduce((s, r) => s + r.count, 0))}</td>
             <td className="num">{pct(bank.loanYield)}</td>
+            <td>
+              <HealthBar share={total > 0 ? rows.reduce((s, r) => s + r.criticized, 0) / total : 0} />
+            </td>
             <td className="num">{pct(total > 0 ? rows.reduce((s, r) => s + r.criticized, 0) / total : 0, 1)}</td>
             <td className="num">{pct(total > 0 ? rows.reduce((s, r) => s + r.nonaccrual, 0) / total : 0, 1)}</td>
-            <td className="num">{dollars(LOAN_TYPES.reduce((s, t) => s + bank.originationsByType[t], 0), unit)}</td>
             <td className="num">{dollars(LOAN_TYPES.reduce((s, t) => s + bank.lifetimeChargeOffsByType[t], 0), unit)}</td>
           </tr>
           <tr className="memo-row">
-            <td>Allowance</td>
+            <td>
+              <Term k="allowance">Cushion against losses (allowance)</Term>
+            </td>
             <td className="num">{dollars(bank.acct.allowance, unit)}</td>
             <td className="num">{pct(bank.acct.loans > 0 ? bank.acct.allowance / bank.acct.loans : 0)}</td>
-            <td colSpan={6}>
-              applications: {num(bank.applications.received)} received, {num(bank.applications.toDesk)} to the desk, {num(bank.applications.autoApproved)} auto-approved for {short(bank.applications.autoApprovedAmount)}, {num(bank.applications.autoDeclined)} auto-declined
+            <td colSpan={5}>
+              {bank.homeCounty
+                ? `Applications: ${num(bank.applications.received)} received, ${num(bank.applications.toDesk)} to your desk, ${num(bank.applications.autoApproved)} approved under policy for ${usd(bank.applications.autoApprovedAmount)}, ${num(bank.applications.autoDeclined)} declined. Originated this year: ${usd(LOAN_TYPES.reduce((s, t) => s + bank.originationsByType[t], 0))}.`
+                : `No home county in this build, so no applications reach the desk: the book grows through the pools. Originated this year: ${usd(LOAN_TYPES.reduce((s, t) => s + bank.originationsByType[t], 0))}.`}
             </td>
           </tr>
         </tbody>
@@ -94,26 +120,35 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
   );
 }
 
+function HealthBar({ share }: { share: number }) {
+  const tone = share < 0.03 ? 'good' : share < 0.08 ? 'warn' : 'bad';
+  return (
+    <span className="bar" title={`${pct(share, 1)} of the balance is graded weak`}>
+      <span className={'fill ' + tone} style={{ width: `${Math.min(100, (share / 0.2) * 100)}%` }} />
+    </span>
+  );
+}
+
 function statusLabel(l: Loan): string {
   switch (l.status) {
     case 'current':
       return 'current';
     case 'late30':
-      return '30 days';
+      return '30 days late';
     case 'late60':
-      return '60 days';
+      return '60 days late';
     case 'late90':
-      return '90 days';
+      return '90 days late';
     case 'nonaccrual':
-      return 'nonaccrual';
+      return 'not paying';
     case 'workout':
-      return 'workout';
+      return 'in workout';
     case 'reo':
-      return 'REO';
+      return 'foreclosed';
     case 'paid':
-      return 'paid';
+      return 'paid off';
     case 'chargedOff':
-      return 'charged off';
+      return 'written off';
   }
 }
 
@@ -123,16 +158,22 @@ function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; o
     <table>
       <thead>
         <tr>
-          <th>Relationship book ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff').length} loans)</th>
+          <th>Loans you decided ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff').length})</th>
           <th>type</th>
           <th className="num">balance {unitLabel(unit)}</th>
           <th className="num">rate</th>
-          <th className="num">grade</th>
+          <th className="num">
+            <Term k="grade">grade</Term>
+          </th>
           <th>status</th>
-          <th className="num">DSCR</th>
-          <th className="num">LTV</th>
+          <th className="num">
+            <Term k="coverage">coverage</Term>
+          </th>
+          <th className="num">
+            <Term k="loan to value">LTV</Term>
+          </th>
           <th>decided</th>
-          <th className="num">originated</th>
+          <th className="num">made</th>
         </tr>
       </thead>
       <tbody>
@@ -142,7 +183,7 @@ function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; o
         {loans.length === 0 && (
           <tr>
             <td colSpan={10} className="empty">
-              No relationship loans yet. Applications arrive daily from the bank's home county; the dial decides which reach you.
+              {bank.homeCounty ? 'No relationship loans yet. Applications arrive daily; the dial decides which reach you.' : 'No relationship loans in this build: without a home county, no applications arrive. The pools hold the book.'}
             </td>
           </tr>
         )}
@@ -160,7 +201,10 @@ function LoanRows({ l, unit, open, toggle }: { l: Loan; unit: Unit; open: boolea
   return (
     <>
       <tr className={'row' + (bad ? ' alert' : '')} onClick={toggle}>
-        <td>{l.borrower}</td>
+        <td>
+          <span className="chev">{open ? '▾' : '▸'}</span>
+          {l.borrower}
+        </td>
         <td>{TYPE[l.type].label}</td>
         <td className="num">{dollars(l.status === 'reo' ? l.reoValue : l.balance, unit)}</td>
         <td className="num">{pct(l.rate)}</td>
@@ -168,7 +212,10 @@ function LoanRows({ l, unit, open, toggle }: { l: Loan; unit: Unit; open: boolea
         <td>{statusLabel(l)}</td>
         <td className="num">{l.memo.dscr.toFixed(2)}x</td>
         <td className="num">{pct(l.memo.ltv, 0)}</td>
-        <td>{l.decision.by}{l.decision.countered ? ' (countered)' : ''}</td>
+        <td>
+          {l.decision.by}
+          {l.decision.countered ? ' (countered)' : ''}
+        </td>
         <td className="num">{formatDate(l.originated)}</td>
       </tr>
       {open && (
@@ -194,33 +241,36 @@ function LoanRows({ l, unit, open, toggle }: { l: Loan; unit: Unit; open: boolea
 function Pools({ world, bank, unit, openPool, setOpenPool }: { world: World; bank: Bank; unit: Unit; openPool: string | null; setOpenPool: (k: string | null) => void }) {
   const pools = [...bank.pools].sort((a, b) => (a.type === b.type ? b.vintage - a.vintage : LOAN_TYPES.indexOf(a.type) - LOAN_TYPES.indexOf(b.type)));
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Pools {unitLabel(unit)}</th>
-          <th className="num">vintage</th>
-          <th className="num">loans</th>
-          <th className="num">balance</th>
-          <th className="num">rate</th>
-          <th className="num">age (mo)</th>
-          {Array.from({ length: GRADES }, (_, g) => (
-            <th key={g} className="num">
-              g{g + 1}
-            </th>
-          ))}
-          <th className="num">cum loss</th>
-          <th className="num">of original</th>
-        </tr>
-      </thead>
-      <tbody>
-        {pools.map((p) => {
-          const key = `${p.type}:${p.vintage}`;
-          return (
-            <PoolRows key={key} world={world} bank={bank} p={p} unit={unit} open={openPool === key} toggle={() => setOpenPool(openPool === key ? null : key)} />
-          );
-        })}
-      </tbody>
-    </table>
+    <div>
+      <p className="hint">
+        Each pool is one loan type and one year of origination. The g1 to g9 columns are the share of the balance in each <Term k="grade">grade</Term>: 1 is the safest, 6 and up are weak, 9 is a loss. Click a pool for a sample of the loans inside it.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Pools {unitLabel(unit)}</th>
+            <th className="num">year</th>
+            <th className="num">loans</th>
+            <th className="num">balance</th>
+            <th className="num">rate</th>
+            <th className="num">age (mo)</th>
+            {Array.from({ length: GRADES }, (_, g) => (
+              <th key={g} className="num">
+                g{g + 1}
+              </th>
+            ))}
+            <th className="num">lost</th>
+            <th className="num">of original</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pools.map((p) => {
+            const key = `${p.type}:${p.vintage}`;
+            return <PoolRows key={key} world={world} bank={bank} p={p} unit={unit} open={openPool === key} toggle={() => setOpenPool(openPool === key ? null : key)} />;
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -229,7 +279,10 @@ function PoolRows({ world, bank, p, unit, open, toggle }: { world: World; bank: 
   return (
     <>
       <tr className="row" onClick={toggle}>
-        <td>{TYPE[p.type].label}</td>
+        <td>
+          <span className="chev">{open ? '▾' : '▸'}</span>
+          {TYPE[p.type].label}
+        </td>
         <td className="num">{p.vintage}</td>
         <td className="num">{num(p.count)}</td>
         <td className="num">{dollars(p.balance, unit)}</td>
@@ -245,7 +298,7 @@ function PoolRows({ world, bank, p, unit, open, toggle }: { world: World; bank: 
       </tr>
       {open && (
         <tr>
-          <td colSpan={16}>
+          <td colSpan={17}>
             <table className="inner stats">
               <thead>
                 <tr>
@@ -294,106 +347,115 @@ function samplePool(world: World, bank: Bank, p: Pool): { name: string; balance:
   return out;
 }
 
+const round2 = (x: number) => Math.round(x * 100) / 100;
+
 function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: () => void }) {
   const p = bank.policy;
   const set = (patch: Partial<Bank['policy']>) => {
     setPolicy(world, patch);
     refresh();
   };
-  const ltv = (t: LoanType, d: number) => set({ maxLtv: { ...p.maxLtv, [t]: Math.max(0.1, Math.min(1.5, Math.round((p.maxLtv[t] + d) * 100) / 100)) } });
+  const dial = (maxAuto: number, minGrade: number) => {
+    setDial(world, maxAuto, minGrade);
+    refresh();
+  };
   return (
-    <div className="cols">
-      <table className="wrap">
-        <thead>
-          <tr>
-            <th>Delegation dial</th>
-            <th className="num">value</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Loans above this size come to you</td>
-            <td className="num">{num(bank.dial.maxAuto)}</td>
-            <td>
-              <button className="key" onClick={() => { setDial(world, bank.dial.maxAuto / 2, bank.dial.minGrade); refresh(); }}>halve</button>
-              <button className="key" onClick={() => { setDial(world, bank.dial.maxAuto === 0 ? 50_000 : bank.dial.maxAuto * 2, bank.dial.minGrade); refresh(); }}>double</button>
-              <button className="key" title="every loan crosses your desk" onClick={() => { setDial(world, 0, 0); refresh(); }}>all to me</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Loans graded worse than this come to you</td>
-            <td className="num">{bank.dial.minGrade}</td>
-            <td>
-              <button className="key" onClick={() => { setDial(world, bank.dial.maxAuto, bank.dial.minGrade - 1); refresh(); }}>tighter</button>
-              <button className="key" onClick={() => { setDial(world, bank.dial.maxAuto, bank.dial.minGrade + 1); refresh(); }}>looser</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <table className="wrap">
-        <thead>
-          <tr>
-            <th>Written loan policy (version {p.version})</th>
-            <th className="num">value</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Minimum coverage (DSCR)</td>
-            <td className="num">{p.minDscr.toFixed(2)}x</td>
-            <td>
-              <button className="key" onClick={() => set({ minDscr: Math.max(0, Math.round((p.minDscr - 0.05) * 100) / 100) })}>-</button>
-              <button className="key" onClick={() => set({ minDscr: Math.round((p.minDscr + 0.05) * 100) / 100 })}>+</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Maximum leverage</td>
-            <td className="num">{p.maxLeverage.toFixed(1)}x</td>
-            <td>
-              <button className="key" onClick={() => set({ maxLeverage: Math.max(0.5, Math.round((p.maxLeverage - 0.5) * 10) / 10) })}>-</button>
-              <button className="key" onClick={() => set({ maxLeverage: Math.round((p.maxLeverage + 0.5) * 10) / 10 })}>+</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Maximum single loan</td>
-            <td className="num">{num(p.maxSize)}</td>
-            <td>
-              <button className="key" onClick={() => set({ maxSize: Math.max(50_000, Math.round(p.maxSize / 2)) })}>halve</button>
-              <button className="key" onClick={() => set({ maxSize: p.maxSize * 2 })}>double</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Sector concentration cap</td>
-            <td className="num">{pct(p.sectorCap, 0)}</td>
-            <td>
-              <button className="key" onClick={() => set({ sectorCap: Math.max(0.05, Math.round((p.sectorCap - 0.05) * 100) / 100) })}>-</button>
-              <button className="key" onClick={() => set({ sectorCap: Math.min(1, Math.round((p.sectorCap + 0.05) * 100) / 100) })}>+</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Guarantee required on business loans</td>
-            <td className="num">{p.requireGuarantor ? 'yes' : 'no'}</td>
-            <td>
-              <button className="key" onClick={() => set({ requireGuarantor: !p.requireGuarantor })}>toggle</button>
-            </td>
-          </tr>
-          {LOAN_TYPES.map((t) => (
-            <tr key={t}>
-              <td>{TYPE[t].label}: max LTV, allowed</td>
-              <td className="num">
-                {pct(p.maxLtv[t], 0)} {p.allowed[t] ? 'on' : 'off'}
-              </td>
+    <div>
+      <p className="hint">
+        The <Term k="delegation dial">dial</Term> decides which loans reach your desk; the <Term k="loan policy">written policy</Term> decides everything else. Small steps are for fine tuning; the larger ones are the old jumps.
+      </p>
+      <div className="cols">
+        <table className="wrap">
+          <thead>
+            <tr>
+              <th>Delegation dial</th>
+              <th className="num">value</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Loans above this size come to you</td>
+              <td className="num">{bank.dial.maxAuto === 0 ? 'every loan' : usd(bank.dial.maxAuto)}</td>
               <td>
-                <button className="key" onClick={() => ltv(t, -0.05)}>-</button>
-                <button className="key" onClick={() => ltv(t, 0.05)}>+</button>
-                <button className="key" onClick={() => { setTypeAllowed(world, t, !p.allowed[t]); refresh(); }}>{p.allowed[t] ? 'turn off' : 'turn on'}</button>
+                <AmountField value={bank.dial.maxAuto} onChange={(v) => dial(v, bank.dial.minGrade)} presets={[0, 100_000, 250_000, 1_000_000, 5_000_000]} label="Size" />
               </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
+            <tr>
+              <td>Loans graded worse than this come to you</td>
+              <td className="num">grade {bank.dial.minGrade}</td>
+              <td>
+                <Stepper value={bank.dial.minGrade} steps={[{ d: 1, label: '1' }, { d: 2, label: '2' }]} fmt={(v) => `grade ${v}`} onChange={(v) => dial(bank.dial.maxAuto, v)} min={0} max={7} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="wrap">
+          <thead>
+            <tr>
+              <th>Written loan policy (version {p.version})</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                Minimum <Term k="coverage">coverage</Term>
+              </td>
+              <td>
+                <Stepper value={p.minDscr} steps={[{ d: 0.01, label: '0.01' }, { d: 0.1, label: '0.10' }]} fmt={(v) => `${v.toFixed(2)}x`} onChange={(v) => set({ minDscr: round2(v) })} min={0} max={5} />
+              </td>
+            </tr>
+            <tr>
+              <td>Maximum leverage (debt to income or earnings)</td>
+              <td>
+                <Stepper value={p.maxLeverage} steps={[{ d: 0.1, label: '0.1' }, { d: 0.5, label: '0.5' }]} fmt={(v) => `${v.toFixed(1)}x`} onChange={(v) => set({ maxLeverage: Math.round(v * 10) / 10 })} min={0.5} max={20} />
+              </td>
+            </tr>
+            <tr>
+              <td>Maximum single loan</td>
+              <td>
+                <AmountField value={p.maxSize} onChange={(v) => set({ maxSize: Math.max(10_000, v) })} presets={[250_000, 1_000_000, 5_000_000, 25_000_000]} label="Size" />
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <Term k="sector concentration">Sector concentration cap</Term>
+              </td>
+              <td>
+                <Stepper value={p.sectorCap} steps={[{ d: 0.01, label: '1%' }, { d: 0.05, label: '5%' }]} fmt={(v) => pct(v, 0)} onChange={(v) => set({ sectorCap: round2(v) })} min={0.05} max={1} />
+              </td>
+            </tr>
+            <tr>
+              <td>Guarantee required on business loans</td>
+              <td>
+                <button className={'btn small' + (p.requireGuarantor ? ' on' : '')} onClick={() => set({ requireGuarantor: !p.requireGuarantor })}>
+                  {p.requireGuarantor ? 'Required' : 'Not required'}
+                </button>
+              </td>
+            </tr>
+            {LOAN_TYPES.map((t) => (
+              <tr key={t}>
+                <td>
+                  <Term k={TYPE[t].label}>{TYPE[t].label}</Term>: maximum <Term k="loan to value">loan to value</Term>
+                </td>
+                <td>
+                  <Stepper value={p.maxLtv[t]} steps={[{ d: 0.01, label: '1%' }, { d: 0.05, label: '5%' }]} fmt={(v) => pct(v, 0)} onChange={(v) => set({ maxLtv: { ...p.maxLtv, [t]: round2(v) } })} min={0.1} max={1.5} />
+                  <button
+                    className={'btn small' + (p.allowed[t] ? '' : ' danger')}
+                    onClick={() => {
+                      setTypeAllowed(world, t, !p.allowed[t]);
+                      refresh();
+                    }}
+                  >
+                    {p.allowed[t] ? 'Lending on' : 'Lending off'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

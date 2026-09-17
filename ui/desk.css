@@ -858,3 +858,269 @@ pre.memo {
     justify-content: flex-start;
   }
 }
+
+/* Plain words on hover. */
+.term {
+  position: relative;
+  border-bottom: 1px dotted var(--faint);
+  cursor: help;
+}
+
+.term:hover::after,
+.term:focus::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  width: max-content;
+  max-width: 340px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  font-family: var(--sans);
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--shadow);
+}
+
+.num .term:hover::after {
+  left: auto;
+  right: 0;
+}
+
+/* Steppers: two steps down, the value, two steps up. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 2px 6px 2px 0;
+  vertical-align: middle;
+}
+
+.stepper button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+
+.stepper button:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+.stepper .val {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  padding: 4px 10px;
+  min-width: 5.5em;
+  text-align: center;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  color: var(--text);
+}
+
+.amountfield {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.amountfield input {
+  width: 9em;
+  margin: 0;
+}
+
+/* The Overview gauges: the one place with big numbers. */
+.gauges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.gauge {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 3px solid var(--line-strong);
+}
+
+.gauge.good {
+  border-top-color: var(--good);
+}
+
+.gauge.warn {
+  border-top-color: var(--accent);
+}
+
+.gauge.bad {
+  border-top-color: var(--bad);
+}
+
+.gauge:hover {
+  background: var(--surface-2);
+  border-color: var(--accent-line);
+}
+
+.gauge-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.gauge-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.gauge-value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.gauge-meaning {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.gauge-go {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sparks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.spark-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.spark-panel .spark {
+  width: 100%;
+  height: 40px;
+  margin-top: 6px;
+}
+
+/* Health bars in the loan book. */
+.bar {
+  display: inline-block;
+  width: 110px;
+  height: 8px;
+  background: var(--surface-3);
+  border-radius: 4px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.bar .fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.bar .fill.good {
+  background: var(--good);
+}
+
+.bar .fill.warn {
+  background: var(--accent);
+}
+
+.bar .fill.bad {
+  background: var(--bad);
+}
+
+/* What a decision means. */
+.preview {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0 4px;
+  max-width: 120ch;
+}
+
+.preview-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.preview p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+th.subhead {
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 9px 12px;
+}
+
+/* Toasts: a short confirmation after every action. */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.toast {
+  background: var(--surface-3);
+  border: 1px solid var(--accent-line);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}

@@ -13,34 +13,29 @@ import { setDividendPayout, setSalary } from '../engine/wealth';
 import { type Loaded, loadData } from './data';
 import { type Unit, short, unitFor } from './format';
 import { MapView, type Shade } from './map';
-import { BalanceSheetScreen, DebugScreen, DecisionDock, FeedScreen, HelpModal, IncomeScreen, MeScreen, SPEEDS, TopBar } from './screens';
+import { DebugScreen, DecisionDock, HelpModal, MeScreen, SPEEDS, TopBar } from './screens';
 import { adviceFor } from './advisor';
 import { StartPanel } from './start';
 import { LoansScreen } from './loans';
-import { QtrScreen } from './qtr';
 import { FundScreen } from './fund';
-import { RivalsScreen } from './rivals';
-import { LinesScreen } from './lines';
-import { CapitalPanel } from './capital';
 import { OfficersScreen } from './off';
+import { OverviewScreen } from './overview';
+import { EarningsScreen } from './earnings';
+import { MarketScreen } from './market';
 import { openBranch } from '../engine/deposits';
 
-type Screen = 'FEED' | 'BS' | 'IS' | 'LOANS' | 'FUND' | 'OFF' | 'RIVALS' | 'ME' | 'QTR' | 'LINES' | 'MAP' | 'DEBUG';
+type Screen = 'OVERVIEW' | 'LENDING' | 'MONEY' | 'EARNINGS' | 'PEOPLE' | 'MARKET' | 'MAP' | 'YOU' | 'DEBUG';
 const SCREENS: { id: Screen; label: string; key: string }[] = [
-  { id: 'FEED', label: 'Feed', key: 'f' },
-  { id: 'BS', label: 'Balance sheet', key: 'b' },
-  { id: 'IS', label: 'Income', key: 'i' },
-  { id: 'LOANS', label: 'Loans', key: 'l' },
-  { id: 'FUND', label: 'Funding', key: 'u' },
-  { id: 'OFF', label: 'Officers', key: 'o' },
-  { id: 'RIVALS', label: 'Rivals', key: 'r' },
-  { id: 'ME', label: 'You', key: 'w' },
-  { id: 'QTR', label: 'Quarter', key: 'q' },
-  { id: 'LINES', label: 'Lines', key: 'n' },
+  { id: 'OVERVIEW', label: 'Overview', key: 'o' },
+  { id: 'LENDING', label: 'Lending', key: 'l' },
+  { id: 'MONEY', label: 'Money', key: 'f' },
+  { id: 'EARNINGS', label: 'Earnings', key: 'e' },
+  { id: 'PEOPLE', label: 'People', key: 'p' },
+  { id: 'MARKET', label: 'Market', key: 'r' },
   { id: 'MAP', label: 'Map', key: 'm' },
-  { id: 'DEBUG', label: 'Debug', key: 'd' },
+  { id: 'YOU', label: 'You', key: 'w' },
 ];
-const SCREEN_KEYS: Record<string, Screen> = Object.fromEntries(SCREENS.map((s) => [s.key, s.id]));
+const SCREEN_KEYS: Record<string, Screen> = { ...Object.fromEntries(SCREENS.map((s) => [s.key, s.id])), d: 'DEBUG' };
 const SAVE_KEY = 'charter.save';
 
 type Phase = 'loading' | 'nodata' | 'start' | 'play';
@@ -69,7 +64,7 @@ export function App() {
   const loadedRef = useRef<Loaded | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
   const [missing, setMissing] = useState<string[]>([]);
-  const [screen, setScreen] = useState<Screen>('FEED');
+  const [screen, setScreen] = useState<Screen>('OVERVIEW');
   const [speed, setSpeedState] = useState(0);
   const speedRef = useRef(0);
   const resumeRef = useRef(2);
@@ -82,9 +77,18 @@ export function App() {
   const [advisorOn, setAdvisorOn] = useState(true);
   const [dismissed, setDismissed] = useState<Record<string, number>>({});
   const [savedFlash, setSavedFlash] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
+  const toastId = useRef(0);
 
   const dismissedRef = useRef<Record<string, number>>({});
   dismissedRef.current = dismissed;
+
+  // A short confirmation after every action, bottom right, gone in a moment.
+  const toast = useCallback((text: string) => {
+    const id = ++toastId.current;
+    setToasts((t) => [...t.slice(-3), { id, text }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  }, []);
 
   const exportSave = useCallback(() => {
     const world = worldRef.current;
@@ -215,6 +219,7 @@ export function App() {
       const ctx: Ctx = { world, events: [] };
       applyDecisions(ctx, [d]);
       world.feed.push(...ctx.events);
+      if (ctx.events[0]) toast(ctx.events[0].text);
       if (p.kind === 'failure') {
         setPhase('start');
         setSelectedMetro(null);
@@ -223,7 +228,7 @@ export function App() {
       }
       refresh();
     },
-    [setSpeed, refresh],
+    [setSpeed, refresh, toast],
   );
 
   const begin = useCallback(
@@ -234,7 +239,7 @@ export function App() {
       fn(ctx);
       world.feed.push(...ctx.events);
       setPhase('play');
-      setScreen('FEED');
+      setScreen('OVERVIEW');
       setSpeed(1);
       writeSave(world);
       refresh();
@@ -242,17 +247,20 @@ export function App() {
     [setSpeed, refresh],
   );
 
-  // Runs a desk action against the engine between ticks.
+  // Runs a desk action against the engine between ticks. The note, or the
+  // first event the action produced, shows as a toast.
   const act = useCallback(
-    (fn: (ctx: Ctx) => void) => {
+    (fn: (ctx: Ctx) => void, note?: string) => {
       const world = worldRef.current;
       if (!world) return;
       const ctx: Ctx = { world, events: [] };
       fn(ctx);
       world.feed.push(...ctx.events);
+      const text = note ?? ctx.events[0]?.text;
+      if (text) toast(text);
       refresh();
     },
-    [refresh],
+    [refresh, toast],
   );
 
   const onCharter = useCallback((cbsa: string, name: string, invest: number) => begin((ctx) => startCharter(ctx, { mode: 'charter', cbsa, name, invest })), [begin]);
@@ -336,18 +344,11 @@ export function App() {
           setAdvisorOn((v) => !v);
           return;
         }
-        if (screen === 'ME') {
-          if (k === '+' || k === '=') setSalary(world, world.player.salary + 10_000);
-          if (k === '-') setSalary(world, world.player.salary - 10_000);
-          if (k === '[') setDividendPayout(world, (world.banks[world.playerBankId ?? '']?.dividendPayout ?? 0) - 0.1);
-          if (k === ']') setDividendPayout(world, (world.banks[world.playerBankId ?? '']?.dividendPayout ?? 0) + 0.1);
-          refresh();
-        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [phase, screen, decide, setSpeed, togglePlay, saveNow, refresh]);
+  }, [phase, decide, setSpeed, togglePlay, saveNow]);
 
   if (phase === 'loading') {
     return (
@@ -390,7 +391,7 @@ export function App() {
             </button>
             {bundledNote && <span className="dim">{bundledNote}</span>}
           </div>
-          <p className="hint">Once inside, press Play in the top bar. Every screen is a tab, every decision is a button, and Help lists the keyboard shortcuts.</p>
+          <p className="hint">Once inside, press Play in the top bar. Every screen is a tab, every decision is a button, and Help explains the rest.</p>
           <p className="hint">
             Or load a save file: <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
           </p>
@@ -429,15 +430,19 @@ export function App() {
             <StartPanel world={world} data={loaded.data} selectedMetro={selectedMetro} onSelectMetro={(c) => setSelectedMetro(c || null)} onCharter={onCharter} onTakeover={onTakeover} />
           </div>
         </main>
-        {world.pending.filter((p) => p.blocking).slice(0, 1).map((p) => (
-          <DecisionDock key={p.id} p={p} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />
-        ))}
+        {world.pending
+          .filter((p) => p.blocking)
+          .slice(0, 1)
+          .map((p) => (
+            <DecisionDock key={p.id} world={world} p={p} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />
+          ))}
       </div>
     );
   }
 
   const blocking = world.pending.find((p) => p.blocking);
   const waiting = world.pending.length;
+  const cards = advisorOn ? adviceFor(world).filter((c) => (dismissed[c.key] ?? -1) < world.day - 90) : [];
   return (
     <div className="desk">
       <div className="chrome">
@@ -446,47 +451,34 @@ export function App() {
           {SCREENS.map((s) => (
             <button key={s.id} className={'tab' + (screen === s.id ? ' on' : '')} onClick={() => setScreen(s.id)}>
               {s.label}
-              {s.id === 'FEED' && waiting > 0 && <span className="badge">{waiting}</span>}
+              {s.id === 'OVERVIEW' && waiting > 0 && <span className="badge">{waiting}</span>}
               <span className="k">{s.key}</span>
             </button>
           ))}
+          {screen === 'DEBUG' && <button className="tab on">Debug</button>}
         </nav>
-        {blocking && <DecisionDock p={blocking} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />}
+        {blocking && <DecisionDock world={world} p={blocking} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />}
       </div>
       <main className="content">
-        {screen === 'FEED' && (
-          <FeedScreen
+        {screen === 'OVERVIEW' && bank && (
+          <OverviewScreen
             world={world}
-            speed={speed}
-            onPlay={togglePlay}
-            onDecide={decide}
-            cards={advisorOn ? adviceFor(world).filter((c) => (dismissed[c.key] ?? -1) < world.day - 90) : []}
+            bank={bank}
+            cards={cards}
             advisorOn={advisorOn}
             onToggleAdvisor={() => setAdvisorOn((v) => !v)}
             onDismiss={(key) => setDismissed((d) => ({ ...d, [key]: world.day }))}
+            onGo={(tab) => setScreen(tab as Screen)}
+            onDecide={decide}
+            speed={speed}
+            onPlay={togglePlay}
           />
         )}
-        {screen === 'BS' && bank && <BalanceSheetScreen bank={bank} unit={unit} />}
-        {screen === 'IS' && bank && <IncomeScreen bank={bank} unit={unit} />}
-        {screen === 'ME' && (
-          <MeScreen
-            world={world}
-            onSalary={(d) => {
-              setSalary(world, world.player.salary + d);
-              refresh();
-            }}
-            onPayout={(d) => {
-              setDividendPayout(world, (bank?.dividendPayout ?? 0) + d);
-              refresh();
-            }}
-            capital={bank ? <CapitalPanel world={world} bank={bank} act={act} /> : undefined}
-          />
-        )}
-        {screen === 'LINES' && bank && <LinesScreen world={world} bank={bank} unit={unit} act={act} />}
-        {screen === 'LOANS' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
-        {screen === 'FUND' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
-        {screen === 'OFF' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
-        {screen === 'QTR' && bank && <QtrScreen bank={bank} unit={unit} />}
+        {screen === 'LENDING' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
+        {screen === 'MONEY' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
+        {screen === 'EARNINGS' && bank && <EarningsScreen bank={bank} unit={unit} />}
+        {screen === 'PEOPLE' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
+        {screen === 'MARKET' && bank && <MarketScreen world={world} bank={bank} unit={unit} act={act} />}
         {screen === 'MAP' && (
           <MapView
             world={world}
@@ -502,10 +494,38 @@ export function App() {
             }}
           />
         )}
+        {screen === 'YOU' && (
+          <MeScreen
+            world={world}
+            onSalary={(v) => {
+              setSalary(world, v);
+              refresh();
+            }}
+            onPayout={(v) => {
+              setDividendPayout(world, Math.round(v * 100) / 100);
+              refresh();
+            }}
+          />
+        )}
         {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk={loadedRef.current !== null} onExport={exportSave} onImport={importSave} onNewWorld={newWorld} />}
-        {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} act={act} />}
       </main>
-      {showKeys && <HelpModal onClose={() => setShowKeys(false)} onNewWorld={newWorld} />}
+      {showKeys && (
+        <HelpModal
+          onClose={() => setShowKeys(false)}
+          onNewWorld={newWorld}
+          onDebug={() => {
+            setScreen('DEBUG');
+            setShowKeys(false);
+          }}
+        />
+      )}
+      <div className="toasts" aria-live="polite">
+        {toasts.map((t) => (
+          <div key={t.id} className="toast">
+            {t.text}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -140,5 +140,8 @@ The desk is a modern operator's console: a dark screen built for the mouse, with
 - Every screen opens with one line saying what it is for.
 - No em dashes or en dashes.
 
+## Layers
+The desk answers the player's questions before it shows the schedules. Overview answers "how am I doing" with five gauges (capital, cash, loans, profit, growth), each with a plain word, a number, a status pill, one sentence of meaning and a link to the tab that changes it; a profit summary in plain words; sparklines; what to do next; the recent feed. Every screen opens with a summary and offers its detail on request (every line, the regulators' view, the pools). Every bank word carries a plain explanation on hover, from a glossary in `ui/glossary.ts`. Every decision shows "what this means" first, computed only from what the player can see. Every adjustable number moves by a fine step and a coarse step, and every amount can be typed. Every action answers with a short confirmation.
+
 ## Screens (v1)
-Feed, Balance sheet, Income, Loans (book, pools, policy and dial), Funding (deposits, rates, borrowings, securities, branches), Officers, Rivals (every bank's call report, deals), You (personal wealth, capital actions), Quarter (earnings review), Lines (business lines, D44, countries), Map, Debug (calibration flags, seed, tick).
+Overview, Lending (your book, policy and dial, pools), Money (deposits and cash, bonds, balance sheet and capital), Earnings (this period, where it came from), People, Market (rivals and deals, business lines, abroad), Map, You. Debug sits behind Help.

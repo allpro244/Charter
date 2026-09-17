@@ -8,14 +8,15 @@ import { pct } from './format';
 import { LINE_LABEL, LINE_ORDER, LINE_THRESHOLDS, lineAvailable, setupCost, toggleLine } from '../engine/lines';
 import { type Bank, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
-import { type Unit, dollars, short, unitLabel } from './format';
+import { type Unit, dollars, short, unitLabel, usd } from './format';
 
-export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Bank; unit: Unit; act: (fn: (ctx: Ctx) => void) => void }) {
+export function LinesScreen({ world, bank, unit, act, part = 'lines' }: { world: World; bank: Bank; unit: Unit; act: (fn: (ctx: Ctx) => void) => void; part?: 'lines' | 'abroad' }) {
   const assets = totalAssets(bank.acct);
+  if (part === 'abroad') return <GlobalTables world={world} bank={bank} unit={unit} act={act} />;
   return (
     <div>
-      <p className="hint">Business lines beyond lending, unlocked as the bank grows, and the world beyond the border.</p>
-      <table>
+      <p className="hint">Business lines beyond lending, each unlocked when the bank reaches a size. A line is a staffed operation with its own revenue and cost; both flow through earnings.</p>
+      <table className="wrap">
         <thead>
           <tr>
             <th>Business lines {unitLabel(unit)}</th>
@@ -34,8 +35,16 @@ export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Ba
             const l = bank.lines[key];
             const available = lineAvailable(bank, key);
             const footprint = key === 'mortgage' ? 'serviced' : key === 'cards' ? 'receivables' : key === 'wealth' ? 'AUM' : 'trading book';
+            if (!available && !l.on) {
+              return (
+                <tr key={key} className="memo-row">
+                  <td>{LINE_LABEL[key]}</td>
+                  <td colSpan={8}>Unlocks at {short(LINE_THRESHOLDS[key])} of assets.</td>
+                </tr>
+              );
+            }
             return (
-              <tr key={key} className={l.on ? '' : available ? '' : 'dim'}>
+              <tr key={key}>
                 <td>{LINE_LABEL[key]}</td>
                 <td className="num">{short(LINE_THRESHOLDS[key])}</td>
                 <td>{l.on ? `on since ${formatDate(l.startedDay ?? 0)}` : available ? 'available' : `needs ${short(LINE_THRESHOLDS[key])} of assets`}</td>
@@ -57,10 +66,9 @@ export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Ba
         </tbody>
       </table>
       <p className="hint">
-        Assets {short(assets)}. Mortgage banking: originate and sell, gain on sale, servicing and an MSR that moves with rates. Cards: receivables in a cards pool with card charge-offs, interchange less rewards and operations. Wealth: assets under management and fees. Investment banking: fees by cycle and a trading book with a fat left tail. Each line's cost includes a fixed staff. Card charge-offs and all lines flow through the income statement and the earnings review.
+        Assets {usd(assets)}. Mortgage banking: originate and sell, gain on sale, servicing and an MSR that moves with rates. Cards: receivables in a cards pool with card charge-offs, interchange less rewards and operations. Wealth: assets under management and fees. Investment banking: fees by cycle and a trading book with a fat left tail. Each line's cost includes a fixed staff. Card charge-offs and all lines flow through the income statement and the earnings review.
       </p>
       <p className="dim">{world.economy.regime === 'recession' ? 'In a recession, mortgage volume, IB fees and AUM all fall.' : ''}</p>
-      <GlobalTables world={world} bank={bank} unit={unit} act={act} />
     </div>
   );
 }
@@ -69,8 +77,42 @@ export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Ba
 function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; unit: Unit; act: (fn: (ctx: Ctx) => void) => void }) {
   const countries = Object.values(world.countries);
   const ok = canGoGlobal(bank);
+  if (!ok && bank.foreign.length === 0) {
+    return (
+      <div>
+        <p className="hint">The world beyond the border unlocks at {short(GLOBAL_FLOOR)} of assets, with a holding company and no enforcement action. Until then the countries below are the backdrop: their rates and cycles move the world you lend in.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Countries</th>
+              <th>currency</th>
+              <th className="num">per USD</th>
+              <th className="num">policy rate</th>
+              <th className="num">10 year</th>
+              <th>cycle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {countries.map((c) => (
+              <tr key={c.code}>
+                <td>
+                  {c.name} ({c.city})
+                </td>
+                <td>{c.currency}</td>
+                <td className="num">{c.fx.toFixed(c.fx > 20 ? 1 : 3)}</td>
+                <td className="num">{pct(c.rate)}</td>
+                <td className="num">{pct(c.y10)}</td>
+                <td>{c.regime}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
   return (
     <div>
+      <p className="hint">Countries, your subsidiaries abroad, and the banks for sale there. Books abroad stay in local currency; the translation runs through AOCI.</p>
       <div>
         <table>
           <thead>
