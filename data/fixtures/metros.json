@@ -1,0 +1,103 @@
+[
+  {
+    "cbsa": "47900",
+    "name": "Washington-Arlington-Alexandria, DC-VA-MD-WV",
+    "principalCity": "Washington",
+    "state": "DC",
+    "counties": [
+      "24021",
+      "24031",
+      "11001",
+      "24009",
+      "24017",
+      "24033",
+      "51013",
+      "51043",
+      "51047",
+      "51059",
+      "51061",
+      "51107",
+      "51113",
+      "51153",
+      "51157",
+      "51177",
+      "51179",
+      "51187",
+      "51510",
+      "51600",
+      "51610",
+      "51630",
+      "51683",
+      "51685",
+      "54037"
+    ],
+    "population": 6332069,
+    "rank": 6,
+    "startable": true,
+    "hpi": null,
+    "hpiChange5y": null
+  },
+  {
+    "cbsa": "19820",
+    "name": "Detroit-Warren-Dearborn, MI",
+    "principalCity": "Detroit",
+    "state": "MI",
+    "counties": [
+      "26163",
+      "26087",
+      "26093",
+      "26099",
+      "26125",
+      "26147"
+    ],
+    "population": 4382832,
+    "rank": 14,
+    "startable": true,
+    "hpi": null,
+    "hpiChange5y": null
+  },
+  {
+    "cbsa": "29820",
+    "name": "Las Vegas-Henderson-Paradise, NV",
+    "principalCity": "Las Vegas",
+    "state": "NV",
+    "counties": [
+      "32003"
+    ],
+    "population": 2231147,
+    "rank": 30,
+    "startable": true,
+    "hpi": null,
+    "hpiChange5y": null
+  },
+  {
+    "cbsa": "41940",
+    "name": "San Jose-Sunnyvale-Santa Clara, CA",
+    "principalCity": "San Jose",
+    "state": "CA",
+    "counties": [
+      "06069",
+      "06085"
+    ],
+    "population": 1995351,
+    "rank": 35,
+    "startable": true,
+    "hpi": null,
+    "hpiChange5y": null
+  },
+  {
+    "cbsa": "33260",
+    "name": "Midland, TX",
+    "principalCity": "Midland",
+    "state": "TX",
+    "counties": [
+      "48317",
+      "48329"
+    ],
+    "population": 172177,
+    "rank": 250,
+    "startable": false,
+    "hpi": null,
+    "hpiChange5y": null
+  }
+]

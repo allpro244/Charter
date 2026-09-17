@@ -79,6 +79,7 @@ export interface BankSeed {
   assets: number; // dollars
   deposits: number; // dollars
   offices: number;
+  national?: boolean; // set by the engine when the seed became one of the national banks at the start
 }
 
 export interface NationalRecord {

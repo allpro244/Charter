@@ -12,6 +12,14 @@
 // filled from the next level up and flagged imputed (CLAUDE.md rule 18); a
 // missing record fails the build with a list of what is missing.
 //
+// Every input has an agency file and, for networks that refuse the agency
+// hosts, a public mirror of the same dataset (scripts/lib/sources.ts,
+// SYSTEMS.md Part 2). The build takes the agency file when it is on disk,
+// the mirror otherwise, and the manifest says which one it used. Bank
+// totals and the four short rates have no mirror: without them the engine
+// generates the banking sector from hand bands (D48) and the build writes
+// the hand rates, both flagged.
+//
 // Run:   npm run build-data                (full outputs)
 //        npm run build-data -- --fixtures  (also writes data/fixtures/, the
 //                                           real subset used by tests)
@@ -25,16 +33,23 @@ import { SECTORS, type BankSeed, type CountyRecord, type MetroRecord, type Natio
 import {
   ACS_B19001_VARS,
   ACS_MAIN_VARS,
+  ACS_MIRROR_PRIOR_YEAR,
+  ACS_MIRROR_YEAR,
   DATA_DIR,
+  OMB_LIST_YEAR,
   FIXTURES_DIR,
   GROWTH_YEARS,
   PEP_LATEST_YEAR,
   PEP_PRIOR_YEAR,
   RAW_DIR,
+  SOURCES,
   VINTAGE,
   rawPath,
   sourceByName,
 } from './lib/sources';
+import { calibration } from '../data/calibration';
+import { type AcsMirrorCounty, loadAcsMirror, loadAcsPopulation, loadCbsaParquet, loadDatahubSeries, loadJoc, stateFromCounties } from './lib/mirrors';
+import { renormalize, zeroShares } from './lib/naics';
 import { findColumn, findColumnOrNull, normalizeHeader, padCode, parseCsv, parseCsvLine, parseNumber } from './lib/csv';
 import { entryByName, readRawManifest, sha256File, type RawEntry } from './lib/manifest';
 import { openZipEntry, readZipEntry } from './lib/zip';
@@ -113,6 +128,7 @@ interface RawFile {
 }
 
 function findRawFile(name: string): RawFile | null {
+  if (!SOURCES.some((s) => s.name === name)) return null;
   const source = sourceByName(name);
   const entry = entryByName(rawManifest, name);
   if (entry?.ok && entry.file && existsSync(rawPath(entry.file))) {
@@ -607,9 +623,451 @@ function writeJson(dir: string, name: string, value: unknown, pretty: boolean): 
   return Buffer.byteLength(text);
 }
 
+
+// ---------------------------------------------------------------------------
+// Inputs: the same shapes whichever file landed.
+
+interface PopCounty {
+  name: string;
+  stateFips: string;
+  population: number;
+}
+
+interface AcsVals {
+  medianHouseholdIncome: number | null;
+  perCapitaIncome: number | null;
+  incomeBuckets: number[] | null;
+  medianHomeValue: number | null;
+  medianRent: number | null;
+  housingUnits: number | null;
+  vacant: number | null;
+}
+
+interface EmpVals {
+  employment: number | null;
+  wage: number | null;
+  shares: Shares | null;
+  imputedSectors: string[];
+  wageImputed: boolean;
+  employmentImputed: boolean;
+}
+
+interface Inputs {
+  pop: { counties: Map<string, PopCounty>; states: Map<string, number>; prior: Map<string, number>; priorStates: Map<string, number>; via: string };
+  acs: { counties: Map<string, AcsVals>; states: Map<string, AcsVals>; via: string };
+  emp: { counties: Map<string, EmpVals>; nationalShares: Shares; via: string; units: { employment: string; wage: string; sectors: string } };
+  laus: { rows: Map<string, LausRow>; via: string; unit: string };
+  gdp: { rows: Map<string, number | null>; unit: string; via: string } | null;
+  fhfaCounty: Map<string, Map<number, number>> | null;
+  fhfaCbsa: Map<string, Map<number, number>> | null;
+  cbsas: { cbsas: Map<string, Cbsa>; via: string };
+  fdic: { institutions: FdicFile; sod: FdicFile | null } | null;
+  national: { record: NationalRecord; via: Record<string, string>; hand: string[]; windows: Record<string, string> };
+  centroids: Map<string, [number, number]>; // JoC centroids, used only when a county has no geometry
+}
+
+function acsFromRow(acs: AcsRow | undefined, buckets: AcsRow | undefined): AcsVals | null {
+  if (!acs) return null;
+  const bucketVars = ACS_B19001_VARS.slice(1);
+  let incomeBuckets: number[] | null = null;
+  const total = buckets?.B19001_001E ?? null;
+  if (buckets && total !== null && total > 0) {
+    const counts = bucketVars.map((v) => buckets[v] ?? 0);
+    const sum = counts.reduce((a, b) => a + b, 0);
+    if (sum > 0) incomeBuckets = counts.map((c) => c / sum);
+  }
+  return {
+    medianHouseholdIncome: acs.B19013_001E ?? null,
+    perCapitaIncome: acs.B19301_001E ?? null,
+    incomeBuckets,
+    medianHomeValue: acs.B25077_001E ?? null,
+    medianRent: acs.B25064_001E ?? null,
+    housingUnits: acs.B25002_001E ?? null,
+    vacant: acs.B25002_003E ?? null,
+  };
+}
+
+function acsFromMirror(c: AcsMirrorCounty | null): AcsVals | null {
+  if (!c) return null;
+  return {
+    medianHouseholdIncome: c.medianHouseholdIncome,
+    perCapitaIncome: c.perCapitaIncome,
+    incomeBuckets: c.incomeBuckets,
+    medianHomeValue: c.medianHomeValue,
+    medianRent: c.medianRent,
+    housingUnits: c.housingUnits,
+    vacant: c.vacant,
+  };
+}
+
+async function loadInputs(sources: ManifestSource[], problems: string[]): Promise<Inputs> {
+  // ---- population ------------------------------------------------------------
+  log('\nPopulation');
+  const pepFile = findRawFile('pep');
+  const pepPriorFile = findRawFile('pep-prior');
+  const jocFile = findRawFile('mirror-counties-joc');
+  const joc = jocFile ? loadJoc(jocFile.path) : null;
+  if (jocFile && joc) {
+    log(`  ${jocFile.file}: ${joc.counties.size} counties (names, centroids, CBP wages)`);
+    sources.push(manifestSource(jocFile, joc.rows, 'JsonOfCounties compilation: CBP 2019 employees and payroll by sector, TIGER 2017 centroids, county names'));
+  }
+  const centroids = new Map<string, [number, number]>();
+  if (joc) for (const [fips, c] of joc.counties) centroids.set(fips, c.centroid);
+  let pop: Inputs['pop'];
+  if (pepFile && pepPriorFile) {
+    const pep = loadPep(pepFile.path, VINTAGE);
+    sources.push(manifestSource(pepFile, pep.rows, `POPESTIMATE${VINTAGE}; file is the 2020-${PEP_LATEST_YEAR} vintage`));
+    const pepPrior = loadPep(pepPriorFile.path, VINTAGE - GROWTH_YEARS);
+    sources.push(manifestSource(pepPriorFile, pepPrior.rows, `POPESTIMATE${VINTAGE - GROWTH_YEARS} from the 2010-${PEP_PRIOR_YEAR} vintage, for 5 year growth`));
+    pop = {
+      counties: pep.counties,
+      states: pep.states,
+      prior: new Map([...pepPrior.counties].map(([f, c]) => [f, c.population])),
+      priorStates: pepPrior.states,
+      via: `Census PEP (POPESTIMATE${VINTAGE}, growth from POPESTIMATE${VINTAGE - GROWTH_YEARS})`,
+    };
+  } else {
+    const x01 = requireRawFile(`mirror-acs-x01_age_and_sex-${ACS_MIRROR_YEAR}`);
+    const x01Prior = requireRawFile(`mirror-acs-x01_age_and_sex-${ACS_MIRROR_PRIOR_YEAR}`);
+    if (!joc) throw new Error('mirror-counties-joc is required for county names when Census PEP is absent (run npm run fetch-data -- --only mirror-counties-joc)');
+    const now = await loadAcsPopulation(x01.path);
+    const prior = await loadAcsPopulation(x01Prior.path);
+    log(`  ${x01.file}: ${now.size} counties; ${x01Prior.file}: ${prior.size} counties`);
+    sources.push(manifestSource(x01, now.size, `B01003 total population summed from tracts, ACS 5 year ${ACS_MIRROR_YEAR - 4} to ${ACS_MIRROR_YEAR}`));
+    sources.push(manifestSource(x01Prior, prior.size, `B01003 total population summed from tracts, ACS 5 year ${ACS_MIRROR_PRIOR_YEAR - 4} to ${ACS_MIRROR_PRIOR_YEAR}, for 5 year growth`));
+    const counties = new Map<string, PopCounty>();
+    const states = new Map<string, number>();
+    const priorStates = new Map<string, number>();
+    let unnamed = 0;
+    for (const [fips, population] of now) {
+      const stateFips = fips.slice(0, 2);
+      if (!isStateFips(stateFips)) continue;
+      const j = joc.counties.get(fips);
+      if (!j) {
+        unnamed++;
+        problems.push(`${fips}: in the ACS ${ACS_MIRROR_YEAR} tables but not in the county compilation (no name or centroid); dropped`);
+        continue;
+      }
+      counties.set(fips, { name: j.name, stateFips, population: Math.round(population) });
+      states.set(stateFips, (states.get(stateFips) ?? 0) + population);
+    }
+    for (const [fips, p] of prior) {
+      const stateFips = fips.slice(0, 2);
+      if (isStateFips(stateFips)) priorStates.set(stateFips, (priorStates.get(stateFips) ?? 0) + p);
+    }
+    if (unnamed > 0) log(`  ${unnamed} counties in the ACS tables have no name in the compilation`);
+    pop = { counties, states, prior, priorStates, via: `ACS 5 year B01003 (${ACS_MIRROR_YEAR - 4} to ${ACS_MIRROR_YEAR}) summed from tracts; growth against the ${ACS_MIRROR_PRIOR_YEAR - 4} to ${ACS_MIRROR_PRIOR_YEAR} release` };
+  }
+
+  // ---- income and housing ------------------------------------------------------
+  log('\nIncome and housing (ACS 5 year)');
+  const acsCountyFile = findRawFile('acs-county');
+  let acs: Inputs['acs'];
+  let mirrorAcs: Awaited<ReturnType<typeof loadAcsMirror>> | null = null;
+  if (acsCountyFile) {
+    const acsCounty = loadAcs(acsCountyFile.path, ACS_MAIN_VARS, 'county');
+    sources.push(manifestSource(acsCountyFile, acsCounty.count));
+    const acsBucketsFile = requireRawFile('acs-county-b19001');
+    const acsBuckets = loadAcs(acsBucketsFile.path, ACS_B19001_VARS, 'county');
+    sources.push(manifestSource(acsBucketsFile, acsBuckets.count));
+    const acsStateFile = requireRawFile('acs-state');
+    const acsState = loadAcs(acsStateFile.path, ACS_MAIN_VARS, 'state');
+    sources.push(manifestSource(acsStateFile, acsState.count, 'state level, used only to fill suppressed county cells'));
+    const acsStateBucketsFile = requireRawFile('acs-state-b19001');
+    const acsStateBuckets = loadAcs(acsStateBucketsFile.path, ACS_B19001_VARS, 'state');
+    sources.push(manifestSource(acsStateBucketsFile, acsStateBuckets.count, 'state level, used only to fill suppressed county cells'));
+    const counties = new Map<string, AcsVals>();
+    for (const [fips, row] of acsCounty.rows) {
+      const v = acsFromRow(row, acsBuckets.rows.get(fips));
+      if (v) counties.set(fips, v);
+    }
+    const states = new Map<string, AcsVals>();
+    for (const [fips, row] of acsState.rows) {
+      const v = acsFromRow(row, acsStateBuckets.rows.get(fips));
+      if (v) states.set(fips, v);
+    }
+    acs = { counties, states, via: `Census API, ACS 5 year ${VINTAGE}` };
+  } else {
+    const paths = {
+      x01: requireRawFile(`mirror-acs-x01_age_and_sex-${ACS_MIRROR_YEAR}`),
+      x19: requireRawFile(`mirror-acs-x19_income-${ACS_MIRROR_YEAR}`),
+      x23: requireRawFile(`mirror-acs-x23_employment_status-${ACS_MIRROR_YEAR}`),
+      x24: requireRawFile(`mirror-acs-x24_industry_occupation-${ACS_MIRROR_YEAR}`),
+      x25: requireRawFile(`mirror-acs-x25_housing_characteristics-${ACS_MIRROR_YEAR}`),
+    };
+    mirrorAcs = await loadAcsMirror({ x01: paths.x01.path, x19: paths.x19.path, x23: paths.x23.path, x24: paths.x24.path, x25: paths.x25.path }, log);
+    sources.push(manifestSource(paths.x19, mirrorAcs.counties.size, 'B19001 buckets summed from tracts; median household income interpolated within the bucket holding the middle household; per capita income = B19313 aggregate income over B01003 population'));
+    sources.push(manifestSource(paths.x23, mirrorAcs.counties.size, 'B23025 civilian labor force, employed and unemployed summed from tracts'));
+    sources.push(manifestSource(paths.x24, mirrorAcs.counties.size, 'C24030 employed residents by industry summed from tracts and mapped to the D41 sectors (scripts/lib/acs.ts)'));
+    sources.push(manifestSource(paths.x25, mirrorAcs.counties.size, 'B25002 units and vacancy summed from tracts; median home value and rent interpolated from the B25075 and B25063 buckets'));
+    const counties = new Map<string, AcsVals>();
+    for (const [fips, c] of mirrorAcs.counties) {
+      const v = acsFromMirror(c);
+      if (v) counties.set(fips, v);
+    }
+    const states = new Map<string, AcsVals>();
+    for (const st of STATES) {
+      const v = acsFromMirror(stateFromCounties(mirrorAcs.counties, st.fips, { incomeBuckets: mirrorAcs.incomeCounts }));
+      if (v) states.set(st.fips, v);
+    }
+    acs = { counties, states, via: `spatial-ucr mirror of the ACS 5 year ${ACS_MIRROR_YEAR - 4} to ${ACS_MIRROR_YEAR} tract tables, summed to counties` };
+  }
+
+  // ---- employment, wages, sectors ----------------------------------------------
+  log('\nEmployment and wages');
+  const qcewFile = findRawFile('qcew');
+  let emp: Inputs['emp'];
+  if (qcewFile) {
+    const qcew = await loadQcew(qcewFile.path);
+    sources.push(manifestSource(qcewFile, qcew.rows, `${qcew.kept} rows kept (county, state, national totals, ownership, and mapped NAICS codes)`));
+    const nationalShares = sectorShares(qcew.national.cells, qcew.national.total ?? 0, null).shares;
+    const stateShares = new Map<string, Shares>();
+    for (const [stateFips, area] of qcew.states) {
+      if (!isStateFips(stateFips) || area.total === null) continue;
+      stateShares.set(stateFips, sectorShares(area.cells, area.total, nationalShares).shares);
+    }
+    const counties = new Map<string, EmpVals>();
+    for (const [fips, q] of qcew.counties) {
+      if (q.total === null || q.totalSuppressed) {
+        counties.set(fips, { employment: null, wage: q.wage, shares: null, imputedSectors: [], wageImputed: false, employmentImputed: false });
+        continue;
+      }
+      const res = sectorShares(q.cells, q.total, stateShares.get(fips.slice(0, 2)) ?? nationalShares);
+      counties.set(fips, { employment: q.total, wage: q.wage, shares: res.shares, imputedSectors: res.imputed.map((s) => `sectors.${s}`), wageImputed: false, employmentImputed: false });
+    }
+    emp = {
+      counties,
+      nationalShares,
+      via: `BLS QCEW ${VINTAGE} annual averages`,
+      units: {
+        employment: 'annual average employment, all ownerships (QCEW annual_avg_emplvl)',
+        wage: 'dollars per week (QCEW annual_avg_wkly_wage)',
+        sectors: 'employment shares by D41 sector, sum to 1; government from ownership codes 1, 2, 3; other is the residual',
+      },
+    };
+  } else {
+    if (!mirrorAcs) {
+      const paths = {
+        x01: requireRawFile(`mirror-acs-x01_age_and_sex-${ACS_MIRROR_YEAR}`),
+        x19: requireRawFile(`mirror-acs-x19_income-${ACS_MIRROR_YEAR}`),
+        x23: requireRawFile(`mirror-acs-x23_employment_status-${ACS_MIRROR_YEAR}`),
+        x24: requireRawFile(`mirror-acs-x24_industry_occupation-${ACS_MIRROR_YEAR}`),
+        x25: requireRawFile(`mirror-acs-x25_housing_characteristics-${ACS_MIRROR_YEAR}`),
+      };
+      mirrorAcs = await loadAcsMirror({ x01: paths.x01.path, x19: paths.x19.path, x23: paths.x23.path, x24: paths.x24.path, x25: paths.x25.path }, log);
+    }
+    if (!joc) throw new Error('mirror-counties-joc is required for wages when QCEW is absent');
+    // State and national sector counts from the counties, for the fallback.
+    const stateCounts = new Map<string, Shares>();
+    const nationalCounts = zeroShares();
+    for (const [fips, c] of mirrorAcs.counties) {
+      if (!c.sectorCounts) continue;
+      const st = stateCounts.get(fips.slice(0, 2)) ?? zeroShares();
+      for (const s of SECTORS) {
+        st[s] += c.sectorCounts[s];
+        nationalCounts[s] += c.sectorCounts[s];
+      }
+      stateCounts.set(fips.slice(0, 2), st);
+    }
+    // State wage ratios from CBP for counties without a payroll figure.
+    const stateWage = new Map<string, { pay: number; emp: number }>();
+    for (const [fips, j] of joc.counties) {
+      if (j.cbpEmployees === null || j.cbpPayroll === null || j.cbpEmployees <= 0) continue;
+      const st = stateWage.get(fips.slice(0, 2)) ?? { pay: 0, emp: 0 };
+      st.pay += j.cbpPayroll;
+      st.emp += j.cbpEmployees;
+      stateWage.set(fips.slice(0, 2), st);
+    }
+    const counties = new Map<string, EmpVals>();
+    for (const [fips, c] of mirrorAcs.counties) {
+      const stateFips = fips.slice(0, 2);
+      let shares: Shares | null = null;
+      let imputedSectors: string[] = [];
+      if (c.sectorCounts && c.industryTotal !== null && c.industryTotal > 0) shares = renormalize(c.sectorCounts);
+      else {
+        const st = stateCounts.get(stateFips);
+        if (st) {
+          shares = renormalize(st);
+          imputedSectors = SECTORS.map((s) => `sectors.${s}`);
+        }
+      }
+      const j = joc.counties.get(fips);
+      let wage: number | null = null;
+      let wageImputed = false;
+      if (j && j.cbpEmployees !== null && j.cbpPayroll !== null && j.cbpEmployees > 0) wage = Math.round(j.cbpPayroll / j.cbpEmployees / 52);
+      else {
+        const st = stateWage.get(stateFips);
+        if (st && st.emp > 0) {
+          wage = Math.round(st.pay / st.emp / 52);
+          wageImputed = true;
+        }
+      }
+      counties.set(fips, { employment: c.employed, wage, shares, imputedSectors, wageImputed, employmentImputed: false });
+    }
+    emp = {
+      counties,
+      nationalShares: renormalize(nationalCounts),
+      via: `ACS C24030 employed residents by industry (${ACS_MIRROR_YEAR - 4} to ${ACS_MIRROR_YEAR}) for sectors and employment; CBP 2019 payroll over employees for the wage`,
+      units: {
+        employment: 'employed civilian residents 16 and over (ACS B23025_004E summed from tracts)',
+        wage: 'dollars per week: CBP 2019 annual payroll over employees, private workplace employment, divided by 52',
+        sectors: 'shares of employed residents by D41 sector from ACS C24030 (scripts/lib/acs.ts), sum to 1; government is public administration',
+      },
+    };
+  }
+
+  // ---- unemployment ---------------------------------------------------------------
+  log('\nUnemployment');
+  const lausFile = findRawFile('laus');
+  let laus: Inputs['laus'];
+  if (lausFile) {
+    const rows = loadLaus(lausFile.path);
+    sources.push(manifestSource(lausFile, rows.size));
+    laus = { rows, via: `BLS LAUS ${VINTAGE} annual averages`, unit: 'percent (LAUS)' };
+  } else {
+    if (!mirrorAcs) throw new Error('unreachable: the ACS mirror is loaded when LAUS is absent');
+    const rows = new Map<string, LausRow>();
+    for (const [fips, c] of mirrorAcs.counties) {
+      rows.set(fips, {
+        laborForce: c.laborForce,
+        unemploymentRate: c.laborForce !== null && c.laborForce > 0 && c.unemployed !== null ? Math.round((c.unemployed / c.laborForce) * 1000) / 10 : null,
+      });
+    }
+    laus = { rows, via: `ACS B23025 (${ACS_MIRROR_YEAR - 4} to ${ACS_MIRROR_YEAR}) civilian labor force and unemployed, summed from tracts`, unit: 'percent, ACS B23025 unemployed over civilian labor force' };
+  }
+
+  // ---- GDP (optional) -----------------------------------------------------------
+  log('\nGDP (BEA CAGDP2)');
+  const beaFile = findRawFile('bea-gdp');
+  let gdp: Inputs['gdp'] = null;
+  if (beaFile) {
+    const bea = await loadBea(beaFile.path);
+    sources.push(manifestSource(beaFile, bea.rows, `entry ${bea.entry}, LineCode 1 (all industry total), unit "${bea.unit}", column ${VINTAGE}`));
+    gdp = { rows: bea.gdp, unit: bea.unit, via: 'BEA CAGDP2' };
+  } else log('  not on disk (apps.bea.gov has no public mirror): gdp is null for every county');
+
+  // ---- home price indexes (optional) ---------------------------------------------
+  log('\nHome prices (FHFA HPI)');
+  const fhfaCountyFile = findRawFile('fhfa-county');
+  let fhfaCounty: Inputs['fhfaCounty'] = null;
+  if (fhfaCountyFile) {
+    const loaded = loadFhfa(fhfaCountyFile.path, ['FIPS code', 'FIPS', 'County FIPS', 'GEOID', 'fips_code'], 5);
+    fhfaCounty = loaded.series;
+    sources.push(manifestSource(fhfaCountyFile, loaded.rows));
+  } else log('  county index not on disk (fhfa.gov has no public mirror): hpi is null; the median home value carries the level');
+  const fhfaCbsaFile = findRawFile('fhfa-cbsa');
+  let fhfaCbsa: Inputs['fhfaCbsa'] = null;
+  if (fhfaCbsaFile) {
+    const loaded = loadFhfa(fhfaCbsaFile.path, ['CBSA Code', 'CBSA', 'Code', 'MSA Code', 'Metro Code', 'cbsa_code', 'FIPS code'], 5);
+    fhfaCbsa = loaded.series;
+    sources.push(manifestSource(fhfaCbsaFile, loaded.rows));
+  } else log('  metro index not on disk: metro hpi is null; a startable metro must carry a median home value instead');
+
+  // ---- metro definitions ---------------------------------------------------------
+  log('\nMetro definitions (OMB)');
+  const ombFile = findRawFile('omb-cbsa');
+  let cbsas: Inputs['cbsas'];
+  if (ombFile) {
+    const omb = loadOmb(ombFile.path);
+    sources.push(manifestSource(ombFile, omb.rows));
+    cbsas = { cbsas: omb.cbsas, via: `OMB list1_${OMB_LIST_YEAR}` };
+  } else {
+    const f = requireRawFile('mirror-cbsa');
+    const loaded = await loadCbsaParquet(f.path);
+    log(`  ${f.file}: ${loaded.cbsas.size} CBSAs, ${loaded.rows} county rows`);
+    sources.push(manifestSource(f, loaded.rows, 'OMB 2020 delineations republished as parquet'));
+    cbsas = { cbsas: loaded.cbsas, via: 'OMB 2020 delineation list, spatial-ucr mirror' };
+  }
+
+  // ---- banks (optional: the engine generates the sector otherwise, D48) ----------------
+  log('\nBanks (FDIC)');
+  const fdicFile = findRawFile('fdic-institutions');
+  let fdic: Inputs['fdic'] = null;
+  if (fdicFile) {
+    const institutions = loadFdicFile(fdicFile.path);
+    log(`  ${fdicFile.file}: ${institutions.data.length} institutions`);
+    sources.push(manifestSource(fdicFile, institutions.data.length, 'active institutions as of the fetch date; ASSET and DEP thousands of dollars'));
+    const sodFile = findRawFile('fdic-sod');
+    let sod: FdicFile | null = null;
+    if (sodFile) {
+      sod = loadFdicFile(sodFile.path);
+      log(`  ${sodFile.file}: ${sod.data.length} branches`);
+      sources.push(manifestSource(sodFile, sod.data.length, 'branch level Summary of Deposits; DEPSUMBR thousands of dollars'));
+    } else log('  fdic-sod not available: bankDeposits and bankOffices will be null');
+    fdic = { institutions, sod };
+  } else log('  not on disk (fdic.gov has no public mirror): states carry zero bank totals and no seeds; the engine generates the sector from hand bands (D48)');
+
+  // ---- national series -------------------------------------------------------------
+  log('\nNational series');
+  const series: Record<string, Obs[]> = {};
+  const via: Record<string, string> = {};
+  const hand: string[] = [];
+  for (const id of ['FEDFUNDS', 'DGS3MO', 'DGS2', 'DGS10', 'DGS30', 'CPIAUCSL', 'UNRATE', 'DCOILWTICO', 'CSUSHPISA', 'SP500']) {
+    const primary = findRawFile(`fred-${id}`);
+    if (primary) {
+      const f = loadFred(id);
+      series[id] = f.series;
+      via[id] = 'FRED';
+      sources.push(manifestSource(f.file, f.series.length, `FRED ${id}`));
+      continue;
+    }
+    const mirror = findRawFile(`mirror-fred-${id}`);
+    if (mirror) {
+      series[id] = loadDatahubSeries(mirror.path, id);
+      via[id] = 'datahub mirror';
+      sources.push(manifestSource(mirror, series[id]!.length, sourceByName(`mirror-fred-${id}`).note));
+      continue;
+    }
+    via[id] = 'hand band (data/calibration.ts, verified: false)';
+    hand.push(id);
+  }
+  const handValue = (id: string): number => {
+    switch (id) {
+      case 'FEDFUNDS':
+        return calibration.startFedFunds.typical;
+      case 'DGS3MO':
+        return calibration.startDgs3mo.typical;
+      case 'DGS2':
+        return calibration.startDgs2.typical;
+      case 'DGS30':
+        return calibration.startDgs30.typical;
+      default:
+        throw new Error(`no hand band for ${id}: fetch-data must land FRED ${id} or a mirror`);
+    }
+  };
+  const pick = (id: string): number => (series[id] ? latestOnOrBefore(series[id]!, AS_OF).value ?? 0 : handValue(id));
+  const windows: Record<string, string> = {};
+  const yoy = (id: string): number => {
+    const s = series[id];
+    if (!s) return handValue(id);
+    const r = yoyPercent(s, AS_OF);
+    windows[id] = `${r.from} to ${r.to}`;
+    return r.value;
+  };
+  for (const id of Object.keys(series)) if (!['CPIAUCSL', 'CSUSHPISA'].includes(id)) windows[id] = latestOnOrBefore(series[id]!, AS_OF).date;
+  const record: NationalRecord = {
+    asOf: AS_OF,
+    fedFunds: pick('FEDFUNDS'),
+    dgs3mo: pick('DGS3MO'),
+    dgs2: pick('DGS2'),
+    dgs10: pick('DGS10'),
+    dgs30: pick('DGS30'),
+    cpiYoY: yoy('CPIAUCSL'),
+    unemploymentRate: pick('UNRATE'),
+    wti: pick('DCOILWTICO'),
+    caseShillerYoY: yoy('CSUSHPISA'),
+    sp500: pick('SP500'),
+  };
+  for (const id of Object.keys(via)) log(`  ${id.padEnd(10)} ${via[id]}${windows[id] ? ` (${windows[id]})` : ''}`);
+  log(`  fed funds ${record.fedFunds}, 10 year ${record.dgs10}, CPI YoY ${record.cpiYoY.toFixed(2)}, home prices YoY ${record.caseShillerYoY.toFixed(2)}, unemployment ${record.unemploymentRate}`);
+
+  return { pop, acs, emp, laus, gdp, fhfaCounty, fhfaCbsa, cbsas, fdic, national: { record, via, hand, windows }, centroids };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const problems: string[] = [];
+  const warnings: string[] = [];
   const sources: ManifestSource[] = [];
   const imputedByField = new Map<string, number>();
   const countImputed = (field: string) => imputedByField.set(field, (imputedByField.get(field) ?? 0) + 1);
@@ -617,83 +1075,8 @@ async function main(): Promise<void> {
   log(`build-data: vintage ${VINTAGE}, raw dir ${RAW_DIR}`);
   if (!rawManifest) log('  note: raw/manifest.json not found; locating files by name');
 
-  // ---- load everything -----------------------------------------------------
-  log('\nPopulation (Census PEP)');
-  const pepFile = requireRawFile('pep');
-  const pep = loadPep(pepFile.path, VINTAGE);
-  sources.push(manifestSource(pepFile, pep.rows, `POPESTIMATE${VINTAGE}; file is the 2020-${PEP_LATEST_YEAR} vintage`));
-  const pepPriorFile = requireRawFile('pep-prior');
-  const pepPrior = loadPep(pepPriorFile.path, VINTAGE - GROWTH_YEARS);
-  sources.push(manifestSource(pepPriorFile, pepPrior.rows, `POPESTIMATE${VINTAGE - GROWTH_YEARS} from the 2010-${PEP_PRIOR_YEAR} vintage, for 5 year growth`));
-
-  log('\nIncome and housing (ACS 5 year)');
-  const acsCountyFile = requireRawFile('acs-county');
-  const acsCounty = loadAcs(acsCountyFile.path, ACS_MAIN_VARS, 'county');
-  sources.push(manifestSource(acsCountyFile, acsCounty.count));
-  const acsBucketsFile = requireRawFile('acs-county-b19001');
-  const acsBuckets = loadAcs(acsBucketsFile.path, ACS_B19001_VARS, 'county');
-  sources.push(manifestSource(acsBucketsFile, acsBuckets.count));
-  const acsStateFile = requireRawFile('acs-state');
-  const acsState = loadAcs(acsStateFile.path, ACS_MAIN_VARS, 'state');
-  sources.push(manifestSource(acsStateFile, acsState.count, 'state level, used only to fill suppressed county cells'));
-  const acsStateBucketsFile = requireRawFile('acs-state-b19001');
-  const acsStateBuckets = loadAcs(acsStateBucketsFile.path, ACS_B19001_VARS, 'state');
-  sources.push(manifestSource(acsStateBucketsFile, acsStateBuckets.count, 'state level, used only to fill suppressed county cells'));
-
-  log('\nEmployment and wages (BLS QCEW)');
-  const qcewFile = requireRawFile('qcew');
-  const qcew = await loadQcew(qcewFile.path);
-  sources.push(manifestSource(qcewFile, qcew.rows, `${qcew.kept} rows kept (county, state, national totals, ownership, and mapped NAICS codes)`));
-
-  log('\nUnemployment (BLS LAUS)');
-  const lausFile = requireRawFile('laus');
-  const laus = loadLaus(lausFile.path);
-  sources.push(manifestSource(lausFile, laus.size));
-
-  log('\nGDP (BEA CAGDP2)');
-  const beaFile = requireRawFile('bea-gdp');
-  const bea = await loadBea(beaFile.path);
-  sources.push(manifestSource(beaFile, bea.rows, `entry ${bea.entry}, LineCode 1 (all industry total), unit "${bea.unit}", column ${VINTAGE}`));
-
-  log('\nHome prices (FHFA HPI)');
-  const fhfaCountyFile = requireRawFile('fhfa-county');
-  const fhfaCounty = loadFhfa(fhfaCountyFile.path, ['FIPS code', 'FIPS', 'County FIPS', 'GEOID', 'fips_code'], 5);
-  sources.push(manifestSource(fhfaCountyFile, fhfaCounty.rows));
-  const fhfaCbsaFile = findRawFile('fhfa-cbsa');
-  let fhfaCbsa: Map<string, Map<number, number>> = new Map();
-  if (fhfaCbsaFile) {
-    const loaded = loadFhfa(fhfaCbsaFile.path, ['CBSA Code', 'CBSA', 'Code', 'MSA Code', 'Metro Code', 'cbsa_code', 'FIPS code'], 5);
-    fhfaCbsa = loaded.series;
-    sources.push(manifestSource(fhfaCbsaFile, loaded.rows));
-  } else {
-    problems.push('fhfa-cbsa raw file is missing; every startable metro will lack an HPI (run npm run fetch-data -- --only fhfa-cbsa)');
-  }
-
-  log('\nMetro definitions (OMB)');
-  const ombFile = requireRawFile('omb-cbsa');
-  const omb = loadOmb(ombFile.path);
-  sources.push(manifestSource(ombFile, omb.rows));
-
-  log('\nBanks (FDIC)');
-  const fdicFile = requireRawFile('fdic-institutions');
-  const fdic = loadFdicFile(fdicFile.path);
-  log(`  ${fdicFile.file}: ${fdic.data.length} institutions`);
-  sources.push(manifestSource(fdicFile, fdic.data.length, 'active institutions as of the fetch date; ASSET and DEP thousands of dollars'));
-  const sodFile = findRawFile('fdic-sod');
-  let sod: FdicFile | null = null;
-  if (sodFile) {
-    sod = loadFdicFile(sodFile.path);
-    log(`  ${sodFile.file}: ${sod.data.length} branches`);
-    sources.push(manifestSource(sodFile, sod.data.length, 'branch level Summary of Deposits; DEPSUMBR thousands of dollars'));
-  } else {
-    log('  fdic-sod not available: bankDeposits and bankOffices will be null');
-  }
-
-  log('\nNational series (FRED)');
-  const fred = Object.fromEntries(
-    ['FEDFUNDS', 'DGS3MO', 'DGS2', 'DGS10', 'DGS30', 'CPIAUCSL', 'UNRATE', 'DCOILWTICO', 'CSUSHPISA', 'SP500'].map((id) => [id, loadFred(id)]),
-  );
-  for (const [id, f] of Object.entries(fred)) sources.push(manifestSource(f.file, f.series.length, `FRED ${id}`));
+  const inputs = await loadInputs(sources, warnings);
+  const { pop, acs, emp, laus, gdp, fhfaCounty, fhfaCbsa, fdic } = inputs;
 
   log('\nGeometry');
   const shapesFile = findRawFile('census-county-shapes');
@@ -714,16 +1097,9 @@ async function main(): Promise<void> {
     });
   }
 
-  // ---- sector shares: national, then state, then county --------------------
-  const nationalShares = sectorShares(qcew.national.cells, qcew.national.total ?? 0, null).shares;
-  const stateShares = new Map<string, Shares>();
-  for (const [stateFips, area] of qcew.states) {
-    if (!isStateFips(stateFips) || area.total === null) continue;
-    stateShares.set(stateFips, sectorShares(area.cells, area.total, nationalShares).shares);
-  }
-
   // ---- SOD by county --------------------------------------------------------
   const sodByCounty = new Map<string, { deposits: number; offices: number }>();
+  const sod = fdic?.sod ?? null;
   if (sod) {
     for (const row of sod.data) {
       const fips = padCode(String(row.STCNTYBR ?? ''), 5);
@@ -738,25 +1114,26 @@ async function main(): Promise<void> {
 
   // ---- county to CBSA ---------------------------------------------------------
   const cbsaByCounty = new Map<string, string>();
-  for (const c of omb.cbsas.values()) for (const fips of c.counties) cbsaByCounty.set(fips, c.code);
+  for (const c of inputs.cbsas.cbsas.values()) for (const fips of c.counties) cbsaByCounty.set(fips, c.code);
 
   // ---- counties ---------------------------------------------------------------
   log('\nAssembling counties');
   const counties: CountyRecord[] = [];
-  for (const [fips, p] of [...pep.counties].sort((a, b) => a[0].localeCompare(b[0]))) {
+  let dropped = 0;
+  for (const [fips, p] of [...pop.counties].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (!isStateFips(p.stateFips)) continue;
     const state = STATE_BY_FIPS[p.stateFips];
     if (!state) continue;
     const imputedFields: string[] = [];
     const missing: string[] = [];
 
-    // population growth: 5 years back from the prior PEP vintage, else the state's growth
+    // population growth: 5 years back, else the state's growth
     let growth: number | null = null;
-    const prior = pepPrior.counties.get(fips);
-    if (prior && prior.population > 0) growth = p.population / prior.population - 1;
+    const prior = pop.prior.get(fips);
+    if (prior !== undefined && prior > 0) growth = p.population / prior - 1;
     else {
-      const statePrior = pepPrior.states.get(p.stateFips);
-      const stateNow = pep.states.get(p.stateFips);
+      const statePrior = pop.priorStates.get(p.stateFips);
+      const stateNow = pop.states.get(p.stateFips);
       if (statePrior && stateNow && statePrior > 0) {
         growth = stateNow / statePrior - 1;
         imputedFields.push('populationGrowth5y');
@@ -764,67 +1141,71 @@ async function main(): Promise<void> {
     }
 
     // income and housing
-    const acs = acsCounty.rows.get(fips);
-    const acsSt = acsState.rows.get(p.stateFips);
-    if (!acs) missing.push('ACS row');
-    let medianHouseholdIncome = acs?.B19013_001E ?? null;
-    if (medianHouseholdIncome === null && acs) {
-      if (acsSt?.B19013_001E != null) {
-        medianHouseholdIncome = acsSt.B19013_001E;
+    const a = acs.counties.get(fips);
+    const aSt = acs.states.get(p.stateFips);
+    if (!a) missing.push('ACS row');
+    let medianHouseholdIncome = a?.medianHouseholdIncome ?? null;
+    if (medianHouseholdIncome === null && a) {
+      if (aSt?.medianHouseholdIncome != null) {
+        medianHouseholdIncome = aSt.medianHouseholdIncome;
         imputedFields.push('medianHouseholdIncome');
       } else missing.push('medianHouseholdIncome');
     }
-    const bucketsRow = acsBuckets.rows.get(fips);
     let incomeBuckets: number[] = [];
-    const bucketVars = ACS_B19001_VARS.slice(1);
-    const bucketsFrom = (row: AcsRow | undefined): number[] | null => {
-      const total = row?.B19001_001E ?? null;
-      if (!row || total === null || total <= 0) return null;
-      const counts = bucketVars.map((v) => row[v] ?? 0);
-      const sum = counts.reduce((a, b) => a + b, 0);
-      if (sum <= 0) return null;
-      return counts.map((c) => c / sum);
-    };
-    const own = bucketsFrom(bucketsRow);
-    if (own) incomeBuckets = own;
-    else {
-      const st = bucketsFrom(acsStateBuckets.rows.get(p.stateFips));
-      if (st) {
-        incomeBuckets = st;
-        imputedFields.push('incomeBuckets');
-      } else missing.push('incomeBuckets');
+    if (a?.incomeBuckets) incomeBuckets = a.incomeBuckets;
+    else if (aSt?.incomeBuckets) {
+      incomeBuckets = aSt.incomeBuckets;
+      imputedFields.push('incomeBuckets');
+    } else missing.push('incomeBuckets');
+    let perCapitaIncome = a?.perCapitaIncome ?? null;
+    if (perCapitaIncome === null && aSt?.perCapitaIncome != null) {
+      perCapitaIncome = aSt.perCapitaIncome;
+      imputedFields.push('perCapitaIncome');
     }
-    const housingUnits = acs?.B25002_001E ?? null;
-    const vacant = acs?.B25002_003E ?? null;
+    const housingUnits = a?.housingUnits ?? null;
+    const vacant = a?.vacant ?? null;
 
     // employment and sectors
-    const q = qcew.counties.get(fips);
+    const e = emp.counties.get(fips);
     let employment = 0;
     let avgWeeklyWage = 0;
-    let sectors: Record<Sector, number> = Object.fromEntries(SECTORS.map((s) => [s, 0])) as Record<Sector, number>;
-    if (!q || q.total === null || q.totalSuppressed) missing.push('employment (QCEW county total)');
+    let sectors: Record<Sector, number> = zeroShares();
+    if (!e || e.employment === null) missing.push('employment');
     else {
-      employment = q.total;
-      avgWeeklyWage = q.wage ?? 0;
-      if (q.wage === null) missing.push('avgWeeklyWage');
-      const fallback = stateShares.get(p.stateFips) ?? nationalShares;
-      const res = sectorShares(q.cells, q.total, fallback);
-      sectors = res.shares;
-      for (const s of res.imputed) imputedFields.push(`sectors.${s}`);
-      const sum = SECTORS.reduce((a, s) => a + sectors[s], 0);
-      if (Math.abs(sum - 1) > 1e-6) missing.push(`sector shares (sum ${sum})`);
+      employment = e.employment;
+      if (e.employmentImputed) imputedFields.push('employment');
+      if (e.wage === null) missing.push('avgWeeklyWage');
+      else {
+        avgWeeklyWage = e.wage;
+        if (e.wageImputed) imputedFields.push('avgWeeklyWage');
+      }
+      if (!e.shares) missing.push('sector shares');
+      else {
+        sectors = e.shares;
+        imputedFields.push(...e.imputedSectors);
+        const sum = SECTORS.reduce((acc, s) => acc + sectors[s], 0);
+        if (Math.abs(sum - 1) > 1e-6) missing.push(`sector shares (sum ${sum})`);
+      }
     }
 
-    // geometry
+    // geometry, or the compilation's centroid when the boundary file predates the county
     const feature = featureByFips.get(fips);
-    if (!feature) missing.push('geometry (centroid)');
+    let center: [number, number] | null = feature ? centroid(feature.geometry) : null;
+    if (!center) {
+      const c = inputs.centroids.get(fips);
+      if (c && (c[0] !== 0 || c[1] !== 0)) {
+        center = c;
+        imputedFields.push('centroid');
+      } else missing.push('geometry (centroid)');
+    }
 
     if (missing.length) {
-      problems.push(`${fips} ${p.name}, ${state.abbr}: missing ${missing.join('; ')}`);
+      dropped++;
+      warnings.push(`${fips} ${p.name}, ${state.abbr}: missing ${missing.join('; ')}; dropped`);
       continue;
     }
-    const lausRow = laus.get(fips);
-    const hp = hpiAt(fhfaCounty.series, fips);
+    const lausRow = laus.rows.get(fips);
+    const hp = fhfaCounty ? hpiAt(fhfaCounty, fips) : { hpi: null, change5y: null };
     const sodRow = sodByCounty.get(fips);
     for (const f of imputedFields) countImputed(f);
     counties.push({
@@ -836,39 +1217,41 @@ async function main(): Promise<void> {
       population: p.population,
       populationGrowth5y: growth ?? 0,
       medianHouseholdIncome: medianHouseholdIncome ?? 0,
-      perCapitaIncome: acs?.B19301_001E ?? null,
+      perCapitaIncome,
       incomeBuckets,
-      medianHomeValue: acs?.B25077_001E ?? null,
-      medianRent: acs?.B25064_001E ?? null,
+      medianHomeValue: a?.medianHomeValue ?? null,
+      medianRent: a?.medianRent ?? null,
       housingUnits,
       vacancyRate: housingUnits !== null && housingUnits > 0 && vacant !== null ? vacant / housingUnits : null,
       employment,
       avgWeeklyWage,
       laborForce: lausRow?.laborForce ?? null,
       unemploymentRate: lausRow?.unemploymentRate ?? null,
-      gdp: bea.gdp.get(fips) ?? null,
+      gdp: gdp ? gdp.rows.get(fips) ?? null : null,
       hpi: hp.hpi,
       hpiChange5y: hp.change5y,
       sectors,
       bankDeposits: sod ? sodRow?.deposits ?? 0 : null,
       bankOffices: sod ? sodRow?.offices ?? 0 : null,
-      centroid: centroid(feature!.geometry),
+      centroid: center as [number, number],
       imputed: imputedFields.length > 0,
       imputedFields,
     });
   }
-  log(`  ${counties.length} counties assembled, ${problems.length} problem(s) so far`);
+  log(`  ${counties.length} counties assembled, ${dropped} dropped, ${warnings.length} warning(s)`);
+  if (counties.length < 3000) problems.push(`only ${counties.length} counties assembled; expected about 3,100`);
+  if (dropped > 10) problems.push(`${dropped} counties dropped for missing fields; more than 10 means a source is broken, not a gap`);
   const countyByFips = new Map(counties.map((c) => [c.fips, c]));
 
   // ---- metros -----------------------------------------------------------------
   log('\nAssembling metros');
   const metros: MetroRecord[] = [];
-  for (const c of omb.cbsas.values()) {
+  for (const c of inputs.cbsas.cbsas.values()) {
     const members = c.counties.filter((f) => countyByFips.has(f));
     if (members.length === 0) continue; // Puerto Rico CBSAs
     const population = members.reduce((a, f) => a + (countyByFips.get(f)?.population ?? 0), 0);
     const [cityPart, statePart] = c.title.split(',');
-    const hp = hpiAt(fhfaCbsa, c.code);
+    const hp = fhfaCbsa ? hpiAt(fhfaCbsa, c.code) : { hpi: null, change5y: null };
     metros.push({
       cbsa: c.code,
       name: c.title,
@@ -887,7 +1270,11 @@ async function main(): Promise<void> {
     m.rank = i + 1;
   });
   for (const m of metros) {
-    if (m.startable && m.hpi === null) problems.push(`metro ${m.cbsa} ${m.name}: startable but no FHFA metro HPI for ${VINTAGE}`);
+    if (m.startable && m.hpi === null) {
+      const withValue = m.counties.filter((f) => (countyByFips.get(f)?.medianHomeValue ?? 0) > 0);
+      if (fhfaCbsa) problems.push(`metro ${m.cbsa} ${m.name}: startable but no FHFA metro HPI for ${VINTAGE}`);
+      else if (withValue.length === 0) problems.push(`metro ${m.cbsa} ${m.name}: startable but no home price datum (no FHFA index and no county median home value)`);
+    }
     if (!STATE_BY_ABBR[m.state]) problems.push(`metro ${m.cbsa} ${m.name}: could not read the state from the title`);
   }
   log(`  ${metros.length} metros, ${metros.filter((m) => m.startable).length} startable`);
@@ -897,26 +1284,28 @@ async function main(): Promise<void> {
   const banksByState: Record<string, BankSeed[]> = Object.fromEntries(STATES.map((s) => [s.abbr, [] as BankSeed[]]));
   let banksOutside = 0;
   let banksWithUnknownCounty = 0;
-  for (const row of fdic.data) {
-    const stalp = String(row.STALP ?? '').trim().toUpperCase();
-    if (!STATE_BY_ABBR[stalp]) {
-      banksOutside++;
-      continue;
+  if (fdic) {
+    for (const row of fdic.institutions.data) {
+      const stalp = String(row.STALP ?? '').trim().toUpperCase();
+      if (!STATE_BY_ABBR[stalp]) {
+        banksOutside++;
+        continue;
+      }
+      const rawCounty = row.STCNTY;
+      let county: string | null = null;
+      if (rawCounty !== null && rawCounty !== undefined && String(rawCounty).trim() !== '') {
+        const code = padCode(String(rawCounty).trim(), 5);
+        if (countyByFips.has(code)) county = code;
+        else banksWithUnknownCounty++;
+      }
+      banksByState[stalp]?.push({
+        state: stalp,
+        county,
+        assets: (fdicNumber(row, 'ASSET') ?? 0) * 1000,
+        deposits: (fdicNumber(row, 'DEP') ?? 0) * 1000,
+        offices: fdicNumber(row, 'OFFDOM') ?? fdicNumber(row, 'OFFICES') ?? 0,
+      });
     }
-    const rawCounty = row.STCNTY;
-    let county: string | null = null;
-    if (rawCounty !== null && rawCounty !== undefined && String(rawCounty).trim() !== '') {
-      const code = padCode(String(rawCounty).trim(), 5);
-      if (countyByFips.has(code)) county = code;
-      else banksWithUnknownCounty++;
-    }
-    banksByState[stalp]?.push({
-      state: stalp,
-      county,
-      assets: (fdicNumber(row, 'ASSET') ?? 0) * 1000,
-      deposits: (fdicNumber(row, 'DEP') ?? 0) * 1000,
-      offices: fdicNumber(row, 'OFFDOM') ?? fdicNumber(row, 'OFFICES') ?? 0,
-    });
   }
   const states: StateRecord[] = STATES.map((s) => {
     const banks = banksByState[s.abbr] ?? [];
@@ -932,33 +1321,22 @@ async function main(): Promise<void> {
     };
   });
   const bankCount = Object.values(banksByState).reduce((a, b) => a + b.length, 0);
-  log(`  ${bankCount} banks in the 50 states and DC, ${banksOutside} outside (territories), ${banksWithUnknownCounty} with a main office county not in counties.json`);
+  if (fdic) log(`  ${bankCount} banks in the 50 states and DC, ${banksOutside} outside (territories), ${banksWithUnknownCounty} with a main office county not in counties.json`);
+  else log('  no FDIC file: every state carries zero banks; the engine generates the sector at world creation (D48)');
 
   // ---- national ---------------------------------------------------------------
-  log('\nNational series');
-  const cpi = yoyPercent(fred.CPIAUCSL!.series, AS_OF);
-  const cs = yoyPercent(fred.CSUSHPISA!.series, AS_OF);
-  const pick = (id: string) => latestOnOrBefore(fred[id]!.series, AS_OF);
-  const national: NationalRecord = {
-    asOf: AS_OF,
-    fedFunds: pick('FEDFUNDS').value ?? 0,
-    dgs3mo: pick('DGS3MO').value ?? 0,
-    dgs2: pick('DGS2').value ?? 0,
-    dgs10: pick('DGS10').value ?? 0,
-    dgs30: pick('DGS30').value ?? 0,
-    cpiYoY: cpi.value,
-    unemploymentRate: pick('UNRATE').value ?? 0,
-    wti: pick('DCOILWTICO').value ?? 0,
-    caseShillerYoY: cs.value,
-    sp500: pick('SP500').value ?? 0,
-  };
-  log(`  fed funds ${national.fedFunds} (${pick('FEDFUNDS').date}), CPI YoY ${cpi.value.toFixed(2)} (${cpi.from} to ${cpi.to}), Case-Shiller YoY ${cs.value.toFixed(2)}`);
+  const national = inputs.national.record;
 
   // ---- fail on problems -------------------------------------------------------
+  if (warnings.length) {
+    log(`\n${warnings.length} warning(s):`);
+    for (const w of warnings.slice(0, 40)) log(`  ${w}`);
+    if (warnings.length > 40) log(`  ... ${warnings.length - 40} more`);
+  }
   if (problems.length) {
     console.error(`\nBUILD FAILED: ${problems.length} problem(s). Nothing was written.`);
     for (const p of problems) console.error(`  ${p}`);
-    console.error('\nA county is required to have population, median income, employment, and sector shares; a startable metro must have an HPI (SYSTEMS.md, Build rules).');
+    console.error('\nA county is required to have population, median income, employment, and sector shares; a startable metro must have a home price datum (SYSTEMS.md, Build rules).');
     process.exit(1);
   }
 
@@ -971,28 +1349,28 @@ async function main(): Promise<void> {
 
   // ---- write ------------------------------------------------------------------
   const units = {
-    population: 'persons (Census PEP)',
-    populationGrowth5y: `fraction, POPESTIMATE${VINTAGE} / POPESTIMATE${VINTAGE - GROWTH_YEARS} - 1`,
-    medianHouseholdIncome: 'dollars (ACS B19013_001E)',
-    perCapitaIncome: 'dollars (ACS B19301_001E)',
+    population: pop.via,
+    populationGrowth5y: `fraction, population now over population five years earlier minus 1 (${pop.via})`,
+    medianHouseholdIncome: `dollars (${acs.via})`,
+    perCapitaIncome: `dollars (${acs.via})`,
     incomeBuckets: 'shares of households in the 16 ACS B19001 buckets, sum to 1',
-    medianHomeValue: 'dollars (ACS B25077_001E)',
-    medianRent: 'dollars per month (ACS B25064_001E)',
+    medianHomeValue: `dollars (${acs.via})`,
+    medianRent: `dollars per month (${acs.via})`,
     housingUnits: 'units (ACS B25002_001E)',
     vacancyRate: 'fraction, B25002_003E / B25002_001E',
-    employment: 'annual average employment, all ownerships (QCEW annual_avg_emplvl)',
-    avgWeeklyWage: 'dollars per week (QCEW annual_avg_wkly_wage)',
-    laborForce: 'persons (LAUS)',
-    unemploymentRate: 'percent (LAUS)',
-    gdp: `thousands of dollars as published (BEA CAGDP2 LineCode 1, unit "${bea.unit}")`,
-    hpi: 'FHFA developmental index level, not seasonally adjusted',
-    hpiChange5y: `fraction, HPI ${VINTAGE} / HPI ${VINTAGE - GROWTH_YEARS} - 1`,
-    sectors: 'employment shares by D41 sector, sum to 1; government from ownership codes 1, 2, 3; other is the residual',
-    bankDeposits: 'dollars (FDIC SOD DEPSUMBR thousands x 1000, summed by branch county)',
-    bankOffices: 'count of SOD branch records in the county',
-    centroid: '[longitude, latitude] degrees, area weighted centroid of the exterior rings',
-    stateTotalAssets: 'dollars (FDIC ASSET thousands x 1000)',
-    stateTotalDeposits: 'dollars (FDIC DEP thousands x 1000)',
+    employment: emp.units.employment,
+    avgWeeklyWage: emp.units.wage,
+    laborForce: `persons (${laus.via})`,
+    unemploymentRate: laus.unit,
+    gdp: gdp ? `thousands of dollars as published (BEA CAGDP2 LineCode 1, unit "${gdp.unit}", column ${VINTAGE})` : 'null: BEA not on disk',
+    hpi: fhfaCounty ? 'FHFA developmental index level, not seasonally adjusted' : 'null: FHFA not on disk; medianHomeValue carries the level',
+    hpiChange5y: fhfaCounty ? `fraction, HPI ${VINTAGE} / HPI ${VINTAGE - GROWTH_YEARS} - 1` : 'null: FHFA not on disk',
+    sectors: emp.units.sectors,
+    bankDeposits: sod ? 'dollars (FDIC SOD DEPSUMBR thousands x 1000, summed by branch county)' : 'null: no Summary of Deposits on disk; the engine derives county deposit pools from state totals or, without FDIC data at all, from personal income (D48)',
+    bankOffices: sod ? 'count of SOD branch records in the county' : 'null',
+    centroid: '[longitude, latitude] degrees, area weighted centroid of the exterior rings; from the county compilation when the boundary file predates the county (flagged imputed)',
+    stateTotalAssets: fdic ? 'dollars (FDIC ASSET thousands x 1000)' : 'zero: no FDIC file; generated by the engine at world creation (D48)',
+    stateTotalDeposits: fdic ? 'dollars (FDIC DEP thousands x 1000)' : 'zero: no FDIC file; generated by the engine at world creation (D48)',
     bankSeedOffices: 'FDIC OFFDOM (domestic offices) when present, else OFFICES',
     national: 'percent for rates and 12 month changes, dollars per barrel for WTI, index level for S&P 500',
   };
@@ -1010,10 +1388,23 @@ async function main(): Promise<void> {
     vintage: VINTAGE,
     asOf: AS_OF,
     fixtures: false,
+    inputs: {
+      population: pop.via,
+      incomeAndHousing: acs.via,
+      employmentAndSectors: emp.via,
+      unemployment: laus.via,
+      gdp: gdp ? gdp.via : 'absent',
+      homePriceIndex: fhfaCounty ? 'FHFA' : 'absent',
+      metroDefinitions: inputs.cbsas.via,
+      banks: fdic ? 'FDIC BankFind' : 'absent: generated by the engine from hand bands (D48)',
+      nationalSeries: inputs.national.via,
+      handNationalSeries: inputs.national.hand,
+    },
     sources,
     units,
     counts: {
       counties: counties.length,
+      droppedCounties: dropped,
       metros: metros.length,
       startableMetros: metros.filter((m) => m.startable).length,
       states: states.length,
@@ -1022,9 +1413,10 @@ async function main(): Promise<void> {
       banksWithUnknownCounty,
       sodBranches: sod ? sod.data.length : null,
     },
+    warnings,
     imputed: { counties: imputedCounties, byField: Object.fromEntries([...imputedByField].sort()) },
     geometry: geometryInfo,
-    national: { cpiWindow: `${cpi.from} to ${cpi.to}`, caseShillerWindow: `${cs.from} to ${cs.to}` },
+    national: inputs.national.windows,
   };
 
   log('\nWriting data/');
@@ -1043,7 +1435,7 @@ async function main(): Promise<void> {
     log('\nWriting data/fixtures/');
     const missingCbsas = Object.keys(FIXTURE_CBSAS).filter((code) => !metros.some((m) => m.cbsa === code));
     if (missingCbsas.length) {
-      throw new Error(`fixture CBSA codes not found in the OMB file: ${missingCbsas.map((c) => `${c} (${FIXTURE_CBSAS[c]})`).join(', ')}`);
+      throw new Error(`fixture CBSA codes not found in the delineation file: ${missingCbsas.map((c) => `${c} (${FIXTURE_CBSAS[c]})`).join(', ')}`);
     }
     const fxMetros = metros.filter((m) => m.cbsa in FIXTURE_CBSAS);
     const fxCountyFips = new Set(fxMetros.flatMap((m) => m.counties));

@@ -217,9 +217,14 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   management = Math.min(5, management);
   if (b.kind === 'player' && vacancies > 0) add('M', 'M:vacancies', `Management: ${vacancies} officer ${vacancies === 1 ? 'seat is' : 'seats are'} vacant. Fill them.`);
   if (exceptions > 0.15) add('M', 'M:exceptions', `Management: ${pct(exceptions, 0)} of relationship loans were policy exceptions. Follow the written policy or change it.`);
-  // Earnings.
+  // Earnings. A new charter is expected to lose money while it builds a
+  // book: for its first three years (the de novo period) examiners rate
+  // earnings against the business plan, not the industry, and raise no
+  // finding for planned losses.
   const roa = trailingRoa(b);
-  const earnings = roa > 0.012 ? 1 : roa > 0.007 ? 2 : roa > 0.002 ? 3 : roa > -0.005 ? 4 : 5;
+  const deNovo = world.day - b.charteredDay < 3 * 365;
+  let earnings = roa > 0.012 ? 1 : roa > 0.007 ? 2 : roa > 0.002 ? 3 : roa > -0.005 ? 4 : 5;
+  if (deNovo) earnings = Math.min(earnings, 3);
   if (earnings >= 4) add('E', 'E', `Earnings: return on assets ${pct(roa)} over the last year. The bank is not earning its cost of capital.`);
   // Liquidity.
   const cashToAssets = b.acct.cash / Math.max(1, totalAssets(b.acct));

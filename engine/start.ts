@@ -84,6 +84,19 @@ const CONTROL_STAKE = 0.3;
 // Three candidates in the metro, drawn from the state's real bank size
 // distribution (banks-by-state.json seeds), priced at a premium to book
 // that rises with quality. Deterministic per world seed and metro.
+// The banks a metro's counties belong to: every state the metro touches.
+export function seedsForMetro(world: World, metro: MetroState): BankSeed[] {
+  const states = new Set<string>();
+  for (const fips of metro.counties) {
+    const c = world.geo.counties[fips];
+    if (c) states.add(c.state);
+  }
+  states.add(metro.state);
+  const out: BankSeed[] = [];
+  for (const st of [...states].sort()) out.push(...(world.bankSeeds[st] ?? []));
+  return out;
+}
+
 export function takeoverCandidates(world: World, metro: MetroState, seeds: BankSeed[]): TakeoverCandidate[] {
   const r = derive(world.seed, hashString(`takeover:${metro.cbsa}`));
   const county = principalCounty(world, metro);

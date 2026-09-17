@@ -13,7 +13,8 @@ import { chance, pick, rand } from './rng';
 import { type Bank, type Decision, type LoanType, type Pending, type World, playerBank } from './state';
 import { LOAN_TYPES, emptyByType } from './loantypes';
 import { money, pct } from './format';
-import { growthRestricted } from './regulation';
+import { creConcentration, growthRestricted } from './regulation';
+import { tier1Capital } from './ledger';
 
 export const REGIME_DEMAND = { expansion: 1.1, late: 1.0, recession: 0.65, recovery: 0.9 } as const;
 
@@ -76,6 +77,16 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
   if (terms.amount > p.maxSize) reasons.push(`size ${money(terms.amount)} over ${money(p.maxSize)}`);
   const sectorShare = sectorExposure(b, m.sector) ;
   if (sectorShare > p.sectorCap && b.acct.loans > 0) reasons.push(`${m.sector} concentration ${(sectorShare * 100).toFixed(0)}% over ${(p.sectorCap * 100).toFixed(0)}%`);
+  // The interagency commercial real estate guidance is part of every
+  // written policy: construction past 100% of capital, or investor CRE
+  // past 300%, is an exception the CCO will not approve on their own.
+  if (app.type === 'construction' || app.type === 'cre_inv') {
+    const conc = creConcentration(b);
+    const t1 = Math.max(1, tier1Capital(b.acct) + b.acct.allowance);
+    const after = terms.amount / t1;
+    if (app.type === 'construction' && conc.construction + after > 1.0) reasons.push(`construction would be ${((conc.construction + after) * 100).toFixed(0)}% of capital, guidance 100%`);
+    if (conc.cre + after > 3.0) reasons.push(`investor CRE would be ${((conc.cre + after) * 100).toFixed(0)}% of capital, guidance 300%`);
+  }
   return { pass: reasons.length === 0, reasons };
 }
 
@@ -183,9 +194,27 @@ export function autoDecide(ctx: Ctx, b: Bank, app: Application, skill: number): 
   const { world } = ctx;
   const terms = termsFrom(app);
   const check = policyCheck(b, app, terms);
-  const errorRate = 0.04 + 0.28 * (1 - skill / 100);
+  // Underwriting error is a marginal thing: a weak CCO misses a policy
+  // exception on a loan that reads well enough, or turns away a good one.
+  // Nobody funds a borrower who cannot cover the payment by mistake.
+  // Turning away a good borrower is the common error; waving a policy
+  // exception through is a quarter as common.
+  const errorRate = 0.02 + 0.1 * (1 - skill / 100);
   let approve = check.pass && !growthRestricted(b);
-  if (chance(world.rng, errorRate)) approve = !approve;
+  if (approve) {
+    if (chance(world.rng, errorRate)) approve = false;
+  } else if (app.memo.suggestedGrade <= 6 && app.memo.dscr >= 1 && chance(world.rng, errorRate / 4)) {
+    approve = !growthRestricted(b);
+  }
+  // A loan is funded from cash the bank has: below a working cushion the
+  // desk declines for lack of funding rather than overdrawing the Fed.
+  const assets = b.acct.cash + b.acct.loans + b.acct.securitiesAFS + b.acct.securitiesHTM;
+  if (approve && b.acct.cash - terms.amount < 0.03 * assets) {
+    approve = false;
+    b.applications.autoDeclined += 1;
+    b.declinedForFunding = (b.declinedForFunding ?? 0) + 1;
+    return;
+  }
   if (approve) {
     fundLoan(ctx, b, app, terms, 'auto', check.pass ? 'within policy' : 'policy exception missed', false);
     b.applications.autoApproved += 1;

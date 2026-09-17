@@ -820,9 +820,9 @@ pre.memo {
 }
 
 .county {
-  fill: #1b242e;
-  stroke: #2c3946;
-  stroke-width: 0.3;
+  fill: #1f2a36;
+  stroke: #33414f;
+  stroke-width: 0.35;
 }
 
 .county.hover {
@@ -852,7 +852,7 @@ pre.memo {
 }
 
 .rival {
-  fill: var(--bad);
+  fill: rgba(242, 103, 77, 0.55);
 }
 
 .maphover {

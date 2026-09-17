@@ -47,8 +47,13 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
   const capital = Math.round(assets * capRatio);
   const deposits = Math.max(0, Math.min(assets - capital, Math.round(seed.deposits > 0 ? seed.deposits * (assets / Math.max(1, seed.assets)) : assets * 0.85)));
   const county = (seed.county && world.geo.counties[seed.county]) || largestCounty(world, seed.state);
-  const loans = Math.round(assets * (0.5 + 0.3 * ai.riskAppetite));
-  const securities = Math.round(assets * (0.12 + 0.12 * (1 - ai.riskAppetite)));
+  // Loans and bonds are funded by deposits and capital on day one, with a
+  // cash cushion; the wholesale gap to the seed's assets is borrowed below.
+  const funding = deposits + capital;
+  const cushion = Math.round(assets * 0.04);
+  const avail = Math.max(0, funding - cushion);
+  const securities = Math.min(Math.round(assets * (0.12 + 0.12 * (1 - ai.riskAppetite))), Math.round(avail * 0.3));
+  const loans = Math.min(Math.round(assets * (0.5 + 0.3 * ai.riskAppetite)), avail - securities);
   const name = generateBankName(r, county ? county.name : seed.state, seed.state, taken);
   const bank = createBank(world, {
     name,
@@ -58,7 +63,7 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
     homeMetro: county?.cbsa ?? null,
     capital,
     deposits: { checking: Math.round(deposits * 0.3), savings: Math.round(deposits * 0.25), mmda: Math.round(deposits * 0.25), cd: deposits - Math.round(deposits * 0.3) - Math.round(deposits * 0.25) - Math.round(deposits * 0.25) },
-    loans: Math.min(loans, assets - capital - Math.round(assets * 0.04)),
+    loans,
     securitiesAFS: Math.round(securities * 0.7),
     securitiesHTM: securities - Math.round(securities * 0.7),
     criticized: 0.03 + 0.07 * ai.riskAppetite,
@@ -113,15 +118,19 @@ export function tiltMix(bank: Bank, appetite: number): void {
 export function aggregateBank(world: World, state: string, count: number, assets: number, deposits: number, label: string): Bank {
   const capital = Math.round(assets * 0.1);
   const dep = Math.min(deposits, assets - capital);
+  // Deployed within what deposits and capital fund, with a cash cushion.
+  const avail = Math.max(0, dep + capital - Math.round(assets * 0.04));
+  const securities = Math.min(Math.round(assets * 0.2), Math.round(avail * 0.3));
+  const loans = Math.min(Math.round(assets * 0.62), avail - securities);
   const bank = createBank(world, {
     name: label,
     kind: 'aggregate',
     state,
     capital,
     deposits: { checking: Math.round(dep * 0.3), savings: Math.round(dep * 0.25), mmda: Math.round(dep * 0.25), cd: dep - Math.round(dep * 0.3) - Math.round(dep * 0.25) - Math.round(dep * 0.25) },
-    loans: Math.round(assets * 0.62),
-    securitiesAFS: Math.round(assets * 0.15),
-    securitiesHTM: Math.round(assets * 0.05),
+    loans,
+    securitiesAFS: Math.round(securities * 0.75),
+    securitiesHTM: securities - Math.round(securities * 0.75),
   });
   bank.represents = Math.max(1, count);
   bank.ai = { riskAppetite: 0.45, growthTarget: 0.04, rateAggression: 0, acquisitive: 0, branchPush: 0 };
@@ -149,7 +158,10 @@ export function populateRivals(world: World, homeState: string): void {
   all.sort((a, b) => b.assets - a.assets);
   const nationals = all.slice(0, NATIONAL_COUNT);
   const nationalSet = new Set(nationals);
-  for (const n of nationals) rivalFromSeed(world, n, r, taken, { national: true });
+  for (const n of nationals) {
+    n.national = true; // never re-created when the player enters its state
+    rivalFromSeed(world, n, r, taken, { national: true });
+  }
   const budget = INDIVIDUAL_BUDGET - NATIONAL_COUNT;
   const homeBudget = Math.round(budget * HOME_SHARE);
   const neighborTotal = neighbors.reduce((s, n) => s + (seeds[n]?.length ?? 0), 0);
@@ -164,7 +176,7 @@ export function populateRivals(world: World, homeState: string): void {
   }
   for (const st of Object.values(states)) {
     if (expanded.has(st.abbr)) continue;
-    const list = (seeds[st.abbr] ?? []).filter((s) => !nationalSet.has(s));
+    const list = (seeds[st.abbr] ?? []).filter((s) => !nationalSet.has(s) && !s.national);
     const assets = list.reduce((s, x) => s + x.assets, 0) || st.totalAssets;
     const deposits = list.reduce((s, x) => s + x.deposits, 0) || st.totalDeposits;
     if (assets <= 0) continue;
@@ -175,7 +187,7 @@ export function populateRivals(world: World, homeState: string): void {
 // Turns a state's seeds into up to n individual banks plus one aggregate
 // for the rest, conserving the state's totals (D42).
 export function expandStateInto(world: World, state: string, n: number, r: Rng, taken: Set<string>, exclude: Set<BankSeed> = new Set()): void {
-  const list = (world.bankSeeds[state] ?? []).filter((s) => !exclude.has(s)).sort((a, b) => b.assets - a.assets);
+  const list = (world.bankSeeds[state] ?? []).filter((s) => !exclude.has(s) && !s.national).sort((a, b) => b.assets - a.assets);
   const individual = list.slice(0, Math.max(0, n));
   const rest = list.slice(Math.max(0, n));
   for (const s of individual) rivalFromSeed(world, s, r, taken);
@@ -228,8 +240,11 @@ export function rivalsMonthly(ctx: Ctx): void {
     const ai = b.ai;
     // Rate sheet: aggression is bp against the market, more when the bank
     // needs funding (loans to deposits above target).
-    const need = coreDeposits(b) > 0 ? b.acct.loans / coreDeposits(b) - b.loansToDeposits : 0;
-    const push = ai.rateAggression * 0.005 + Math.max(0, need) * 0.02 - (b.confidence < 0.9 ? 0 : 0);
+    // A funding squeeze pushes the sheet up, but no bank pays more than
+    // about 150 basis points over the market for long: past that the money
+    // comes from the Home Loan Bank and brokers instead.
+    const need = coreDeposits(b) > 0 ? Math.min(1, b.acct.loans / coreDeposits(b) - b.loansToDeposits) : 0;
+    const push = Math.min(0.015, ai.rateAggression * 0.005 + Math.max(0, need) * 0.02);
     const before = b.rates.mmda;
     for (const t of DEPOSIT_TYPES) {
       const sens = t === 'checking' ? 0.1 : t === 'savings' ? 0.6 : 1;

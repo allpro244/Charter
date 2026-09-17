@@ -1,0 +1,100 @@
+[
+  {
+    "fips": "06",
+    "abbr": "CA",
+    "name": "California",
+    "population": 39455353,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "NV"
+    ]
+  },
+  {
+    "fips": "11",
+    "abbr": "DC",
+    "name": "District of Columbia",
+    "population": 683154,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MD",
+      "VA"
+    ]
+  },
+  {
+    "fips": "24",
+    "abbr": "MD",
+    "name": "Maryland",
+    "population": 6148545,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "DC",
+      "VA",
+      "WV"
+    ]
+  },
+  {
+    "fips": "26",
+    "abbr": "MI",
+    "name": "Michigan",
+    "population": 10062512,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": []
+  },
+  {
+    "fips": "32",
+    "abbr": "NV",
+    "name": "Nevada",
+    "population": 3059238,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CA"
+    ]
+  },
+  {
+    "fips": "48",
+    "abbr": "TX",
+    "name": "Texas",
+    "population": 28862581,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": []
+  },
+  {
+    "fips": "51",
+    "abbr": "VA",
+    "name": "Virginia",
+    "population": 8582479,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "DC",
+      "MD",
+      "WV"
+    ]
+  },
+  {
+    "fips": "54",
+    "abbr": "WV",
+    "name": "West Virginia",
+    "population": 1801049,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MD",
+      "VA"
+    ]
+  }
+]

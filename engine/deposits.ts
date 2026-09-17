@@ -59,7 +59,10 @@ function km(a: [number, number], b: [number, number]): number {
 // home, capped by branch capacity at local wages.
 export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.county === b.homeCounty): number {
   const county = world.geo.counties[br.county];
-  const pool = county ? county.depositPool : b.franchise.pool;
+  // A bank whose deposits dwarf its home county gathers them from a wider
+  // market than the county: its franchise pool, set at creation, stands in
+  // for the county pool at home (a money center bank in one county).
+  const pool = county ? Math.max(county.depositPool, isHome ? b.franchise.pool : 0) : b.franchise.pool;
   if (pool <= 0) return br.deposits;
   const years = Math.max(0, (world.day - br.openedDay) / 365);
   const ceiling = calibration.deNovoShareCeiling.typical / 100;
@@ -75,8 +78,14 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   // geography the franchise pool is the whole addressable market.
   if (!county) return Math.round(fromShare);
   const wageIndex = Math.max(0.5, Math.min(2, county.wage / 1300));
-  const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1);
-  return Math.round(Math.min(fromShare, perBranch));
+  // A branch gathers customers at a pace, whatever the county holds: a
+  // twentieth of a mature branch's book in its first months, a third by
+  // the end of year one, all of it after four years. A de novo in a huge
+  // county still starts small.
+  const seasoning = Math.min(1, 0.05 + years / 4);
+  const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1) * seasoning;
+  // Capacity caps growth; it never pushes out what a branch already holds.
+  return Math.round(Math.min(fromShare, Math.max(perBranch, br.deposits)));
 }
 
 // Attractiveness of a branch to depositors in its county: the rate sheet
@@ -84,7 +93,9 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
 // and confidence. Pure, so it can be tested on its own.
 export function attractiveness(rateGap: number, years: number, assets: number, confidence: number): number {
   const elasticity = calibration.depositRateElasticity.typical / 100;
-  return Math.exp(elasticity * 8 * (rateGap / 0.01) + 0.4 * Math.log(1 + Math.min(years, 30)) + 0.15 * Math.log(Math.max(assets, 1e6) / 1e8)) * Math.pow(Math.max(0.05, confidence), 2);
+  // Three points over or under the market is as far as depositors can tell.
+  const gap = Math.max(-0.03, Math.min(0.03, rateGap));
+  return Math.exp(elasticity * 8 * (gap / 0.01) + 0.4 * Math.log(1 + Math.min(Math.max(0, years), 30)) + 0.15 * Math.log(Math.max(assets, 1e6) / 1e8)) * Math.pow(Math.max(0.05, confidence), 2);
 }
 
 // Splits a county's simulated share of deposits among the branches there
@@ -115,19 +126,25 @@ export function competeCounties(world: World): void {
     }
     let held = 0;
     let natural = 0;
+    const own: number[] = [];
     const attract = list.map(({ bank, br }) => {
       held += br.deposits;
       br.competitiveTarget = null;
-      natural += branchTarget(world, bank, br);
+      const mine = branchTarget(world, bank, br);
+      own.push(mine);
+      natural += mine;
       const years = (world.day - br.openedDay) / 365;
       return { attract: attractiveness(bankDepositRate(bank) - marketDepositRate(world), years, totalAssets(bank.acct), bank.confidence) };
     });
     // The contested pot: what the branches would hold on their own, capped
-    // by the county pool. Winners take from losers inside it.
+    // by the county pool. Winners take from losers inside it, but no branch
+    // wins more than a quarter over what it could gather on its own: a new
+    // branch does not inherit a giant's customers by pricing well.
     const pot = Math.min(county.depositPool, Math.max(held, natural));
     const targets = splitCounty(pot, 1, attract);
     list.forEach((x, i) => {
-      x.br.competitiveTarget = targets[i] ?? null;
+      const t = targets[i] ?? 0;
+      x.br.competitiveTarget = Math.min(t, Math.max(Math.round((own[i] ?? 0) * 1.25), x.br.deposits));
     });
   }
 }

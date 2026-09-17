@@ -198,12 +198,14 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
     m.interestBorrowings += borrowings;
   }
 
-  // Overhead on average assets, split by the calibration shares, plus the
-  // fixed cost of every branch from real local wages.
-  const avgAssets = (Math.max(0, adb.cash) + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
+  // Overhead on the average earning assets (loans and bonds need lenders,
+  // servicers and analysts; cash at the Fed needs nobody), split by the
+  // calibration shares, plus the fixed cost of every branch from real
+  // local wages and the officers' pay.
+  const avgEarning = (adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
   let branchCost = 0;
   for (const br of b.branches) branchCost += br.fixedCost;
-  const overhead = accrue(avgAssets, b.overheadRate, days) + accrue(branchCost + officerPayroll(b), 1, days);
+  const overhead = accrue(avgEarning, b.overheadRate, days) + accrue(branchCost + officerPayroll(b), 1, days);
   if (overhead > 0) {
     const salaries = Math.round((overhead * calibration.salariesShareOfNie.typical) / 100);
     const occupancy = Math.round((overhead * calibration.occupancyShareOfNie.typical) / 100);
@@ -300,6 +302,7 @@ function quarterlyClose(ctx: Ctx): void {
       b.is.year = emptyIS();
       b.originationsByType = emptyByType(0);
       b.applicationsByType = emptyByType(0);
+      b.declinedForFunding = 0;
       linesYearEnd(b);
     }
   }

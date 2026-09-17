@@ -13,6 +13,7 @@ import { sha256File, sha256Text, shouldSkipDownload, upsertEntry, type RawEntry,
 import { STATES, STATE_NEIGHBORS } from '../scripts/lib/states';
 import { bandFromYearly, isBand, median, percentile, renderCalibrationFile, type CalibrationTree } from '../scripts/lib/calibration-file';
 import { centroid } from '../scripts/lib/geo';
+import { C24030_CELLS, INCOME_BUCKET_BOUNDS, VALUE_BUCKET_BOUNDS, RENT_BUCKET_BOUNDS, bucketMedian, c24030Column, countyOfGeoid, sectorsFromC24030, sumTractsToCounties } from '../scripts/lib/acs';
 import { SECTORS } from '../data/types';
 import { calibration } from '../data/calibration';
 
@@ -262,5 +263,56 @@ describe('calibration file', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('acs mirror helpers', () => {
+  it('interpolates a bucket median and handles the open top bucket', () => {
+    // 10 households: 4 under 10k, 4 in 10 to 15k, 2 in 15 to 20k: the middle
+    // household (the fifth) sits a quarter of the way into the second bucket.
+    const counts = [4, 4, 2, ...new Array(13).fill(0)];
+    expect(bucketMedian(counts, INCOME_BUCKET_BOUNDS)).toBe(11250);
+    // Everyone in the open top bucket: its lower bound times 1.25.
+    const top = [...new Array(15).fill(0), 7];
+    expect(bucketMedian(top, INCOME_BUCKET_BOUNDS)).toBe(250000);
+    expect(bucketMedian(new Array(16).fill(0), INCOME_BUCKET_BOUNDS)).toBeNull();
+    expect(VALUE_BUCKET_BOUNDS.length).toBe(26);
+    expect(RENT_BUCKET_BOUNDS.length).toBe(24);
+    expect(() => bucketMedian([1, 2], INCOME_BUCKET_BOUNDS)).toThrow();
+  });
+
+  it('maps every C24030 industry cell to exactly one sector and keeps the table total', () => {
+    const cells = Object.values(C24030_CELLS).flat().sort((a, b) => a - b);
+    expect(cells).toEqual([4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 19, 20, 22, 23, 25, 26, 27, 28]);
+    expect(new Set(cells).size).toBe(cells.length);
+    // A row where every leaf cell holds one worker for men and two for women.
+    const sums: Record<string, number> = { C24030_001E: cells.length * 3 };
+    for (const c of cells) {
+      sums[c24030Column(c)] = 1;
+      sums[c24030Column(c + 27)] = 2;
+    }
+    const res = sectorsFromC24030(sums);
+    expect(res.covered).toBe(res.total);
+    expect(res.counts.energy).toBe(3);
+    expect(res.counts.other).toBe(15);
+    expect(Object.values(res.shares).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+    expect(c24030Column(5)).toBe('C24030_005E');
+  });
+
+  it('reads the county from either geoid spelling and sums tracts, flagging all-null columns', () => {
+    expect(countyOfGeoid('48201100000')).toBe('48201');
+    expect(countyOfGeoid('14000US48201100000')).toBe('48201');
+    expect(countyOfGeoid('bad')).toBeNull();
+    const rows = [
+      { GEOID: '14000US01001020100', a: 1, b: null },
+      { GEOID: '01001020200', a: 2, b: null },
+      { GEOID: '01003010100', a: 5, b: 7 },
+    ];
+    const r = sumTractsToCounties(rows, ['a', 'b']);
+    expect(r.tracts).toBe(3);
+    expect(r.counties.get('01001')).toEqual({ a: 3, b: 0 });
+    expect(r.counties.get('01003')).toEqual({ a: 5, b: 7 });
+    expect([...(r.missing.get('01001') ?? [])]).toEqual(['b']);
+    expect(r.missing.has('01003')).toBe(false);
   });
 });

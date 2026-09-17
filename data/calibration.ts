@@ -109,6 +109,23 @@ export const calibration = {
   ceoSalaryPerBillionAssets: hand(150, 400, 250, 'thousands of dollars per year at $1B assets, log scaled', 'Bank CEO pay surveys, community banks'),
   founderCash: hand(2, 10, 5, 'millions of dollars', 'Design choice, no public source: what a de novo organizer group member typically commits'),
   depositRateElasticity: hand(3, 15, 8, 'percent change in deposit share per 100bp above market', 'Fed and FDIC deposit competition studies, community banks'),
+  // The banking sector when the FDIC hosts are unreachable (D48). Every one
+  // of these is typed from memory of the FDIC Quarterly Banking Profile and
+  // stays unverified until scripts/calibrate.ts can reach fdic.gov; the real
+  // institution list replaces all of them the moment fetch-data lands it.
+  depositsToPersonalIncome: hand(0.6, 1.0, 0.75, 'ratio', 'FDIC QBP domestic deposits (about 17.5 trillion) over BEA personal income (about 24 trillion), 2024, from memory'),
+  banksPerMillionPeople: hand(8, 20, 13.5, 'banks per million residents', 'FDIC: about 4,500 insured institutions for 335 million people, 2024, from memory'),
+  bankSizeSpread: hand(1.4, 2.2, 1.8, 'log standard deviation of assets', 'FDIC size distribution: median institution near 350 million of assets, mean near 5 billion, from memory'),
+  largestBankAssets: hand(3.0, 3.6, 3.4, 'trillions of dollars', 'largest US bank by assets, 2024, from memory'),
+  nationalRankDecay: hand(0.6, 1.0, 0.8, 'exponent', 'assets of the largest banks fall roughly as rank to the minus 0.8 (3.4T, 2.5T, 1.8T, 1.7T, then a gap), from memory'),
+  bankDepositsToAssets: hand(0.75, 0.9, 0.82, 'ratio', 'FDIC QBP domestic deposits over total assets, all insured institutions, 2024, from memory'),
+  // Starting short rates when FRED is unreachable and no public mirror
+  // carries the series (D48). December 2024 values from memory; the FRED
+  // file replaces them when fetch-data can reach it.
+  startFedFunds: hand(4.3, 4.6, 4.48, 'percent', 'FRED FEDFUNDS, December 2024 monthly average, from memory'),
+  startDgs3mo: hand(4.2, 4.5, 4.37, 'percent', 'FRED DGS3MO, end of December 2024, from memory'),
+  startDgs2: hand(4.1, 4.4, 4.25, 'percent', 'FRED DGS2, end of December 2024, from memory'),
+  startDgs30: hand(4.6, 4.9, 4.78, 'percent', 'FRED DGS30, end of December 2024, from memory'),
   loanRateElasticity: hand(4, 15, 8, 'percent more applications per 25bp under market', 'No public series. Set on the scale of the deposit band; a hand band until a source exists'),
   depositsPerBranch: hand(40, 400, 120, 'millions of dollars per branch', 'FDIC Summary of Deposits, deposits divided by offices'),
   deNovoShareCeiling: hand(1, 5, 2.5, 'percent of home county deposits after ramp', 'FDIC de novo studies, share after 5 years'),

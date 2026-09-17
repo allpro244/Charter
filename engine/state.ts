@@ -5,6 +5,7 @@ import { type Accounts, type DepositType, type IncomeStatement, emptyAccounts, e
 import { type Rng, derive, hashString, makeRng } from './rng';
 import { mixFor, seedPools } from './credit';
 import { seedLots } from './funding';
+import { depositPoolsFromIncome, generateSeeds } from './seeds';
 import { type BankSeed, SECTORS, type Sector, type WorldData } from '../data/types';
 import { calibration } from '../data/calibration';
 
@@ -140,6 +141,7 @@ export interface Bank {
   recoveriesByType: Record<LoanType, number>; // quarter to date
   originationsByType: Record<LoanType, number>; // year to date
   applicationsByType: Record<LoanType, number>; // year to date, received
+  declinedForFunding: number; // year to date: auto-declined because cash was short of the working cushion
   pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
@@ -539,6 +541,7 @@ export interface Geo {
   metros: Record<string, MetroState>;
   states: Record<string, StateState>;
   nationalShares: Record<Sector, number> | null; // employment-weighted sector mix
+  bankData: 'fdic' | 'generated' | 'none'; // where the state bank totals and seeds come from (D48)
 }
 
 export type FeedSource = 'borrower' | 'depositor' | 'rival' | 'officer' | 'regulator' | 'market' | 'system';
@@ -694,7 +697,7 @@ export function initialEconomy(data: WorldData | null): Economy {
 }
 
 export function buildGeo(data: WorldData | null): Geo {
-  const geo: Geo = { counties: {}, metros: {}, states: {}, nationalShares: null };
+  const geo: Geo = { counties: {}, metros: {}, states: {}, nationalShares: null, bankData: 'none' };
   if (!data) return geo;
   for (const c of data.counties) {
     geo.counties[c.fips] = {
@@ -757,8 +760,16 @@ export function buildGeo(data: WorldData | null): Geo {
       expanded: false,
     };
   }
-  // Counties without a Summary of Deposits figure get their share of the
-  // state's real deposit total by population weighted by income.
+  // No FDIC data at any level: pools follow real personal income and the
+  // state totals follow the pools (D48). Otherwise counties without a
+  // Summary of Deposits figure get their share of the state's real deposit
+  // total by population weighted by income.
+  const fdicPresent = data.states.some((s) => s.totalDeposits > 0 || s.bankCount > 0);
+  geo.bankData = fdicPresent ? 'fdic' : 'generated';
+  if (!fdicPresent) {
+    depositPoolsFromIncome(geo);
+    return geo;
+  }
   const byState: Record<string, CountyState[]> = {};
   for (const c of Object.values(geo.counties)) (byState[c.state] ??= []).push(c);
   for (const [abbr, counties] of Object.entries(byState)) {
@@ -776,13 +787,16 @@ export function buildGeo(data: WorldData | null): Geo {
 }
 
 export function createWorld(seed: number, data: WorldData | null = null): World {
+  const geo = buildGeo(data);
+  const hasSeeds = data ? Object.values(data.banksByState).some((l) => l.length > 0) : false;
+  const bankSeeds = data ? (hasSeeds ? data.banksByState : generateSeeds(geo, seed)) : {};
   return {
     version: 1,
     seed,
     rng: makeRng(seed),
     day: 0,
     economy: initialEconomy(data),
-    geo: buildGeo(data),
+    geo,
     banks: {},
     bankOrder: [],
     playerBankId: null,
@@ -805,19 +819,19 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
     nextId: 0,
     milestones: [],
     dataVintage: data?.national.asOf ?? null,
-    bankSeeds: data?.banksByState ?? {},
+    bankSeeds,
     failures: [],
     deals: [],
     countries: initialCountries(),
-    largestNational: largestSeed(data),
+    largestNational: largestSeed(bankSeeds),
   };
 }
 
-function largestSeed(data: WorldData | null): number {
+function largestSeed(seeds: Record<string, BankSeed[]>): number {
   let x = 0;
-  if (!data) return 3_400_000_000_000; // the largest US bank in 2024 by assets, used when there is no data (tests)
-  for (const list of Object.values(data.banksByState)) for (const s of list) if (s.assets > x) x = s.assets;
-  return x || 3_400_000_000_000;
+  for (const list of Object.values(seeds)) for (const s of list) if (s.assets > x) x = s.assets;
+  // With no data at all (tests), the hand band for the largest US bank.
+  return x || calibration.largestBankAssets.typical * 1e12;
 }
 
 export function initialCountries(): Record<string, Country> {
@@ -945,6 +959,7 @@ export function createBank(world: World, spec: BankSpec): Bank {
     recoveriesByType: emptyByType(0),
     originationsByType: emptyByType(0),
     applicationsByType: emptyByType(0),
+    declinedForFunding: 0,
     pricing: emptyByType(0),
     originationAppetite: 1,
     applications: { received: 0, toDesk: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
@@ -989,7 +1004,11 @@ export function createBank(world: World, spec: BankSpec): Bank {
       competitiveTarget: null,
     });
     if (county && county.depositPool > 0) {
-      bank.franchise.baseShare = core / county.depositPool;
+      // A bank holding more than half its county's deposits draws on a
+      // wider market: its franchise pool is sized so it holds half of it.
+      if (core > 0.5 * county.depositPool) bank.franchise.pool = Math.round(core / 0.5);
+      const pool = Math.max(county.depositPool, bank.franchise.pool);
+      bank.franchise.baseShare = core / pool;
       bank.franchise.targetShare = bank.franchise.baseShare;
     }
     // A bank created with deposits is a seasoned franchise.

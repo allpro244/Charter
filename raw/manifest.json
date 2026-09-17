@@ -1,0 +1,973 @@
+{
+  "fetchedOn": "2026-09-17T06:09:02.593Z",
+  "vintage": 2024,
+  "entries": [
+    {
+      "name": "pep",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:02.593Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "Census PEP county totals. Latin-1 encoded. POPESTIMATE2024 is the frozen population."
+    },
+    {
+      "name": "pep-prior",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:07.744Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "Census PEP 2010-2019 county totals, for POPESTIMATE2019 (5 year growth)."
+    },
+    {
+      "name": "acs-county",
+      "kind": "json",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E,B19301_001E,B25077_001E,B25064_001E,B25002_001E,B25002_003E,B01003_001E&for=county:*",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:10.191Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E,B19301_001E,B25077_001E,B25064_001E,B25002_001E,B25002_003E,B01003_001E&for=county:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E,B19301_001E,B25077_001E,B25064_001E,B25002_001E,B25002_003E,B01003_001E&for=county:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "ACS 5 year, county level: income, home value, rent, housing units, vacancy."
+    },
+    {
+      "name": "acs-county-b19001",
+      "kind": "json",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://api.census.gov/data/2024/acs/acs5?get=B19001_001E,B19001_002E,B19001_003E,B19001_004E,B19001_005E,B19001_006E,B19001_007E,B19001_008E,B19001_009E,B19001_010E,B19001_011E,B19001_012E,B19001_013E,B19001_014E,B19001_015E,B19001_016E,B19001_017E&for=county:*",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:12.666Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=B19001_001E,B19001_002E,B19001_003E,B19001_004E,B19001_005E,B19001_006E,B19001_007E,B19001_008E,B19001_009E,B19001_010E,B19001_011E,B19001_012E,B19001_013E,B19001_014E,B19001_015E,B19001_016E,B19001_017E&for=county:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=B19001_001E,B19001_002E,B19001_003E,B19001_004E,B19001_005E,B19001_006E,B19001_007E,B19001_008E,B19001_009E,B19001_010E,B19001_011E,B19001_012E,B19001_013E,B19001_014E,B19001_015E,B19001_016E,B19001_017E&for=county:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "ACS 5 year, county level: household income distribution, 16 buckets."
+    },
+    {
+      "name": "acs-state",
+      "kind": "json",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E,B19301_001E,B25077_001E,B25064_001E,B25002_001E,B25002_003E,B01003_001E&for=state:*",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:15.168Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E,B19301_001E,B25077_001E,B25064_001E,B25002_001E,B25002_003E,B01003_001E&for=state:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E,B19301_001E,B25077_001E,B25064_001E,B25002_001E,B25002_003E,B01003_001E&for=state:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "ACS 5 year, state level. Used only to fill suppressed county cells (CLAUDE.md rule 18)."
+    },
+    {
+      "name": "acs-state-b19001",
+      "kind": "json",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://api.census.gov/data/2024/acs/acs5?get=B19001_001E,B19001_002E,B19001_003E,B19001_004E,B19001_005E,B19001_006E,B19001_007E,B19001_008E,B19001_009E,B19001_010E,B19001_011E,B19001_012E,B19001_013E,B19001_014E,B19001_015E,B19001_016E,B19001_017E&for=state:*",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:17.543Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=B19001_001E,B19001_002E,B19001_003E,B19001_004E,B19001_005E,B19001_006E,B19001_007E,B19001_008E,B19001_009E,B19001_010E,B19001_011E,B19001_012E,B19001_013E,B19001_014E,B19001_015E,B19001_016E,B19001_017E&for=state:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://api.census.gov/data/2024/acs/acs5?get=B19001_001E,B19001_002E,B19001_003E,B19001_004E,B19001_005E,B19001_006E,B19001_007E,B19001_008E,B19001_009E,B19001_010E,B19001_011E,B19001_012E,B19001_013E,B19001_014E,B19001_015E,B19001_016E,B19001_017E&for=state:*",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "ACS 5 year, state level income buckets. Used only to fill suppressed county cells."
+    },
+    {
+      "name": "qcew",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://data.bls.gov/cew/data/files/2024/csv/2024_annual_singlefile.zip",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:20.078Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://data.bls.gov/cew/data/files/2024/csv/2024_annual_singlefile.zip",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://data.bls.gov/cew/data/files/2024/csv/2024_annual_singlefile.zip",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "BLS QCEW annual averages, all areas, all industries, all ownerships. A few hundred MB; streamed."
+    },
+    {
+      "name": "laus",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www.bls.gov/lau/laucnty24.txt",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:22.602Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www.bls.gov/lau/laucnty24.xlsx",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.bls.gov/lau/laucnty24.xlsx",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.bls.gov/lau/laucnty24.txt",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.bls.gov/lau/laucnty24.txt",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "BLS LAUS county annual averages: labor force and unemployment rate."
+    },
+    {
+      "name": "bea-gdp",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://apps.bea.gov/regional/zip/CAGDP2.zip",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:27.670Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://apps.bea.gov/regional/zip/CAGDP2.zip",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://apps.bea.gov/regional/zip/CAGDP2.zip",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "BEA CAGDP2, GDP by county, all industries, thousands of current dollars. Latin-1 encoded CSV inside the zip."
+    },
+    {
+      "name": "fhfa-county",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_county.csv",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:30.021Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www.fhfa.gov/hpi/download/annual/hpi_at_bdl_county.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.fhfa.gov/hpi/download/annual/hpi_at_bdl_county.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_county.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_county.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FHFA HPI, counties, developmental index, annual, not seasonally adjusted."
+    },
+    {
+      "name": "fhfa-cbsa",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_cbsa.csv",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:34.826Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www.fhfa.gov/hpi/download/annual/hpi_at_bdl_cbsa.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.fhfa.gov/hpi/download/annual/hpi_at_bdl_cbsa.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_cbsa.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_cbsa.csv",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FHFA HPI, metropolitan areas (CBSA), developmental index, annual."
+    },
+    {
+      "name": "omb-cbsa",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2020/delineation-files/list1_2020.xls",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:39.830Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2023/delineation-files/list1_2023.xls",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2023/delineation-files/list1_2023.xls",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2020/delineation-files/list1_2020.xls",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2020/delineation-files/list1_2020.xls",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "OMB CBSA delineation file: which counties form each metro or micro area."
+    },
+    {
+      "name": "fdic-institutions",
+      "kind": "fdic",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://banks.data.fdic.gov/api/institutions?filters=ACTIVE:1&fields=CERT,NAME,STALP,STCNTY,COUNTY,CITY,ASSET,DEP,OFFICES,OFFDOM&limit=10000&format=json&offset=0",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:44.770Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://banks.data.fdic.gov/api/institutions?filters=ACTIVE:1&fields=CERT,NAME,STALP,STCNTY,COUNTY,CITY,ASSET,DEP,OFFICES,OFFDOM&limit=10000&format=json&offset=0",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://banks.data.fdic.gov/api/institutions?filters=ACTIVE:1&fields=CERT,NAME,STALP,STCNTY,COUNTY,CITY,ASSET,DEP,OFFICES,OFFDOM&limit=10000&format=json&offset=0",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FDIC BankFind institutions, active as of the download date. ASSET and DEP are in thousands of dollars."
+    },
+    {
+      "name": "fdic-sod",
+      "kind": "fdic",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://banks.data.fdic.gov/api/sod?filters=YEAR:2024&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT&limit=10000&format=json&offset=0",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:47.299Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://banks.data.fdic.gov/api/sod?filters=YEAR:2024&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT&limit=10000&format=json&offset=0",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://banks.data.fdic.gov/api/sod?filters=YEAR:2024&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT&limit=10000&format=json&offset=0",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FDIC Summary of Deposits, branch level, 2024. DEPSUMBR is in thousands of dollars. Optional: when missing, bankDeposits and bankOffices are null."
+    },
+    {
+      "name": "fred-FEDFUNDS",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:49.752Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series FEDFUNDS, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-DGS3MO",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:52.264Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series DGS3MO, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-DGS2",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:54.755Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series DGS2, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-DGS10",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:57.267Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series DGS10, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-DGS30",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS30",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:09:59.465Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS30",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS30",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series DGS30, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-CPIAUCSL",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:10:01.817Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series CPIAUCSL, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-UNRATE",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:10:04.334Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series UNRATE, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-DCOILWTICO",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:10:06.856Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series DCOILWTICO, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-CSUSHPISA",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CSUSHPISA",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:10:09.296Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CSUSHPISA",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CSUSHPISA",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series CSUSHPISA, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "fred-SP500",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:10:11.749Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "FRED series SP500, full history, CSV. When missing, the build uses the datahub mirror of the same series, or for the four short rates a hand band in data/calibration.ts (verified: false)."
+    },
+    {
+      "name": "census-county-shapes",
+      "kind": "file",
+      "required": false,
+      "ok": false,
+      "file": null,
+      "url": "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_county_5m.zip",
+      "status": null,
+      "bytes": null,
+      "sha256": null,
+      "fetchedOn": "2026-09-17T06:10:14.292Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_county_5m.zip",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        },
+        {
+          "url": "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_county_5m.zip",
+          "status": null,
+          "error": "fetch failed (Request was cancelled.)"
+        }
+      ],
+      "note": "Census cartographic county boundaries, 1:5m. When missing, the build falls back to the us-atlas npm package, which is built from the same Census files."
+    },
+    {
+      "name": "us-atlas-fallback",
+      "kind": "npm",
+      "required": false,
+      "ok": true,
+      "file": "/home/user/Charter/node_modules/us-atlas/counties-10m.json",
+      "url": "npm:us-atlas@3.0.1",
+      "status": null,
+      "bytes": 842143,
+      "sha256": "145aaf5d1433352a6a1d8e86b5f149c7c653f9171baf14aaf75ee66575def1b0",
+      "fetchedOn": "2026-09-17T06:10:16.806Z",
+      "skipped": false,
+      "attempts": [],
+      "note": "Fallback geometry: us-atlas (npm), derived from Census cb_*_us_county_5m. Used only when census-county-shapes failed."
+    },
+    {
+      "name": "mirror-counties-joc",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/counties-joc.json",
+      "url": "https://raw.githubusercontent.com/evangambit/JsonOfCounties/master/counties.json",
+      "status": 200,
+      "bytes": 23082049,
+      "sha256": "247cba17d4ce64c865530ed8616e9b868c120a28d99ab5f29ae4c65b388e9632",
+      "fetchedOn": "2026-09-17T06:10:18.481Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/evangambit/JsonOfCounties/master/counties.json",
+          "status": 200,
+          "bytes": 23082049
+        }
+      ],
+      "note": "County Business Patterns 2019 (Census CB1900CBP: employees and annual payroll by NAICS sector), county names and centroids from TIGER 2017, compiled per county in the public JsonOfCounties repository. Used for the average wage and as the fallback employment total."
+    },
+    {
+      "name": "mirror-cbsa",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/msa_definitions.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/administrative/msa_definitions.parquet",
+      "status": 200,
+      "bytes": 74327,
+      "sha256": "7c3374cc0ba807137e349b5cfe4260348f6a49ef176019d880dd6cf6432376f2",
+      "fetchedOn": "2026-09-17T06:10:18.831Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "OMB CBSA delineation list (2020 vintage columns: CBSA Code, CBSA Title, Metropolitan/Micropolitan Statistical Area, FIPS State Code, FIPS County Code), republished as parquet in the spatial-ucr bucket."
+    },
+    {
+      "name": "mirror-acs-x01_age_and_sex-2021",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/acs/acs_2021_X01_AGE_AND_SEX_tract.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/demographic_profile/2021/acs_2021_X01_AGE_AND_SEX_tract.parquet",
+      "status": 200,
+      "bytes": 26282955,
+      "sha256": "36877e59c6da53af4d5be61ef4d24eca200de09a743dbe216c8d001da10ec979",
+      "fetchedOn": "2026-09-17T06:10:19.111Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "ACS 5 year 2017 to 2021, tract level table X01_AGE_AND_SEX (B01003 total population), Census summary file geodatabase columns, republished as parquet by the UC Riverside Center for Geospatial Sciences (open bucket spatial-ucr). Summed to counties in the build."
+    },
+    {
+      "name": "mirror-acs-x01_age_and_sex-2016",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/acs/acs_2016_X01_AGE_AND_SEX_tract.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/demographic_profile/2016/acs_2016_X01_AGE_AND_SEX_tract.parquet",
+      "status": 200,
+      "bytes": 23087770,
+      "sha256": "377269a672a4d62e14b930888e08d34ff5056bf891ff9f244583f95ebebdfa49",
+      "fetchedOn": "2026-09-17T06:10:19.373Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "ACS 5 year 2012 to 2016, tract level table X01_AGE_AND_SEX (B01003 total population, five years earlier), Census summary file geodatabase columns, republished as parquet by the UC Riverside Center for Geospatial Sciences (open bucket spatial-ucr). Summed to counties in the build."
+    },
+    {
+      "name": "mirror-acs-x19_income-2021",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/acs/acs_2021_X19_INCOME_tract.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/demographic_profile/2021/acs_2021_X19_INCOME_tract.parquet",
+      "status": 200,
+      "bytes": 114853792,
+      "sha256": "1d3eeef47aae1d9078c0a32b49771543c356f1af8bb01c530822479ddabc0505",
+      "fetchedOn": "2026-09-17T06:10:20.048Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "ACS 5 year 2017 to 2021, tract level table X19_INCOME (B19001 income buckets, B19313 aggregate income), Census summary file geodatabase columns, republished as parquet by the UC Riverside Center for Geospatial Sciences (open bucket spatial-ucr). Summed to counties in the build."
+    },
+    {
+      "name": "mirror-acs-x23_employment_status-2021",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/acs/acs_2021_X23_EMPLOYMENT_STATUS_tract.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/demographic_profile/2021/acs_2021_X23_EMPLOYMENT_STATUS_tract.parquet",
+      "status": 200,
+      "bytes": 68737303,
+      "sha256": "28b5a3d984766c975b2642df0cddc149957892cdd48a39cc123a705e0b8f5a05",
+      "fetchedOn": "2026-09-17T06:10:20.491Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "ACS 5 year 2017 to 2021, tract level table X23_EMPLOYMENT_STATUS (B23025 labor force, employed, unemployed), Census summary file geodatabase columns, republished as parquet by the UC Riverside Center for Geospatial Sciences (open bucket spatial-ucr). Summed to counties in the build."
+    },
+    {
+      "name": "mirror-acs-x24_industry_occupation-2021",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/acs/acs_2021_X24_INDUSTRY_OCCUPATION_tract.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/demographic_profile/2021/acs_2021_X24_INDUSTRY_OCCUPATION_tract.parquet",
+      "status": 200,
+      "bytes": 129064785,
+      "sha256": "37d58f49d88172e2fb9cbc58945afbbd1d335a94119998eceedf773ad28a4ea8",
+      "fetchedOn": "2026-09-17T06:10:21.211Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "ACS 5 year 2017 to 2021, tract level table X24_INDUSTRY_OCCUPATION (C24030 employed residents by industry), Census summary file geodatabase columns, republished as parquet by the UC Riverside Center for Geospatial Sciences (open bucket spatial-ucr). Summed to counties in the build."
+    },
+    {
+      "name": "mirror-acs-x25_housing_characteristics-2021",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/acs/acs_2021_X25_HOUSING_CHARACTERISTICS_tract.parquet",
+      "url": "https://s3.amazonaws.com/spatial-ucr/census/demographic_profile/2021/acs_2021_X25_HOUSING_CHARACTERISTICS_tract.parquet",
+      "status": 200,
+      "bytes": 188919388,
+      "sha256": "4043cafc9de245017c27e43d93403eca225494105f8a1196438b6767d540c381",
+      "fetchedOn": "2026-09-17T06:10:22.134Z",
+      "skipped": true,
+      "attempts": [],
+      "note": "ACS 5 year 2017 to 2021, tract level table X25_HOUSING_CHARACTERISTICS (B25002 units and vacancy, B25075 value buckets, B25063 rent buckets), Census summary file geodatabase columns, republished as parquet by the UC Riverside Center for Geospatial Sciences (open bucket spatial-ucr). Summed to counties in the build."
+    },
+    {
+      "name": "mirror-fred-DGS10",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/fred/DGS10.csv",
+      "url": "https://raw.githubusercontent.com/datasets/bond-yields-us-10y/main/data/monthly.csv",
+      "status": 200,
+      "bytes": 15043,
+      "sha256": "2ce54ee178023699587e2c01a1bbe8878aed45a22b738c8e2ec71d63b6b51b46",
+      "fetchedOn": "2026-09-17T06:10:22.377Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/datasets/bond-yields-us-10y/main/data/monthly.csv",
+          "status": 200,
+          "bytes": 15043
+        }
+      ],
+      "note": "FRED DGS10 (10 year Treasury constant maturity), monthly, datahub.io core dataset bond-yields-us-10y"
+    },
+    {
+      "name": "mirror-fred-CPIAUCSL",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/fred/CPIAUCSL.csv",
+      "url": "https://raw.githubusercontent.com/datasets/cpi-us/main/data/cpiai.csv",
+      "status": 200,
+      "bytes": 29403,
+      "sha256": "57a5e25c2f51356dfad1568871e82bdb92b12d2b9d25cac295cc5486ac6aafd6",
+      "fetchedOn": "2026-09-17T06:10:22.651Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/datasets/cpi-us/main/data/cpiai.csv",
+          "status": 200,
+          "bytes": 29403
+        }
+      ],
+      "note": "BLS CPI-U all items (FRED CPIAUCSL), monthly index, datahub.io core dataset cpi-us"
+    },
+    {
+      "name": "mirror-fred-DCOILWTICO",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/fred/DCOILWTICO.csv",
+      "url": "https://raw.githubusercontent.com/datasets/oil-prices/main/data/wti-monthly.csv",
+      "status": 200,
+      "bytes": 8768,
+      "sha256": "3fd154f0c6cb70c2293c7e25ca59416b74538a8182062d271f35ffd7b24835ab",
+      "fetchedOn": "2026-09-17T06:10:22.893Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/datasets/oil-prices/main/data/wti-monthly.csv",
+          "status": 200,
+          "bytes": 8768
+        }
+      ],
+      "note": "EIA WTI spot (FRED DCOILWTICO), monthly, datahub.io core dataset oil-prices"
+    },
+    {
+      "name": "mirror-fred-SP500",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/fred/SP500.csv",
+      "url": "https://raw.githubusercontent.com/datasets/s-and-p-500/main/data/data.csv",
+      "status": 200,
+      "bytes": 123800,
+      "sha256": "ed6a0faf1864d60161806b594b45a2642f6149f59b26b3d7b32c2ce38758dc6f",
+      "fetchedOn": "2026-09-17T06:10:23.103Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/datasets/s-and-p-500/main/data/data.csv",
+          "status": 200,
+          "bytes": 123800
+        }
+      ],
+      "note": "S&P 500 monthly level (Shiller data), datahub.io core dataset s-and-p-500"
+    },
+    {
+      "name": "mirror-fred-CSUSHPISA",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/fred/CSUSHPISA.csv",
+      "url": "https://raw.githubusercontent.com/datasets/house-prices-us/main/data/national-month.csv",
+      "status": 200,
+      "bytes": 16010,
+      "sha256": "5c32d483bec4d81e57a93a216582d868d1541ebe3bebadf9e17d6354ae9edf58",
+      "fetchedOn": "2026-09-17T06:10:23.320Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/datasets/house-prices-us/main/data/national-month.csv",
+          "status": 200,
+          "bytes": 16010
+        }
+      ],
+      "note": "S&P Case-Shiller US national home price index (FRED CSUSHPISA and NSA), monthly, datahub.io core dataset house-prices-us"
+    },
+    {
+      "name": "mirror-fred-UNRATE",
+      "kind": "file",
+      "required": true,
+      "ok": true,
+      "file": "mirror/fred/UNRATE.csv",
+      "url": "https://raw.githubusercontent.com/datasets/employment-us/main/data/aat1.csv",
+      "status": 200,
+      "bytes": 5563,
+      "sha256": "9e91f60d07387e8f17130bbb8ab1f3be86e58b368c3bb314d28a829c5442720b",
+      "fetchedOn": "2026-09-17T06:10:23.559Z",
+      "skipped": false,
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/datasets/employment-us/main/data/aat1.csv",
+          "status": 200,
+          "bytes": 5563
+        }
+      ],
+      "note": "BLS civilian unemployment rate, annual average (FRED UNRATE averaged), datahub.io core dataset employment-us"
+    }
+  ]
+}

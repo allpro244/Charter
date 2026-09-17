@@ -35,14 +35,17 @@ const SHADE_LABEL: Record<string, string> = { none: 'Plain', condition: 'Conditi
 
 export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSelectMetro, onOpenBranch }: Props) {
   const [hover, setHover] = useState<string | null>(null);
+  // A click pins a county so the mouse can leave the map for the button.
+  const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => {
     if (!onOpenBranch || mode !== 'play') return;
     const h = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'o' && hover) onOpenBranch(hover);
+      const target = picked ?? hover;
+      if (e.key.toLowerCase() === 'o' && target) onOpenBranch(target);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [hover, onOpenBranch, mode]);
+  }, [hover, picked, onOpenBranch, mode]);
   const paths = useMemo<CountyPath[]>(
     () => geo.features.map((f) => ({ fips: f.properties.fips, name: f.properties.name, state: f.properties.state, d: pathFor(f.geometry, f.properties.state) })),
     [geo],
@@ -59,10 +62,12 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
     return `rgba(213,216,220,${(t * 0.6).toFixed(2)})`;
   };
   const hovered = hover ? world.geo.counties[hover] : undefined;
+  const pinned = picked ? world.geo.counties[picked] : undefined;
+  const shown = pinned ?? hovered;
   const empty = paths.length === 0;
   return (
     <div className="mapwrap">
-      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers; open branches where you want deposits. Shade the map by a sector's share of jobs or by how each county is doing.</p>}
+      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers, click it to pin it, then open a branch there to gather its deposits and meet its borrowers. Shade the map by a sector's share of jobs or by how each county is doing.</p>}
       {empty && <p className="hint">This build has no county map: the playtest bank has no home town. The map fills in once the county data is built.</p>}
       {onShade && !empty && (
         <div className="toolbar">
@@ -82,13 +87,14 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
             <path
               key={p.fips}
               d={p.d}
-              className={'county' + (hover === p.fips ? ' hover' : '')}
+              className={'county' + (hover === p.fips || picked === p.fips ? ' hover' : '')}
               style={shade !== 'none' ? { fill: shadeOf(p.fips) } : undefined}
               onMouseEnter={() => setHover(p.fips)}
               onMouseLeave={() => setHover((h) => (h === p.fips ? null : h))}
               onClick={() => {
                 const c = world.geo.counties[p.fips];
-                if (c?.cbsa && world.geo.metros[c.cbsa]?.startable) onSelectMetro(c.cbsa);
+                if (mode === 'play') setPicked((cur) => (cur === p.fips ? null : p.fips));
+                else if (c?.cbsa && world.geo.metros[c.cbsa]?.startable) onSelectMetro(c.cbsa);
               }}
             />
           ))}
@@ -125,11 +131,18 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
           })}
       </svg>
       <div className="maphover">
-        {hovered ? <CountyStats c={hovered} world={world} /> : !empty && <span className="dim">hover a county for its real statistics{mode === 'start' ? '; click a green metro to start there' : ''}</span>}
-        {hovered && mode === 'play' && onOpenBranch && (
-          <button className="btn primary" onClick={() => onOpenBranch(hovered.fips)}>
-            Open a branch in {hovered.name}
-          </button>
+        {shown ? <CountyStats c={shown} world={world} /> : !empty && <span className="dim">hover a county for its real statistics{mode === 'start' ? '; click a green metro to start there' : '; click one to pin it'}</span>}
+        {shown && mode === 'play' && onOpenBranch && (
+          <span>
+            <button className="btn primary" onClick={() => onOpenBranch(shown.fips)}>
+              Open a branch in {shown.name}
+            </button>{' '}
+            {pinned && (
+              <button className="btn small" onClick={() => setPicked(null)}>
+                Unpin
+              </button>
+            )}
+          </span>
         )}
       </div>
     </div>

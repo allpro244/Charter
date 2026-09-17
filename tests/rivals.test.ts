@@ -8,7 +8,7 @@ import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
 import { newPlayer, startCharter, startableMetros } from '../engine/start';
 import { tick } from '../engine/tick';
-import { setRate } from '../engine/deposits';
+import { marketRate, setRate } from '../engine/deposits';
 import { DEPOSIT_TYPES } from '../engine/ledger';
 import { buildBigWorld } from './helpers/bigworld';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
@@ -83,7 +83,7 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
     for (const st of Object.values(world.geo.states)) {
       const inState = banks.filter((b) => b.state === st.abbr && b.kind !== 'player');
       const assets = inState.reduce((s, b) => s + totalAssets(b.acct), 0);
-      const seeds = (data.banksByState[st.abbr] ?? []).reduce((s, x) => s + x.assets, 0);
+      const seeds = (world.bankSeeds[st.abbr] ?? []).reduce((s, x) => s + x.assets, 0);
       if (seeds > 0) expect(Math.abs(assets / seeds - 1)).toBeLessThan(0.25);
     }
     for (let d = 0; d < 365; d++) tick(world);
@@ -99,12 +99,14 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
     newPlayer(world);
     const metro = startableMetros(world)[0]!;
     startCharter({ world, events: [] }, { mode: 'charter', cbsa: metro.cbsa, name: 'H', invest: 2_000_000 });
-    const agg = world.bankOrder.map((id) => world.banks[id]!).find((b) => b.kind === 'aggregate' && b.represents > 5);
+    const agg = world.bankOrder.map((id) => world.banks[id]!).find((b) => b.kind === 'aggregate' && b.represents > 5 && !world.geo.states[b.state]?.expanded);
     expect(agg).toBeDefined();
     const before = totalAssets(agg!.acct);
     const beforeDeposits = totalDeposits(agg!.acct);
     expect(expandState({ world, events: [] }, agg!.state)).toBe(true);
-    const after = world.bankOrder.map((id) => world.banks[id]!).filter((b) => b.state === agg!.state && b.status === 'open' && b.kind !== 'player');
+    // The state's banks after the expansion, without the national giants
+    // that live there since the start and were never in the aggregate.
+    const after = world.bankOrder.map((id) => world.banks[id]!).filter((b) => b.state === agg!.state && b.status === 'open' && b.kind !== 'player' && !b.national);
     const assets = after.reduce((s, b) => s + totalAssets(b.acct), 0);
     const deposits = after.reduce((s, b) => s + totalDeposits(b.acct), 0);
     expect(Math.abs(assets / before - 1)).toBeLessThan(0.2);
@@ -112,21 +114,30 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
   });
 
   it('the player loses deposits to a rival that prices higher in the same county', () => {
-    const data = loadFixtures();
-    const world = createWorld(3, data);
-    newPlayer(world);
-    const metro = startableMetros(world)[0]!;
-    const bank = startCharter({ world, events: [] }, { mode: 'charter', cbsa: metro.cbsa, name: 'H', invest: 2_000_000 });
-    for (let d = 0; d < 3 * 365; d++) tick(world);
-    const before = coreDeposits(bank);
-    // A rival in the home county goes 150bp above market on every type; the
-    // player holds still.
-    const rival = world.bankOrder.map((id) => world.banks[id]!).find((b) => b.kind === 'rival' && b.homeCounty === bank.homeCounty && b.status === 'open');
-    expect(rival).toBeDefined();
-    rival!.ai!.rateAggression = 3;
-    for (const t of DEPOSIT_TYPES) setRate(world, t, Math.max(0, bank.rates[t] - 0.005));
-    for (let d = 0; d < 365; d++) tick(world);
-    expect(coreDeposits(bank)).toBeLessThan(before);
+    // The same three year old bank twice: once pricing 50bp under the
+    // market while a home county rival pushes 150bp over, once left alone.
+    // A young bank still grows either way; it grows less when underpriced.
+    const run = (contest: boolean) => {
+      const data = loadFixtures();
+      const world = createWorld(3, data);
+      newPlayer(world);
+      const metro = startableMetros(world)[0]!;
+      const bank = startCharter({ world, events: [] }, { mode: 'charter', cbsa: metro.cbsa, name: 'H', invest: 2_000_000 });
+      for (let d = 0; d < 3 * 365; d++) tick(world);
+      const before = coreDeposits(bank);
+      if (contest) {
+        const rival = world.bankOrder.map((id) => world.banks[id]!).find((b) => b.kind === 'rival' && b.homeCounty === bank.homeCounty && b.status === 'open');
+        expect(rival).toBeDefined();
+        rival!.ai!.rateAggression = 3;
+        for (const t of DEPOSIT_TYPES) setRate(world, t, Math.max(0, marketRate(world, t) - 0.005));
+      }
+      for (let d = 0; d < 365; d++) tick(world);
+      return { before, after: coreDeposits(bank) };
+    };
+    const alone = run(false);
+    const contested = run(true);
+    expect(contested.before).toBe(alone.before);
+    expect(contested.after).toBeLessThan(alone.after * 0.97);
   });
 
   it('an energy shock hurts a Midland bank and not a San Jose bank', () => {
@@ -134,7 +145,7 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
     const run = (name: string) => {
       const world = createWorld(4, data);
       newPlayer(world);
-      const metro = startableMetros(world).find((m) => m.name.startsWith(name))!;
+      const metro = Object.values(world.geo.metros).find((m) => m.name.startsWith(name))!;
       const bank = startCharter({ world, events: [] }, { mode: 'charter', cbsa: metro.cbsa, name: 'H', invest: 2_000_000 });
       const county = world.geo.counties[bank.homeCounty!]!;
       for (let d = 0; d < 3 * 365; d++) {

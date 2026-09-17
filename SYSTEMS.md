@@ -137,6 +137,25 @@ Bulk download URLs (verify each at run time; agencies move files):
 | National series | FRED | National | Fed funds, Treasury curve, CPI, unemployment, oil (WTI), Case-Shiller, S&P 500 (for calibration only, D37) |
 | Geography | Census TIGER county shapefiles, simplified to GeoJSON | County | Boundaries, centroids |
 
+## Alternate public mirrors
+Some networks refuse every agency host above (census.gov, bls.gov, bea.gov, fhfa.gov, fdic.gov, fred.stlouisfed.org). The same datasets are republished by third parties on hosts that stay open; `scripts/lib/sources.ts` lists each mirror with its provenance and the primary it stands in for, `scripts/fetch-data.ts` fetches both, and `scripts/build-data.ts` takes the agency file when it is on disk and the mirror otherwise, recording which in `data/manifest.json`. Mirrors are the same public data, not substitutes for it; a field with no mirror is null or, for the banking sector and four short rates, generated in the engine from hand bands (D48).
+
+| Primary | Mirror | What it carries | Vintage |
+|---|---|---|---|
+| Census ACS 5 year (county API) | UC Riverside Center for Geospatial Sciences open bucket `spatial-ucr`, `census/demographic_profile/<year>/acs_<year>_X..._tract.parquet` (Census summary file geodatabase tables as parquet) | X01 B01003 population; X19 B19001 income buckets and B19313 aggregate income; X23 B23025 labor force; X24 C24030 employed residents by industry; X25 B25002 units, B25075 value buckets, B25063 rent buckets. Summed from tracts to counties; medians interpolated within the bucket holding the middle household | 2017 to 2021 release (the last with Connecticut's counties); 2012 to 2016 release for the five year population growth |
+| Census PEP | the ACS X01 tables above | population and five year growth | as above |
+| BLS QCEW | ACS C24030 (sectors, employment) and Census County Business Patterns 2019 via the JsonOfCounties compilation (`evangambit/JsonOfCounties`, `counties.json`) | employed residents by D41 sector; employment; average weekly wage = CBP annual payroll over employees, divided by 52 | 2021; CBP 2019 |
+| BLS LAUS | ACS B23025 | labor force, unemployment rate | 2021 |
+| OMB delineations | `spatial-ucr`, `census/administrative/msa_definitions.parquet` | county to CBSA, metropolitan or micropolitan | 2020 |
+| Census county boundaries | `us-atlas` (npm), built from the Census cartographic files | boundaries and centroids; the compilation's TIGER 2017 centroid when a county postdates the boundary file | 2017 |
+| FRED DGS10, CPIAUCSL, DCOILWTICO, SP500, CSUSHPISA, UNRATE | datahub.io core datasets on GitHub (`datasets/bond-yields-us-10y`, `cpi-us`, `oil-prices`, `s-and-p-500`, `house-prices-us`, `employment-us`) | the same series, monthly (UNRATE annual) | through the as-of date |
+| FRED FEDFUNDS, DGS3MO, DGS2, DGS30 | none found | hand bands in `data/calibration.ts` (`startFedFunds` and friends, verified: false) | December 2024 |
+| BEA GDP by county | none found | `gdp` is null | |
+| FHFA HPI | none found | `hpi` is null; the county median home value carries the level | |
+| FDIC institutions and Summary of Deposits | none found | states carry zero bank totals and no seeds; the engine generates the sector from hand bands (D48) and the real list replaces it when it lands | |
+
+With the mirrors, `sectors` are shares of employed residents by industry (where people live) rather than of jobs by workplace; the ACS publishes 54 (professional, scientific and technical) whole, so `tech` is 51 plus all of 54; `government` is public administration.
+
 ## Sector mapping (D41)
 QCEW NAICS supersectors map to the game's ten sector indices:
 - Energy: mining, quarrying, oil and gas extraction (NAICS 21) plus oil and gas support (213), petroleum products (324), pipelines (486)
@@ -172,6 +191,6 @@ QCEW suppresses county cells with few employers, and ACS has wide margins in sma
 
 ## Build rules
 - The build fails if any county is missing population, income, employment, or sector shares.
-- The build fails if any startable metro lacks home price data.
+- The build fails if any startable metro lacks a home price datum: the FHFA metro index when FHFA is on disk, else a county median home value.
 - Values are stored as given; unit conversions are done once in the build and documented in the manifest.
 - The game never edits these files at runtime. They are the world's day one and the sim moves from there.

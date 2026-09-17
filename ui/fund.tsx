@@ -305,7 +305,7 @@ function Bonds({ world, bank, unit, act }: Props) {
             </tr>
             {TERMS.map((d) => (
               <tr key={d}>
-                <td>{d} year{d > 1 ? 's' : ''}</td>
+                <td>{d < 1 ? '3 months (Treasury bill)' : `${d} year${d > 1 ? 's' : ''}`}</td>
                 {PRODUCTS.map((p) => (
                   <td key={p} className="num">
                     <button className={'btn small' + (product === p && duration === d ? ' on' : '')} onClick={() => { setProduct(p); setDuration(d); }} title={`${d} year ${PRODUCT_LABEL[p]}: pick this yield`}>
@@ -313,7 +313,7 @@ function Bonds({ world, bank, unit, act }: Props) {
                     </button>
                   </td>
                 ))}
-                <td className="num alert">({pct(d * 0.01, 0)} of price)</td>
+                <td className="num alert">({pct(d * 0.01, d < 1 ? 2 : 0)} of price)</td>
               </tr>
             ))}
             <tr className="memo-row">
@@ -353,7 +353,7 @@ function Bonds({ world, bank, unit, act }: Props) {
             <tr>
               <td>Bond</td>
               <td>
-                {duration} year <Term k={PRODUCT_LABEL[product]}>{PRODUCT_LABEL[product]}</Term>
+                {duration < 1 ? '3 month' : `${duration} year`} <Term k={PRODUCT_LABEL[product]}>{PRODUCT_LABEL[product]}</Term>
               </td>
             </tr>
             <tr className="total">
@@ -383,8 +383,8 @@ function Bonds({ world, bank, unit, act }: Props) {
             </tr>
             <tr>
               <td colSpan={2}>
-                <button className="btn primary" disabled={a.cash < amount || amount <= 0} onClick={() => act((c) => buySecurities(c, bank, kind, product, amount, duration), `Bought ${usd(amount)} of ${duration} year ${PRODUCT_LABEL[product]} at ${pct(y)}`)}>
-                  Buy {usd(amount)} of {duration} year {PRODUCT_LABEL[product]} at {pct(y)}
+                <button className="btn primary" disabled={a.cash < amount || amount <= 0} onClick={() => act((c) => buySecurities(c, bank, kind, product, amount, duration), `Bought ${usd(amount)} of ${duration < 1 ? '3 month' : `${duration} year`} ${PRODUCT_LABEL[product]} at ${pct(y)}`)}>
+                  Buy {usd(amount)} of {duration < 1 ? '3 month' : `${duration} year`} {PRODUCT_LABEL[product]} at {pct(y)}
                 </button>
                 {a.cash < amount && <span className="dim"> Not enough cash: {usd(a.cash)} on hand.</span>}
               </td>
@@ -415,7 +415,7 @@ function Bonds({ world, bank, unit, act }: Props) {
           {bank.lots.map((l) => (
             <tr key={l.id} className={l.fair < l.cost * 0.9 ? 'alert' : ''}>
               <td>
-                {Math.round(l.duration)} year <Term k={PRODUCT_LABEL[l.product]}>{PRODUCT_LABEL[l.product]}</Term>
+                {l.duration < 0.75 ? 'Short' : `${Math.round(l.duration)} year`} <Term k={PRODUCT_LABEL[l.product]}>{PRODUCT_LABEL[l.product]}</Term>
               </td>
               <td>{l.kind === 'afs' ? 'for sale' : 'to maturity'}</td>
               <td className="num">{dollars(l.cost, unit)}</td>
@@ -505,5 +505,5 @@ function Bonds({ world, bank, unit, act }: Props) {
   );
 }
 
-const TERMS = [1, 2, 3, 5, 7, 10];
+const TERMS = [0.25, 1, 2, 3, 5, 7, 10];
 const PRODUCTS: Product[] = ['treasury', 'agency', 'mbs'];

@@ -20,7 +20,7 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { SOURCES, VINTAGE, RAW_DIR, rawPath, type Source } from './lib/sources';
+import { SOURCES, VINTAGE, RAW_DIR, mirrorsFor, rawPath, type Source } from './lib/sources';
 import {
   downloadToFile,
   fetchText,
@@ -370,9 +370,10 @@ async function main(): Promise<void> {
 
   const touched = manifest.entries.filter((e) => selected.some((s) => s.name === e.name) || e.name === 'us-atlas-fallback');
   log('\n' + summaryTable(touched));
-  const failedRequired = touched.filter((e) => e.required && !e.ok);
+  const okNames = new Set(manifest.entries.filter((e) => e.ok).map((e) => e.name));
+  const failedRequired = touched.filter((e) => e.required && !e.ok && !mirrorsFor(e.name).some((m) => okNames.has(m.name)));
   if (failedRequired.length) {
-    log(`\n${failedRequired.length} required source(s) failed:`);
+    log(`\n${failedRequired.length} required source(s) failed (no mirror covers them):`);
     for (const e of failedRequired) {
       for (const a of e.attempts) log(`  ${e.name}: ${a.url} -> ${a.status ?? 'no response'}${a.error ? ` (${a.error})` : ''}`);
     }

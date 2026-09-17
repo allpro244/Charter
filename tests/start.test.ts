@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { totalAssets, totalEquity } from '../engine/ledger';
 import { createWorld } from '../engine/state';
-import { charterTerms, newPlayer, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
+import { charterTerms, newPlayer, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
 import { tick } from '../engine/tick';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
 
@@ -39,7 +39,7 @@ describe.skipIf(!hasFixtures())(`start (${hasFixtures() ? 'fixtures loaded' : FI
     const world = createWorld(3, data);
     newPlayer(world);
     const metro = startableMetros(world)[0]!;
-    const seeds = data.banksByState[metro.state] ?? [];
+    const seeds = seedsForMetro(world, metro);
     const candidates = takeoverCandidates(world, metro, seeds);
     expect(candidates.length).toBeGreaterThan(0);
     const c = candidates.find((x) => x.price <= world.player.cash) ?? candidates[0]!;

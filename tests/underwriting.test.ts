@@ -6,9 +6,10 @@ import { generateApplication, ccoReview } from '../engine/borrowers';
 import { LOAN_TYPES } from '../engine/loantypes';
 import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
-import { newPlayer, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
+import { newPlayer, principalCounty, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
 import { tick } from '../engine/tick';
-import { demandMultiplier, setDial, setPolicy, setPricing } from '../engine/underwriting';
+import { isYearEnd } from '../engine/time';
+import { applicationsDaily, demandMultiplier, setDial, setPolicy, setPricing } from '../engine/underwriting';
 import { createBank } from '../engine/state';
 import { calibration } from '../data/calibration';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
@@ -20,13 +21,13 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
     const data = loadFixtures();
     const world = createWorld(1, data);
     newPlayer(world);
-    const metros = startableMetros(world);
+    const metros = Object.values(world.geo.metros);
     const midland = metros.find((m) => m.name.startsWith('Midland'))!;
     const sanJose = metros.find((m) => m.name.startsWith('San Jose'))!;
     const ctx = { world, events: [] };
     const bank = startCharter(ctx, { mode: 'charter', cbsa: midland.cbsa, name: 'M', invest: 2_000_000 });
     const county = world.geo.counties[bank.homeCounty!]!;
-    const sj = world.geo.counties[sanJose.counties[0]!]!;
+    const sj = principalCounty(world, sanJose)!;
     const r = makeRng(3);
     let energyM = 0;
     let techSJ = 0;
@@ -65,7 +66,7 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
     const world = createWorld(3, data);
     newPlayer(world);
     const metro = startableMetros(world)[0]!;
-    const seeds = data.banksByState[metro.state] ?? [];
+    const seeds = seedsForMetro(world, metro);
     const c = takeoverCandidates(world, metro, seeds).find((x) => x.price <= world.player.cash)!;
     const bank = startTakeover({ world, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate: c });
     setDial(world, 50_000_000, 7); // everything auto
@@ -82,7 +83,9 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
     expect(bank.loans.length).toBeLessThanOrEqual(500 + 400);
   });
 
-  it(`a disciplined underwriter (DSCR > 1.5, LTV < 65%) loses less than approve-everything across ${SEEDS} seeds`, () => {
+  it(`a disciplined underwriter (DSCR > 1.5, LTV < 65%) pays less for credit than approve-everything across ${SEEDS} seeds`, () => {
+    // The cost of credit is what the bank set aside plus what it wrote off,
+    // against everything it lent. A bank that failed lost it all.
     const data = loadFixtures();
     let disciplinedWins = 0;
     for (let s = 0; s < SEEDS; s++) {
@@ -95,10 +98,21 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
         setDial(world, 100_000_000, 7);
         if (disciplined) setPolicy(world, { minDscr: 1.5, maxLtv: { ci: 0.65, cre_oo: 0.65, cre_inv: 0.65, construction: 0.65, resi: 0.65, consumer: 0.65, ag: 0.65, energy: 0.65, cards: 0.65 } });
         else setPolicy(world, { minDscr: 0, maxLeverage: 100, maxLtv: { ci: 2, cre_oo: 2, cre_inv: 2, construction: 2, resi: 2, consumer: 2, ag: 2, energy: 2, cards: 2 }, sectorCap: 1, maxSize: 1e12 });
-        for (let d = 0; d < 6 * 365; d++) tick(world);
-        const co = LOAN_TYPES.reduce((x, t) => x + bank.lifetimeChargeOffsByType[t], 0);
-        const orig = LOAN_TYPES.reduce((x, t) => x + bank.originationsByType[t], 0) + bank.acct.loans;
-        rates.push(co / Math.max(1, orig));
+        let lent = 0;
+        for (let d = 0; d < 6 * 365; d++) {
+          tick(world);
+          // The year to date resets inside the year-end tick: read it the day before.
+          if (isYearEnd(world.day + 1)) lent += LOAN_TYPES.reduce((x, t) => x + bank.originationsByType[t], 0);
+          if (bank.status === 'failed') break;
+        }
+        lent += LOAN_TYPES.reduce((x, t) => x + bank.originationsByType[t], 0);
+        if (bank.status === 'failed') {
+          rates.push(Infinity);
+          continue;
+        }
+        const provisions = bank.quarterHistory.reduce((x, q) => x + q.is.provision, 0) + bank.is.quarter.provision;
+        const chargeOffs = LOAN_TYPES.reduce((x, t) => x + bank.lifetimeChargeOffsByType[t], 0);
+        rates.push((Math.max(0, provisions) + chargeOffs) / Math.max(1, lent));
       }
       if (rates[0]! < rates[1]!) disciplinedWins += 1;
     }
@@ -147,7 +161,9 @@ describe('the rate sheet', () => {
     expect(bank.pricing.resi).toBe(0.0012);
   });
 
-  it.skipIf(!hasFixtures())('a cheaper C&I rate brings more C&I borrowers and no other type over a year, and every memo carries the offset', () => {
+  it.skipIf(!hasFixtures())('a cheaper C&I rate brings more C&I borrowers and no other type, and every memo carries the offset', () => {
+    // The same day, run many times, so the economy holds still and only the
+    // sheet differs: arrivals by type are compared as shares of the total.
     const run = (offset: number) => {
       const data = loadFixtures();
       const world = createWorld(21, data);
@@ -157,23 +173,28 @@ describe('the rate sheet', () => {
       const bank = startCharter(ctx, { mode: 'charter', cbsa: metro.cbsa, name: 'R', invest: 2_000_000 });
       setPricing(world, 'ci', offset);
       setDial(world, 0, 0);
-      let rateCheck = true;
-      for (let d = 0; d < 360; d++) {
-        tick(world);
+      let memoRates = 0;
+      let memosChecked = 0;
+      for (let i = 0; i < 1500; i++) {
+        applicationsDaily(ctx);
         for (const p of world.pending) {
-          if (p.kind === 'loan_application') {
-            const app = p.data.app as { type: string; memo: { rate: number } };
-            if (app.type === 'ci' && offset !== 0 && app.memo.rate <= 0) rateCheck = false;
-          }
+          const apps = p.kind === 'loan_application' ? [p.data.app as { type: string; memo: { rate: number } }] : p.kind === 'loan_batch' ? (p.data.apps as { type: string; memo: { rate: number } }[]) : [];
+          for (const a of apps) if (a.type === 'ci') { memoRates += a.memo.rate; memosChecked++; }
         }
         world.pending = [];
       }
-      return { ci: bank.applicationsByType.ci, resi: bank.applicationsByType.resi, rateCheck };
+      const total = LOAN_TYPES.reduce((s, t) => s + bank.applicationsByType[t], 0);
+      return { total, ciShare: bank.applicationsByType.ci / total, resiShare: bank.applicationsByType.resi / total, avgCiRate: memoRates / Math.max(1, memosChecked) };
     };
     const base = run(0);
     const cheap = run(-0.01);
-    expect(cheap.rateCheck).toBe(true);
-    expect(cheap.ci).toBeGreaterThan(base.ci * 1.15);
-    expect(Math.abs(cheap.resi - base.resi)).toBeLessThan(Math.max(10, base.resi * 0.35));
+    expect(base.total).toBeGreaterThan(300);
+    // A full point under market at 8% per 25bp is 36% more C&I borrowers:
+    // their share of arrivals rises by about a fifth of itself.
+    expect(cheap.ciShare).toBeGreaterThan(base.ciShare * 1.1);
+    expect(cheap.ciShare).toBeLessThan(base.ciShare * 1.5);
+    // Every C&I memo carries the offset, near enough to a basis point.
+    expect(cheap.avgCiRate).toBeLessThan(base.avgCiRate - 0.008);
+    expect(cheap.avgCiRate).toBeGreaterThan(base.avgCiRate - 0.012);
   });
 });

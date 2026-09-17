@@ -23,7 +23,39 @@ export interface Loaded {
 
 const FILES = ['counties.json', 'metros.json', 'states.json', 'banks-by-state.json', 'national.json', 'counties.geo.json'];
 
+// A packed page carries every data file inside one script element.
+function inlineBundle(): Record<string, unknown> | null {
+  const el = typeof document === 'undefined' ? null : document.getElementById('charter-data');
+  if (!el || !el.textContent) return null;
+  try {
+    const parsed = JSON.parse(el.textContent) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadData(): Promise<{ ok: true; loaded: Loaded } | { ok: false; missing: string[] }> {
+  const bundle = inlineBundle();
+  if (bundle) {
+    const missing = FILES.filter((f) => !(f in bundle)).map((f) => `data/${f}`);
+    if (missing.length > 0) return { ok: false, missing };
+    const get = (f: string) => bundle[f];
+    return {
+      ok: true,
+      loaded: {
+        data: {
+          counties: get('counties.json') as WorldData['counties'],
+          metros: get('metros.json') as WorldData['metros'],
+          states: get('states.json') as WorldData['states'],
+          banksByState: get('banks-by-state.json') as WorldData['banksByState'],
+          national: get('national.json') as WorldData['national'],
+        },
+        geo: get('counties.geo.json') as GeoCollection,
+        manifest: (bundle['manifest.json'] as Record<string, unknown> | undefined) ?? null,
+      },
+    };
+  }
   const results = await Promise.all(
     FILES.map(async (f) => {
       try {

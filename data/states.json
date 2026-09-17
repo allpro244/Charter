@@ -1,0 +1,779 @@
+[
+  {
+    "fips": "01",
+    "abbr": "AL",
+    "name": "Alabama",
+    "population": 4997675,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "FL",
+      "GA",
+      "MS",
+      "TN"
+    ]
+  },
+  {
+    "fips": "02",
+    "abbr": "AK",
+    "name": "Alaska",
+    "population": 726301,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": []
+  },
+  {
+    "fips": "04",
+    "abbr": "AZ",
+    "name": "Arizona",
+    "population": 7079203,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CA",
+      "CO",
+      "NV",
+      "NM",
+      "UT"
+    ]
+  },
+  {
+    "fips": "05",
+    "abbr": "AR",
+    "name": "Arkansas",
+    "population": 3006309,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "LA",
+      "MO",
+      "MS",
+      "OK",
+      "TN",
+      "TX"
+    ]
+  },
+  {
+    "fips": "06",
+    "abbr": "CA",
+    "name": "California",
+    "population": 39455353,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AZ",
+      "NV",
+      "OR"
+    ]
+  },
+  {
+    "fips": "08",
+    "abbr": "CO",
+    "name": "Colorado",
+    "population": 5723176,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AZ",
+      "KS",
+      "NE",
+      "NM",
+      "OK",
+      "UT",
+      "WY"
+    ]
+  },
+  {
+    "fips": "09",
+    "abbr": "CT",
+    "name": "Connecticut",
+    "population": 3605330,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MA",
+      "NY",
+      "RI"
+    ]
+  },
+  {
+    "fips": "10",
+    "abbr": "DE",
+    "name": "Delaware",
+    "population": 981892,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MD",
+      "NJ",
+      "PA"
+    ]
+  },
+  {
+    "fips": "11",
+    "abbr": "DC",
+    "name": "District of Columbia",
+    "population": 683154,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MD",
+      "VA"
+    ]
+  },
+  {
+    "fips": "12",
+    "abbr": "FL",
+    "name": "Florida",
+    "population": 21339762,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AL",
+      "GA"
+    ]
+  },
+  {
+    "fips": "13",
+    "abbr": "GA",
+    "name": "Georgia",
+    "population": 10625615,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AL",
+      "FL",
+      "NC",
+      "SC",
+      "TN"
+    ]
+  },
+  {
+    "fips": "15",
+    "abbr": "HI",
+    "name": "Hawaii",
+    "population": 1453498,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": []
+  },
+  {
+    "fips": "16",
+    "abbr": "ID",
+    "name": "Idaho",
+    "population": 1811617,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MT",
+      "NV",
+      "OR",
+      "UT",
+      "WA",
+      "WY"
+    ]
+  },
+  {
+    "fips": "17",
+    "abbr": "IL",
+    "name": "Illinois",
+    "population": 12821813,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IN",
+      "IA",
+      "KY",
+      "MO",
+      "WI"
+    ]
+  },
+  {
+    "fips": "18",
+    "abbr": "IN",
+    "name": "Indiana",
+    "population": 6751340,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IL",
+      "KY",
+      "MI",
+      "OH"
+    ]
+  },
+  {
+    "fips": "19",
+    "abbr": "IA",
+    "name": "Iowa",
+    "population": 3179090,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IL",
+      "MN",
+      "MO",
+      "NE",
+      "SD",
+      "WI"
+    ]
+  },
+  {
+    "fips": "20",
+    "abbr": "KS",
+    "name": "Kansas",
+    "population": 2932099,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CO",
+      "MO",
+      "NE",
+      "OK"
+    ]
+  },
+  {
+    "fips": "21",
+    "abbr": "KY",
+    "name": "Kentucky",
+    "population": 4494141,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IL",
+      "IN",
+      "MO",
+      "OH",
+      "TN",
+      "VA",
+      "WV"
+    ]
+  },
+  {
+    "fips": "22",
+    "abbr": "LA",
+    "name": "Louisiana",
+    "population": 4657305,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AR",
+      "MS",
+      "TX"
+    ]
+  },
+  {
+    "fips": "23",
+    "abbr": "ME",
+    "name": "Maine",
+    "population": 1357046,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "NH"
+    ]
+  },
+  {
+    "fips": "24",
+    "abbr": "MD",
+    "name": "Maryland",
+    "population": 6148545,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "DE",
+      "DC",
+      "PA",
+      "VA",
+      "WV"
+    ]
+  },
+  {
+    "fips": "25",
+    "abbr": "MA",
+    "name": "Massachusetts",
+    "population": 6991852,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CT",
+      "NH",
+      "NY",
+      "RI",
+      "VT"
+    ]
+  },
+  {
+    "fips": "26",
+    "abbr": "MI",
+    "name": "Michigan",
+    "population": 10062512,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IN",
+      "OH",
+      "WI"
+    ]
+  },
+  {
+    "fips": "27",
+    "abbr": "MN",
+    "name": "Minnesota",
+    "population": 5670472,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IA",
+      "ND",
+      "SD",
+      "WI"
+    ]
+  },
+  {
+    "fips": "28",
+    "abbr": "MS",
+    "name": "Mississippi",
+    "population": 2967023,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AL",
+      "AR",
+      "LA",
+      "TN"
+    ]
+  },
+  {
+    "fips": "29",
+    "abbr": "MO",
+    "name": "Missouri",
+    "population": 6141534,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AR",
+      "IL",
+      "IA",
+      "KS",
+      "KY",
+      "NE",
+      "OK",
+      "TN"
+    ]
+  },
+  {
+    "fips": "30",
+    "abbr": "MT",
+    "name": "Montana",
+    "population": 1077978,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "ID",
+      "ND",
+      "SD",
+      "WY"
+    ]
+  },
+  {
+    "fips": "31",
+    "abbr": "NE",
+    "name": "Nebraska",
+    "population": 1951480,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CO",
+      "IA",
+      "KS",
+      "MO",
+      "SD",
+      "WY"
+    ]
+  },
+  {
+    "fips": "32",
+    "abbr": "NV",
+    "name": "Nevada",
+    "population": 3059238,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AZ",
+      "CA",
+      "ID",
+      "OR",
+      "UT"
+    ]
+  },
+  {
+    "fips": "33",
+    "abbr": "NH",
+    "name": "New Hampshire",
+    "population": 1372175,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "ME",
+      "MA",
+      "VT"
+    ]
+  },
+  {
+    "fips": "34",
+    "abbr": "NJ",
+    "name": "New Jersey",
+    "population": 9234024,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "DE",
+      "NY",
+      "PA"
+    ]
+  },
+  {
+    "fips": "35",
+    "abbr": "NM",
+    "name": "New Mexico",
+    "population": 2109366,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AZ",
+      "CO",
+      "OK",
+      "TX",
+      "UT"
+    ]
+  },
+  {
+    "fips": "36",
+    "abbr": "NY",
+    "name": "New York",
+    "population": 20114745,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CT",
+      "MA",
+      "NJ",
+      "PA",
+      "VT"
+    ]
+  },
+  {
+    "fips": "37",
+    "abbr": "NC",
+    "name": "North Carolina",
+    "population": 10367022,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "GA",
+      "SC",
+      "TN",
+      "VA"
+    ]
+  },
+  {
+    "fips": "38",
+    "abbr": "ND",
+    "name": "North Dakota",
+    "population": 773344,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MN",
+      "MT",
+      "SD"
+    ]
+  },
+  {
+    "fips": "39",
+    "abbr": "OH",
+    "name": "Ohio",
+    "population": 11769923,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IN",
+      "KY",
+      "MI",
+      "PA",
+      "WV"
+    ]
+  },
+  {
+    "fips": "40",
+    "abbr": "OK",
+    "name": "Oklahoma",
+    "population": 3948136,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AR",
+      "CO",
+      "KS",
+      "MO",
+      "NM",
+      "TX"
+    ]
+  },
+  {
+    "fips": "41",
+    "abbr": "OR",
+    "name": "Oregon",
+    "population": 4207177,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CA",
+      "ID",
+      "NV",
+      "WA"
+    ]
+  },
+  {
+    "fips": "42",
+    "abbr": "PA",
+    "name": "Pennsylvania",
+    "population": 12970650,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "DE",
+      "MD",
+      "NJ",
+      "NY",
+      "OH",
+      "WV"
+    ]
+  },
+  {
+    "fips": "44",
+    "abbr": "RI",
+    "name": "Rhode Island",
+    "population": 1091949,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CT",
+      "MA"
+    ]
+  },
+  {
+    "fips": "45",
+    "abbr": "SC",
+    "name": "South Carolina",
+    "population": 5078903,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "GA",
+      "NC"
+    ]
+  },
+  {
+    "fips": "46",
+    "abbr": "SD",
+    "name": "South Dakota",
+    "population": 867950,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IA",
+      "MN",
+      "MT",
+      "NE",
+      "ND",
+      "WY"
+    ]
+  },
+  {
+    "fips": "47",
+    "abbr": "TN",
+    "name": "Tennessee",
+    "population": 6859497,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AL",
+      "AR",
+      "GA",
+      "KY",
+      "MS",
+      "MO",
+      "NC",
+      "VA"
+    ]
+  },
+  {
+    "fips": "48",
+    "abbr": "TX",
+    "name": "Texas",
+    "population": 28862581,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AR",
+      "LA",
+      "NM",
+      "OK"
+    ]
+  },
+  {
+    "fips": "49",
+    "abbr": "UT",
+    "name": "Utah",
+    "population": 3231370,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "AZ",
+      "CO",
+      "ID",
+      "NV",
+      "NM",
+      "WY"
+    ]
+  },
+  {
+    "fips": "50",
+    "abbr": "VT",
+    "name": "Vermont",
+    "population": 641637,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "MA",
+      "NH",
+      "NY"
+    ]
+  },
+  {
+    "fips": "51",
+    "abbr": "VA",
+    "name": "Virginia",
+    "population": 8582479,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "DC",
+      "KY",
+      "MD",
+      "NC",
+      "TN",
+      "WV"
+    ]
+  },
+  {
+    "fips": "53",
+    "abbr": "WA",
+    "name": "Washington",
+    "population": 7617364,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "ID",
+      "OR"
+    ]
+  },
+  {
+    "fips": "54",
+    "abbr": "WV",
+    "name": "West Virginia",
+    "population": 1801049,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "KY",
+      "MD",
+      "OH",
+      "PA",
+      "VA"
+    ]
+  },
+  {
+    "fips": "55",
+    "abbr": "WI",
+    "name": "Wisconsin",
+    "population": 5871661,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "IL",
+      "IA",
+      "MI",
+      "MN"
+    ]
+  },
+  {
+    "fips": "56",
+    "abbr": "WY",
+    "name": "Wyoming",
+    "population": 576641,
+    "bankCount": 0,
+    "totalAssets": 0,
+    "totalDeposits": 0,
+    "neighbors": [
+      "CO",
+      "ID",
+      "MT",
+      "NE",
+      "SD",
+      "UT"
+    ]
+  }
+]

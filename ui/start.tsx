@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { WorldData } from '../data/types';
 import type { World } from '../engine/state';
-import { charterTerms, describeCandidate, startableMetros, takeoverCandidates, type TakeoverCandidate } from '../engine/start';
+import { charterTerms, describeCandidate, seedsForMetro, startableMetros, takeoverCandidates, type TakeoverCandidate } from '../engine/start';
 import { num, short } from './format';
 
 interface Props {
@@ -25,7 +25,7 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
   const metro = selectedMetro ? world.geo.metros[selectedMetro] : undefined;
   const terms = metro ? charterTerms(world, metro) : null;
   const candidates = useMemo(
-    () => (metro ? takeoverCandidates(world, metro, data.banksByState[metro.state] ?? []) : []),
+    () => (metro ? takeoverCandidates(world, metro, seedsForMetro(world, metro)) : []),
     [world, metro, data],
   );
   const cash = world.player.cash;
@@ -35,6 +35,7 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
         <div>
           <h2 style={{ margin: '0 0 6px' }}>Where will you start?</h2>
           <p className="hint">Start with a small bank in any major American city. Click a green metro on the map or pick one below. You have {short(cash)} of your own money to put in.</p>
+          {world.geo.bankData === 'generated' && <p className="hint">Every county's people, incomes, jobs and home prices are real. The rival banks are generated from national bands until the FDIC list can be downloaded; their sizes and counts are plausible, not the real ones.</p>}
           <input className="filter" placeholder="filter metros" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />
           <table>
             <thead>
