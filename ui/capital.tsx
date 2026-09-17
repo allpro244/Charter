@@ -18,10 +18,10 @@ export function CapitalPanel({ world, bank, act }: { world: World; bank: Bank; a
   const step = Math.max(1_000_000, Math.round(totalEquity(bank.acct) * 0.1));
   return (
     <div>
-      <table>
+      <table className="wrap">
         <thead>
           <tr>
-            <th>CAPITAL AND STOCK</th>
+            <th>Capital and stock</th>
             <th className="num">value</th>
             <th></th>
           </tr>
@@ -30,7 +30,7 @@ export function CapitalPanel({ world, bank, act }: { world: World; bank: Bank; a
           <tr>
             <td>Holding company</td>
             <td className="num">{bank.holdingCompany ? 'formed' : 'none'}</td>
-            <td>{!bank.holdingCompany && <button className="key" onClick={() => act((c) => formHoldingCompany(c, bank))}>form ($250K)</button>}</td>
+            <td>{!bank.holdingCompany && <button className="btn primary small" onClick={() => act((c) => formHoldingCompany(c, bank))}>Form one ($250K)</button>}</td>
           </tr>
           <tr>
             <td>Shares outstanding / your stake</td>
@@ -61,12 +61,17 @@ export function CapitalPanel({ world, bank, act }: { world: World; bank: Bank; a
             <td>Private raise (passive investors, dilutes everyone)</td>
             <td className="num">
               <input className="amount" type="number" value={raise} step={step} min={step} onChange={(e) => setRaise(Number(e.target.value))} />
-              <span className="nowrap">of which yours</span>{' '}
-              <input className="amount" type="number" value={playerPart} step={100_000} min={0} max={world.player.cash} onChange={(e) => setPlayerPart(Number(e.target.value))} />
             </td>
             <td>
-              <button className="key" disabled={bank.isPublic} onClick={() => act((c) => raiseCapital(c, bank, raise, playerPart))}>raise</button>
+              <button className="btn primary small" disabled={bank.isPublic} onClick={() => act((c) => raiseCapital(c, bank, raise, playerPart))}>Raise</button>
             </td>
+          </tr>
+          <tr>
+            <td className="indent">Your own money in that raise</td>
+            <td className="num">
+              <input className="amount" type="number" value={playerPart} step={100_000} min={0} max={world.player.cash} onChange={(e) => setPlayerPart(Number(e.target.value))} />
+            </td>
+            <td></td>
           </tr>
           <tr>
             <td>IPO (floor {short(IPO_FLOOR)}, holding company, well capitalized)</td>
@@ -98,7 +103,7 @@ export function CapitalPanel({ world, bank, act }: { world: World; bank: Bank; a
           <tr>
             <td>Sell your shares ({bank.isPublic ? 'at market less impact' : 'privately at 80% of book, up to 10% at a time'})</td>
             <td className="num">
-              <input type="number" value={sellN} step={1000} min={0} max={world.player.shares} onChange={(e) => setSellN(Number(e.target.value))} />
+              <input className="amount" type="number" value={sellN} step={1000} min={0} max={world.player.shares} onChange={(e) => setSellN(Number(e.target.value))} />
             </td>
             <td>
               <button className="key" disabled={sellN <= 0} onClick={() => act((c) => sellPlayerShares(c, sellN))}>sell</button>

@@ -13,11 +13,9 @@ interface Props {
   onSelectMetro: (cbsa: string) => void;
   onCharter: (cbsa: string, name: string, invest: number) => void;
   onTakeover: (cbsa: string, c: TakeoverCandidate) => void;
-  hasSave: boolean;
-  onContinue: () => void;
 }
 
-export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharter, onTakeover, hasSave, onContinue }: Props) {
+export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharter, onTakeover }: Props) {
   const [filter, setFilter] = useState('');
   const [mode, setMode] = useState<'pick' | 'charter' | 'takeover'>('pick');
   const [name, setName] = useState('');
@@ -33,20 +31,10 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
   const cash = world.player.cash;
   return (
     <div className="start">
-      <header className="bar">
-        <span className="title">CHARTER</span>
-        <span className="status">
-          {hasSave && (
-            <button className="key" onClick={onContinue}>
-              continue saved game
-            </button>
-          )}
-          founder cash {short(cash)}
-        </span>
-      </header>
       {!metro && (
         <div>
-          <p>Start with a small bank in any major American city. Click a metro on the map or pick one below.</p>
+          <h2 style={{ margin: '0 0 6px' }}>Where will you start?</h2>
+          <p className="hint">Start with a small bank in any major American city. Click a green metro on the map or pick one below. You have {short(cash)} of your own money to put in.</p>
           <input className="filter" placeholder="filter metros" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />
           <table>
             <thead>
@@ -72,23 +60,32 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
       )}
       {metro && terms && mode === 'pick' && (
         <div>
-          <p>
-            {metro.name}: population {num(metro.population)}, rank {metro.rank}.{' '}
-            <button className="key" onClick={() => onSelectMetro('')}>
-              change
+          <h2 style={{ margin: '0 0 6px' }}>{metro.name}</h2>
+          <p className="hint">
+            Population {num(metro.population)}, rank {metro.rank} among American metros.{' '}
+            <button className="btn small" onClick={() => onSelectMetro('')}>
+              Change metro
             </button>
           </p>
           <table>
+            <thead>
+              <tr>
+                <th>How will you start?</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               <tr className="row" onClick={() => setMode('charter')}>
-                <td>c</td>
-                <td>Charter a new bank</td>
-                <td>raise {short(terms.raise)}, you put in {short(terms.minInvest)} to {short(terms.maxInvest)}</td>
+                <td>
+                  <button className="btn primary">Charter a new bank</button>
+                </td>
+                <td className="dim">raise {short(terms.raise)}; you put in {short(terms.minInvest)} to {short(terms.maxInvest)} and run it from day one</td>
               </tr>
               <tr className="row" onClick={() => setMode('takeover')}>
-                <td>t</td>
-                <td>Take over an existing bank</td>
-                <td>buy a control stake in one of {candidates.length} banks for sale</td>
+                <td>
+                  <button className="btn">Take over an existing bank</button>
+                </td>
+                <td className="dim">buy a control stake in one of {candidates.length} banks for sale here</td>
               </tr>
             </tbody>
           </table>
@@ -96,7 +93,7 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
       )}
       {metro && terms && mode === 'charter' && (
         <div>
-          <p>
+          <p className="hint">
             Charter in {metro.name}. Total raise {short(terms.raise)} at ${terms.sharePrice} a share. Outside organizers take the rest and stay passive.
           </p>
           <table>
@@ -124,22 +121,22 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
             </tbody>
           </table>
           <p>
-            <button className="key" onClick={() => onCharter(metro.cbsa, name || `${metro.principalCity} Bank`, invest ?? terms.maxInvest)}>
-              enter: open the doors
+            <button className="btn primary" onClick={() => onCharter(metro.cbsa, name || `${metro.principalCity} Bank`, invest ?? terms.maxInvest)}>
+              Open the doors
             </button>{' '}
-            <button className="key" onClick={() => setMode('pick')}>
-              esc: back
+            <button className="btn" onClick={() => setMode('pick')}>
+              Back
             </button>
           </p>
         </div>
       )}
       {metro && mode === 'takeover' && (
         <div>
-          <p>Banks for sale in {metro.name}. A control stake is 30% of the shares. You have {short(cash)}.</p>
+          <p className="hint">Banks for sale in {metro.name}. A control stake is 30% of the shares. You have {short(cash)}. Click a bank you can afford to buy it.</p>
           <table>
             <thead>
               <tr>
-                <th>key</th>
+                <th>Banks for sale</th>
                 <th>bank</th>
                 <th className="num">assets</th>
                 <th className="num">deposits</th>
@@ -172,8 +169,8 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
             </pre>
           ))}
           <p>
-            <button className="key" onClick={() => setMode('pick')}>
-              esc: back
+            <button className="btn" onClick={() => setMode('pick')}>
+              Back
             </button>
           </p>
         </div>

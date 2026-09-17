@@ -1,5 +1,6 @@
 // The desk. A viewer over the engine (D9): holds the world, runs the
-// ticker, routes keys to screens and decisions, saves to localStorage.
+// ticker, routes clicks and keys to screens and decisions, saves to
+// localStorage. Mouse first (DESIGN.md Part 3); keys are shortcuts.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Ctx } from '../engine/ctx';
@@ -10,9 +11,9 @@ import { applyDecisions, tick } from '../engine/tick';
 import { isYearEnd } from '../engine/time';
 import { setDividendPayout, setSalary } from '../engine/wealth';
 import { type Loaded, loadData } from './data';
-import { type Unit, unitFor } from './format';
-import { MapView, SHADES, type Shade } from './map';
-import { BalanceSheetScreen, DebugScreen, FeedScreen, IncomeScreen, KeyMap, MeScreen, PendingPanel, StatusBar } from './screens';
+import { type Unit, short, unitFor } from './format';
+import { MapView, type Shade } from './map';
+import { BalanceSheetScreen, DebugScreen, DecisionDock, FeedScreen, HelpModal, IncomeScreen, MeScreen, SPEEDS, TopBar } from './screens';
 import { adviceFor } from './advisor';
 import { StartPanel } from './start';
 import { LoansScreen } from './loans';
@@ -25,9 +26,21 @@ import { OfficersScreen } from './off';
 import { openBranch } from '../engine/deposits';
 
 type Screen = 'FEED' | 'BS' | 'IS' | 'LOANS' | 'FUND' | 'OFF' | 'RIVALS' | 'ME' | 'QTR' | 'LINES' | 'MAP' | 'DEBUG';
-const SCREEN_KEYS: Record<string, Screen> = { f: 'FEED', b: 'BS', i: 'IS', l: 'LOANS', u: 'FUND', o: 'OFF', r: 'RIVALS', w: 'ME', q: 'QTR', n: 'LINES', m: 'MAP', d: 'DEBUG' };
-// Days per real second. Speed 4 is D3's top speed: a year in two minutes.
-const SPEEDS = [0, 0.5, 1, 2, 3, 6];
+const SCREENS: { id: Screen; label: string; key: string }[] = [
+  { id: 'FEED', label: 'Feed', key: 'f' },
+  { id: 'BS', label: 'Balance sheet', key: 'b' },
+  { id: 'IS', label: 'Income', key: 'i' },
+  { id: 'LOANS', label: 'Loans', key: 'l' },
+  { id: 'FUND', label: 'Funding', key: 'u' },
+  { id: 'OFF', label: 'Officers', key: 'o' },
+  { id: 'RIVALS', label: 'Rivals', key: 'r' },
+  { id: 'ME', label: 'You', key: 'w' },
+  { id: 'QTR', label: 'Quarter', key: 'q' },
+  { id: 'LINES', label: 'Lines', key: 'n' },
+  { id: 'MAP', label: 'Map', key: 'm' },
+  { id: 'DEBUG', label: 'Debug', key: 'd' },
+];
+const SCREEN_KEYS: Record<string, Screen> = Object.fromEntries(SCREENS.map((s) => [s.key, s.id]));
 const SAVE_KEY = 'charter.save';
 
 type Phase = 'loading' | 'nodata' | 'start' | 'play';
@@ -59,7 +72,7 @@ export function App() {
   const [screen, setScreen] = useState<Screen>('FEED');
   const [speed, setSpeedState] = useState(0);
   const speedRef = useRef(0);
-  const resumeRef = useRef(1);
+  const resumeRef = useRef(2);
   const [version, setVersion] = useState(0);
   const [tickMs, setTickMs] = useState(0);
   const [shade, setShade] = useState<Shade>('none');
@@ -68,6 +81,7 @@ export function App() {
   const [showKeys, setShowKeys] = useState(false);
   const [advisorOn, setAdvisorOn] = useState(true);
   const [dismissed, setDismissed] = useState<Record<string, number>>({});
+  const [savedFlash, setSavedFlash] = useState(false);
 
   const dismissedRef = useRef<Record<string, number>>({});
   dismissedRef.current = dismissed;
@@ -98,15 +112,16 @@ export function App() {
       return false;
     }
   }, []);
-  const importSave = useCallback((file: File) => {
-    file.text().then(loadSaveText);
-  }, [loadSaveText]);
-  // A playtest world shipped next to the page: a small bank with no home
-  // county, so lending runs through pools and no applications arrive.
+  const importSave = useCallback(
+    (file: File) => {
+      file.text().then(loadSaveText);
+    },
+    [loadSaveText],
+  );
+  // A playtest world shipped inside or next to the page: a small bank with
+  // no home county, so lending runs through pools and no applications arrive.
   const [bundledNote, setBundledNote] = useState('');
   const loadBundled = useCallback(() => {
-    // The single-file build carries the save inside the page, so it runs
-    // from a double-clicked file with nothing to fetch.
     const inline = document.getElementById('playtest-save');
     if (inline && inline.textContent) {
       if (!loadSaveText(inline.textContent)) setBundledNote('the playtest save inside this page is not a save file');
@@ -125,8 +140,18 @@ export function App() {
     if (s > 0) resumeRef.current = s;
     setSpeedState(s);
   }, []);
+  const togglePlay = useCallback(() => setSpeed(speedRef.current === 0 ? resumeRef.current : 0), [setSpeed]);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
+  const saveNow = useCallback(() => {
+    const world = worldRef.current;
+    if (!world) return;
+    writeSave(world);
+    setHasSave(true);
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1500);
+  }, []);
 
   useEffect(() => {
     loadData().then((r) => {
@@ -242,26 +267,47 @@ export function App() {
     refresh();
   }, [setSpeed, refresh]);
 
-  // Keys. Every screen has a key; speed is the number keys; space pauses.
+  const newWorld = useCallback(() => {
+    if (!confirm('Start a new world? The current save is replaced when you next save.')) return;
+    const loaded = loadedRef.current;
+    if (!loaded && document.getElementById('playtest-save')) {
+      setShowKeys(false);
+      loadBundled();
+      return;
+    }
+    worldRef.current = createWorld(Date.now() % 2_147_483_647, loaded ? loaded.data : null);
+    newPlayer(worldRef.current);
+    setSelectedMetro(null);
+    setShowKeys(false);
+    setPhase('start');
+    setSpeed(0);
+    refresh();
+  }, [loadBundled, setSpeed, refresh]);
+
+  // Keys are shortcuts for what the mouse can do: tabs, the clock,
+  // decisions, save, help.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
       const world = worldRef.current;
       const k = e.key.toLowerCase();
+      if (e.key === 'Escape') {
+        setShowKeys(false);
+        return;
+      }
       if (phase === 'play' && world) {
         const blocking = world.pending.find((p) => p.blocking);
         if (blocking) {
-          const p = blocking;
-          const opt = p.options.find((o) => o.key === k);
+          const opt = blocking.options.find((o) => o.key === k);
           if (opt) {
-            decide(p, opt.key);
+            decide(blocking, opt.key);
             e.preventDefault();
             return;
           }
         }
         if (k === ' ') {
-          setSpeed(speedRef.current === 0 ? resumeRef.current : 0);
+          togglePlay();
           e.preventDefault();
           return;
         }
@@ -274,8 +320,7 @@ export function App() {
           return;
         }
         if (k === 's') {
-          writeSave(world);
-          setHasSave(true);
+          saveNow();
           return;
         }
         if (k === '?') {
@@ -291,18 +336,6 @@ export function App() {
           setAdvisorOn((v) => !v);
           return;
         }
-        if (k === 'n') {
-          if (confirm('Start a new world? The current save is replaced when you next save.')) {
-            const loaded = loadedRef.current;
-            worldRef.current = createWorld(Date.now() % 2_147_483_647, loaded ? loaded.data : null);
-            newPlayer(worldRef.current);
-            setSelectedMetro(null);
-            setPhase('start');
-            setSpeed(0);
-            refresh();
-          }
-          return;
-        }
         if (screen === 'ME') {
           if (k === '+' || k === '=') setSalary(world, world.player.salary + 10_000);
           if (k === '-') setSalary(world, world.player.salary - 10_000);
@@ -310,51 +343,59 @@ export function App() {
           if (k === ']') setDividendPayout(world, (world.banks[world.playerBankId ?? '']?.dividendPayout ?? 0) + 0.1);
           refresh();
         }
-        if (screen === 'MAP' && k === 'c') {
-          setShade((s) => SHADES[(SHADES.indexOf(s) + 1) % SHADES.length] as Shade);
-        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [phase, screen, decide, setSpeed, refresh]);
+  }, [phase, screen, decide, setSpeed, togglePlay, saveNow, refresh]);
 
-  if (phase === 'loading') return <main className="desk">loading data</main>;
+  if (phase === 'loading') {
+    return (
+      <div className="desk">
+        <main className="content narrow">
+          <div className="brand big">CHARTER</div>
+          <p className="lede">Loading the world.</p>
+        </main>
+      </div>
+    );
+  }
   if (phase === 'nodata') {
     const packed = document.getElementById('playtest-save') !== null;
     return (
-      <main className="desk">
-        <header className="bar">
-          <span className="title">CHARTER</span>
-          <span className="status">{packed ? 'playtest build' : 'no data'}</span>
-        </header>
-        {packed ? (
-          <p>This build has no county map yet, so it runs the playtest bank: an $80M bank with no home town. Lending runs through pools, no applications reach the desk, and the map stays empty. Everything else runs.</p>
-        ) : (
-          <>
-            <p>The world is built from real public data and these files are missing:</p>
-            <pre className="memo">{missing.join('\n')}</pre>
-            <p>A note for Claude Code, not for the player: the files come from</p>
-            <pre className="memo">{'npm run fetch-data\nnpm run build-data'}</pre>
-            <p>A saved world carries its own geography, so a save still loads without the files. The map stays empty until they exist.</p>
-          </>
-        )}
-        <p>
-          {hasSave && (
-            <button className="key" onClick={onContinue}>
-              continue saved game
-            </button>
+      <div className="desk">
+        <main className="content narrow">
+          <div className="hero">
+            <div className="brand big">CHARTER</div>
+            <p className="lede">Run a bank. Start small, lend well, survive the cycle, and grow past everyone.</p>
+          </div>
+          {packed ? (
+            <p className="hint">This build has no county map yet, so it runs the playtest bank: an $80M bank with no home town. Lending runs through pools, no applications reach the desk, and the map stays empty. Everything else runs.</p>
+          ) : (
+            <>
+              <p className="hint">The world is built from real public data and these files are missing:</p>
+              <pre className="memo">{missing.join('\n')}</pre>
+              <p className="hint">A note for Claude Code, not for the player: the files come from</p>
+              <pre className="memo">{'npm run fetch-data\nnpm run build-data'}</pre>
+              <p className="hint">A saved world carries its own geography, so a save still loads without the files. The map stays empty until they exist.</p>
+            </>
           )}
-          <button className="key" onClick={loadBundled}>
-            {hasSave ? 'start a new playtest bank' : 'start with the playtest bank'}
-          </button>
-          {bundledNote && <span className="dim"> {bundledNote}</span>}
-        </p>
-        <p className="dim">Space starts the clock, 1 to 5 set the speed, s saves, and ? shows the keys.</p>
-        <p className="dim">
-          or load a save file: <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
-        </p>
-      </main>
+          <div className="toolbar">
+            {hasSave && (
+              <button className="btn primary" onClick={onContinue}>
+                Continue saved game
+              </button>
+            )}
+            <button className={'btn' + (hasSave ? '' : ' primary')} onClick={loadBundled}>
+              {hasSave ? 'Start a new playtest bank' : 'Start with the playtest bank'}
+            </button>
+            {bundledNote && <span className="dim">{bundledNote}</span>}
+          </div>
+          <p className="hint">Once inside, press Play in the top bar. Every screen is a tab, every decision is a button, and Help lists the keyboard shortcuts.</p>
+          <p className="hint">
+            Or load a save file: <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
+          </p>
+        </main>
+      </div>
     );
   }
   const world = worldRef.current as World;
@@ -365,95 +406,106 @@ export function App() {
 
   if (phase === 'start') {
     return (
-      <main className="desk">
-        <div className="cols start-cols">
-          <MapView world={world} geo={loaded.geo} mode="start" shade={shade} selectedMetro={selectedMetro} onSelectMetro={(c) => setSelectedMetro(c || null)} />
-          <StartPanel
-            world={world}
-            data={loaded.data}
-            selectedMetro={selectedMetro}
-            onSelectMetro={(c) => setSelectedMetro(c || null)}
-            onCharter={onCharter}
-            onTakeover={onTakeover}
-            hasSave={hasSave}
-            onContinue={onContinue}
-          />
+      <div className="desk">
+        <div className="chrome">
+          <header className="topbar">
+            <div className="brand">CHARTER</div>
+            <div className="bankname">
+              New game
+              <small>founder cash {short(world.player.cash)}</small>
+            </div>
+            <div className="topbar-actions" style={{ marginLeft: 'auto' }}>
+              {hasSave && (
+                <button className="btn primary" onClick={onContinue}>
+                  Continue saved game
+                </button>
+              )}
+            </div>
+          </header>
         </div>
-        {world.pending.map((p) => (
-          <PendingPanel key={p.id} p={p} onDecide={decide} />
+        <main className="content">
+          <div className="cols start-cols">
+            <MapView world={world} geo={loaded.geo} mode="start" shade={shade} onShade={setShade} selectedMetro={selectedMetro} onSelectMetro={(c) => setSelectedMetro(c || null)} />
+            <StartPanel world={world} data={loaded.data} selectedMetro={selectedMetro} onSelectMetro={(c) => setSelectedMetro(c || null)} onCharter={onCharter} onTakeover={onTakeover} />
+          </div>
+        </main>
+        {world.pending.filter((p) => p.blocking).slice(0, 1).map((p) => (
+          <DecisionDock key={p.id} p={p} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />
         ))}
-      </main>
+      </div>
     );
   }
 
+  const blocking = world.pending.find((p) => p.blocking);
+  const waiting = world.pending.length;
   return (
-    <main className="desk">
-      <StatusBar world={world} speed={speed} screen={screen} unit={unit} />
-      {screen !== 'FEED' && world.pending.map((p) => <PendingPanel key={p.id} p={p} onDecide={decide} />)}
-      {showKeys && <KeyMap />}
-      {screen === 'FEED' && (
-        <FeedScreen
-          world={world}
-          onDecide={decide}
-          cards={advisorOn ? adviceFor(world).filter((c) => (dismissed[c.key] ?? -1) < world.day - 90) : []}
-          onDismiss={(key) => setDismissed((d) => ({ ...d, [key]: world.day }))}
-        />
-      )}
-      {screen === 'BS' && bank && <BalanceSheetScreen bank={bank} unit={unit} />}
-      {screen === 'IS' && bank && <IncomeScreen bank={bank} unit={unit} />}
-      {screen === 'ME' && (
-        <MeScreen
-          world={world}
-          onSalary={(d) => {
-            setSalary(world, world.player.salary + d);
-            refresh();
-          }}
-          onPayout={(d) => {
-            setDividendPayout(world, (bank?.dividendPayout ?? 0) + d);
-            refresh();
-          }}
-          capital={bank ? <CapitalPanel world={world} bank={bank} act={act} /> : undefined}
-        />
-      )}
-      {screen === 'LINES' && bank && <LinesScreen world={world} bank={bank} unit={unit} act={act} />}
-      {screen === 'LOANS' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
-      {screen === 'FUND' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
-      {screen === 'OFF' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
-      {screen === 'QTR' && bank && <QtrScreen bank={bank} unit={unit} />}
-      {screen === 'MAP' && (
-        <MapView
-          world={world}
-          geo={loaded.geo}
-          mode="play"
-          shade={shade}
-          selectedMetro={null}
-          onSelectMetro={() => undefined}
-          onOpenBranch={(fips) => {
-            const county = world.geo.counties[fips];
-            if (county) act((ctx) => openBranch(ctx, county));
-          }}
-        />
-      )}
-      {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk={loadedRef.current !== null} onExport={exportSave} onImport={importSave} />}
-      {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} act={act} />}
-      <footer className="keys">
-        <span>f feed</span>
-        <span>b balance sheet</span>
-        <span>i income</span>
-        <span>l loans</span>
-        <span>u funding</span>
-        <span>o officers</span>
-        <span>r rivals</span>
-        <span>w me</span>
-        <span>q quarter</span>
-        <span>n lines</span>
-        <span>m map{screen === 'MAP' ? ` (c shade: ${shade})` : ''}</span>
-        <span>d debug</span>
-        <span>space pause</span>
-        <span>0-5 speed</span>
-        <span>s save</span>
-        <span>? keys</span>
-      </footer>
-    </main>
+    <div className="desk">
+      <div className="chrome">
+        <TopBar world={world} speed={speed} onSpeed={setSpeed} onToggle={togglePlay} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} />
+        <nav className="tabs" aria-label="Screens">
+          {SCREENS.map((s) => (
+            <button key={s.id} className={'tab' + (screen === s.id ? ' on' : '')} onClick={() => setScreen(s.id)}>
+              {s.label}
+              {s.id === 'FEED' && waiting > 0 && <span className="badge">{waiting}</span>}
+              <span className="k">{s.key}</span>
+            </button>
+          ))}
+        </nav>
+        {blocking && <DecisionDock p={blocking} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />}
+      </div>
+      <main className="content">
+        {screen === 'FEED' && (
+          <FeedScreen
+            world={world}
+            speed={speed}
+            onPlay={togglePlay}
+            onDecide={decide}
+            cards={advisorOn ? adviceFor(world).filter((c) => (dismissed[c.key] ?? -1) < world.day - 90) : []}
+            advisorOn={advisorOn}
+            onToggleAdvisor={() => setAdvisorOn((v) => !v)}
+            onDismiss={(key) => setDismissed((d) => ({ ...d, [key]: world.day }))}
+          />
+        )}
+        {screen === 'BS' && bank && <BalanceSheetScreen bank={bank} unit={unit} />}
+        {screen === 'IS' && bank && <IncomeScreen bank={bank} unit={unit} />}
+        {screen === 'ME' && (
+          <MeScreen
+            world={world}
+            onSalary={(d) => {
+              setSalary(world, world.player.salary + d);
+              refresh();
+            }}
+            onPayout={(d) => {
+              setDividendPayout(world, (bank?.dividendPayout ?? 0) + d);
+              refresh();
+            }}
+            capital={bank ? <CapitalPanel world={world} bank={bank} act={act} /> : undefined}
+          />
+        )}
+        {screen === 'LINES' && bank && <LinesScreen world={world} bank={bank} unit={unit} act={act} />}
+        {screen === 'LOANS' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
+        {screen === 'FUND' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
+        {screen === 'OFF' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
+        {screen === 'QTR' && bank && <QtrScreen bank={bank} unit={unit} />}
+        {screen === 'MAP' && (
+          <MapView
+            world={world}
+            geo={loaded.geo}
+            mode="play"
+            shade={shade}
+            onShade={setShade}
+            selectedMetro={null}
+            onSelectMetro={() => undefined}
+            onOpenBranch={(fips) => {
+              const county = world.geo.counties[fips];
+              if (county) act((ctx) => openBranch(ctx, county));
+            }}
+          />
+        )}
+        {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk={loadedRef.current !== null} onExport={exportSave} onImport={importSave} onNewWorld={newWorld} />}
+        {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} act={act} />}
+      </main>
+      {showKeys && <HelpModal onClose={() => setShowKeys(false)} onNewWorld={newWorld} />}
+    </div>
   );
 }

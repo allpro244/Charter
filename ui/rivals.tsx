@@ -22,7 +22,7 @@ function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; ta
     <table>
       <thead>
         <tr>
-          <th>OFFER FOR {target.name.toUpperCase()}</th>
+          <th>Offer for {target.name}</th>
           <th className="num">tangible book {short(book)}</th>
           <th></th>
         </tr>
@@ -35,7 +35,7 @@ function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; ta
             <span className="nowrap">= {short(Math.round(book * pb))}</span>
           </td>
           <td>
-            <button className="key" onClick={() => act((ctx) => setLast(makeOffer(ctx, buyer, target.id, pb, stock).why))}>offer</button>
+            <button className="btn primary" onClick={() => act((ctx) => setLast(makeOffer(ctx, buyer, target.id, pb, stock).why))}>Make the offer</button>
           </td>
         </tr>
         <tr>
@@ -64,18 +64,25 @@ function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; ta
 export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; act?: (fn: (ctx: Ctx) => void) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const [showAggregates, setShowAggregates] = useState(false);
+  const [filter, setFilter] = useState('');
   const rows = world.bankOrder
     .map((id) => world.banks[id]!)
     .filter((b) => b.kind !== 'player' && b.status !== 'acquired')
     .map((b) => rivalReport(world, b))
     .sort((a, b) => (a.kind === b.kind ? b.assets - a.assets : a.kind === 'rival' ? -1 : 1));
-  const shown = rows.filter((r) => showAggregates || r.kind === 'rival').slice(0, 400);
+  const q = filter.trim().toLowerCase();
+  const shown = rows
+    .filter((r) => showAggregates || r.kind === 'rival')
+    .filter((r) => !q || r.name.toLowerCase().includes(q) || r.state.toLowerCase() === q || (r.county ?? '').toLowerCase().includes(q))
+    .slice(0, 400);
   const failed = rows.filter((r) => r.status === 'failed').length;
   return (
     <div>
-      <div className="keys-inline">
-        <button className={'key' + (showAggregates ? ' on' : '')} onClick={() => setShowAggregates((x) => !x)}>
-          {showAggregates ? 'hide' : 'show'} state aggregates
+      <p className="hint">Every other bank in the world, largest first. Click a bank for its call reports and its book, and to make an offer for it.</p>
+      <div className="toolbar">
+        <input className="filter" style={{ maxWidth: 260 }} placeholder="Find a bank, state or town" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <button className={'btn' + (showAggregates ? ' on' : '')} onClick={() => setShowAggregates((x) => !x)}>
+          {showAggregates ? 'Hide' : 'Show'} state aggregates
         </button>
         <span className="dim">
           {rows.filter((r) => r.kind === 'rival' && r.status === 'open').length} individual banks, {rows.filter((r) => r.kind === 'aggregate').length} aggregates, {failed} failed, {world.failures.length} failures recorded in the world
@@ -84,7 +91,7 @@ export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; a
       <table>
         <thead>
           <tr>
-            <th>BANK {unitLabel(unit)}</th>
+            <th>Bank {unitLabel(unit)}</th>
             <th>state</th>
             <th>home</th>
             <th className="num">assets</th>
@@ -118,10 +125,11 @@ function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<
     <>
       <tr className={cls} onClick={toggle}>
         <td>
+          <span className="chev">{open ? '\u25BE' : '\u25B8'}</span>
           {r.name}
           {r.national ? ' (national)' : ''}
           {r.kind === 'aggregate' ? ` (${num(r.represents)} banks)` : ''}
-          {r.forSale && r.status === 'open' ? ' [for sale]' : ''}
+          {r.forSale && r.status === 'open' ? <span className="pill warn" style={{ marginLeft: 6 }}>for sale</span> : ''}
         </td>
         <td>{r.state}</td>
         <td>{r.county}</td>
@@ -140,10 +148,10 @@ function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<
           <td colSpan={12}>
             <div>
               <ReportsTable bank={bank} unit={unit} />
-              <table>
+              <table className="inner">
                 <thead>
                   <tr>
-                    <th>BOOK BY TYPE {unitLabel(unit)}</th>
+                    <th>Book by type {unitLabel(unit)}</th>
                     <th className="num">balance</th>
                     <th className="num">yield</th>
                     <th className="num">criticized</th>

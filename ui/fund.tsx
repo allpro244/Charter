@@ -31,11 +31,12 @@ export function FundScreen({ world, bank, unit, act }: Props) {
   const county = bank.homeCounty ? world.geo.counties[bank.homeCounty] : undefined;
   return (
     <div>
+      <p className="hint">Deposits and what you pay for them, borrowings, the bond book, and branches. Rates below the market lose money market and CD balances first.</p>
       <div>
         <table>
           <thead>
             <tr>
-              <th>DEPOSITS {unitLabel(unit)}</th>
+              <th>Deposits {unitLabel(unit)}</th>
               <th className="num">balance</th>
               <th className="num">share</th>
               <th className="num">your rate</th>
@@ -92,7 +93,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
         <table>
           <thead>
             <tr>
-              <th>BORROWINGS AND LIQUIDITY {unitLabel(unit)}</th>
+              <th>Borrowings and liquidity {unitLabel(unit)}</th>
               <th className="num">balance</th>
               <th className="num">rate</th>
               <th></th>
@@ -149,7 +150,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
       <table>
         <thead>
           <tr>
-            <th>SECURITIES {unitLabel(unit)}</th>
+            <th>Securities {unitLabel(unit)}</th>
             <th>book</th>
             <th className="num">cost</th>
             <th className="num">fair value</th>
@@ -174,19 +175,34 @@ export function FundScreen({ world, bank, unit, act }: Props) {
               <td>{l.kind === 'afs' && <button className="key" onClick={() => act((c) => sellSecurities(c, bank, l.id, Math.min(l.cost, step * 5)))}>sell {short(Math.min(l.cost, step * 5))}</button>}</td>
             </tr>
           ))}
+          {bank.lots.length === 0 && (
+            <tr>
+              <td colSpan={9} className="empty">
+                No securities held. Idle cash earns the fed funds rate; bonds earn more and carry rate risk.
+              </td>
+            </tr>
+          )}
           <tr>
             <td colSpan={9}>
-              buy:
-              <button className={'key' + (kind === 'afs' ? ' on' : '')} onClick={() => setKind('afs')}>AFS</button>
-              <button className={'key' + (kind === 'htm' ? ' on' : '')} onClick={() => setKind('htm')}>HTM</button>
-              {(['treasury', 'agency', 'mbs'] as Product[]).map((p) => (
-                <button key={p} className={'key' + (product === p ? ' on' : '')} onClick={() => setProduct(p)}>{PRODUCT_LABEL[p]}</button>
-              ))}
-              {[1, 3, 5, 7, 10].map((d) => (
-                <button key={d} className={'key' + (duration === d ? ' on' : '')} onClick={() => setDuration(d)}>{d}y</button>
-              ))}
-              <button className="key" disabled={a.cash < step * 5} onClick={() => act((c) => buySecurities(c, bank, kind, product, step * 5, duration))}>buy {short(step * 5)}</button>
-              <button className="key" disabled={a.cash < step * 25} onClick={() => act((c) => buySecurities(c, bank, kind, product, step * 25, duration))}>buy {short(step * 25)}</button>
+              <div className="toolbar" style={{ margin: '4px 0' }}>
+                <span className="seg-label">Buy</span>
+                <div className="seg">
+                  <button className={kind === 'afs' ? 'on' : ''} onClick={() => setKind('afs')} title="available for sale: marked to market, can be sold">AFS</button>
+                  <button className={kind === 'htm' ? 'on' : ''} onClick={() => setKind('htm')} title="held to maturity: carried at cost, cannot be sold">HTM</button>
+                </div>
+                <div className="seg">
+                  {(['treasury', 'agency', 'mbs'] as Product[]).map((p) => (
+                    <button key={p} className={product === p ? 'on' : ''} onClick={() => setProduct(p)}>{PRODUCT_LABEL[p]}</button>
+                  ))}
+                </div>
+                <div className="seg">
+                  {[1, 3, 5, 7, 10].map((d) => (
+                    <button key={d} className={duration === d ? 'on' : ''} onClick={() => setDuration(d)}>{d} year</button>
+                  ))}
+                </div>
+                <button className="btn primary" disabled={a.cash < step * 5} onClick={() => act((c) => buySecurities(c, bank, kind, product, step * 5, duration))}>Buy {short(step * 5)}</button>
+                <button className="btn primary" disabled={a.cash < step * 25} onClick={() => act((c) => buySecurities(c, bank, kind, product, step * 25, duration))}>Buy {short(step * 25)}</button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -194,7 +210,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
       <table>
         <thead>
           <tr>
-            <th>SWAPS (pay fixed, receive floating; hedge the securities book; from {short(SWAP_FLOOR)} of assets)</th>
+            <th>Swaps (pay fixed, receive floating; hedge the securities book; from {short(SWAP_FLOOR)} of assets)</th>
             <th className="num">notional {unitLabel(unit)}</th>
             <th className="num">fixed</th>
             <th className="num">tenor</th>
@@ -228,7 +244,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
       <table>
         <thead>
           <tr>
-            <th>BRANCHES</th>
+            <th>Branches</th>
             <th className="num">deposits {unitLabel(unit)}</th>
             <th className="num">fixed cost / year</th>
             <th className="num">km from home</th>
@@ -252,7 +268,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
           })}
           <tr>
             <td colSpan={6} className="dim">
-              open a branch from the map: hover a county and press o. {county ? `Home county ${county.name}.` : ''}
+              {bank.branches.length === 0 ? 'No branches: the playtest bank has no home town. ' : ''}Open a branch from the Map tab: hover a county and click Open a branch. {county ? `Home county ${county.name}.` : ''}
             </td>
           </tr>
         </tbody>

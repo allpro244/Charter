@@ -11,7 +11,7 @@ import { type Unit, dollars, unitLabel } from './format';
 export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const [idx, setIdx] = useState<number | null>(null);
   const reviews = bank.reviews;
-  if (reviews.length === 0) return <p className="dim">no quarter has closed yet.</p>;
+  if (reviews.length === 0) return <p className="empty">No quarter has closed yet. The first earnings review arrives at the end of March.</p>;
   const i = idx === null ? reviews.length - 1 : Math.max(0, Math.min(reviews.length - 1, idx));
   const r = reviews[i] as QuarterReview;
   const prev = i > 0 ? reviews[i - 1] : undefined;
@@ -19,22 +19,23 @@ export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const overhead = r.overhead.salaries + r.overhead.occupancy + r.overhead.other + r.overhead.assessment;
   return (
     <div>
-      <div className="keys-inline">
-        <button className="key" onClick={() => setIdx(i - 1)} disabled={i === 0}>
-          previous quarter
+      <p className="hint">The quarterly earnings review: every dollar earned and lost, and which decisions made the losses. It ties to the ledger to the dollar.</p>
+      <div className="toolbar">
+        <button className="btn" onClick={() => setIdx(i - 1)} disabled={i === 0}>
+          Previous quarter
         </button>
-        <span>
-          {r.quarter} closed {formatDate(r.day)}
-        </span>
-        <button className="key" onClick={() => setIdx(i + 1)} disabled={i === reviews.length - 1}>
-          next quarter
+        <strong>
+          {r.quarter}, closed {formatDate(r.day)}
+        </strong>
+        <button className="btn" onClick={() => setIdx(i + 1)} disabled={i === reviews.length - 1}>
+          Next quarter
         </button>
       </div>
       <div className="cols">
         <table>
           <thead>
             <tr>
-              <th>EARNINGS REVIEW {r.quarter} {unitLabel(unit)}</th>
+              <th>Earnings review {r.quarter} {unitLabel(unit)}</th>
               <th className="num">this quarter</th>
               <th className="num">prior</th>
             </tr>
@@ -132,10 +133,10 @@ export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
           </tbody>
         </table>
         <div>
-          <table>
+          <table className="wrap">
             <thead>
               <tr>
-                <th>LOSSES BY LOAN AND DECISION {unitLabel(unit)}</th>
+                <th>Losses by loan and decision {unitLabel(unit)}</th>
                 <th>type</th>
                 <th className="num">loss</th>
                 <th>decided by</th>
@@ -156,8 +157,8 @@ export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
               ))}
               {r.lossesByLoan.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="dim">
-                    no relationship loan losses this quarter
+                  <td colSpan={6} className="empty">
+                    No relationship loan losses this quarter.
                   </td>
                 </tr>
               )}
@@ -166,7 +167,7 @@ export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
           <table>
             <thead>
               <tr>
-                <th>POOLED CHARGE-OFFS BY BOOK {unitLabel(unit)}</th>
+                <th>Pooled charge-offs by book {unitLabel(unit)}</th>
                 <th className="num">charge-offs</th>
               </tr>
             </thead>
@@ -186,7 +187,7 @@ export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
           <table>
             <thead>
               <tr>
-                <th>YOUR CALLS</th>
+                <th>Your calls</th>
                 <th className="num">loss</th>
               </tr>
             </thead>

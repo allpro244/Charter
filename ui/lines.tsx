@@ -14,10 +14,11 @@ export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Ba
   const assets = totalAssets(bank.acct);
   return (
     <div>
+      <p className="hint">Business lines beyond lending, unlocked as the bank grows, and the world beyond the border.</p>
       <table>
         <thead>
           <tr>
-            <th>BUSINESS LINES {unitLabel(unit)}</th>
+            <th>Business lines {unitLabel(unit)}</th>
             <th className="num">threshold</th>
             <th>status</th>
             <th className="num">footprint</th>
@@ -46,8 +47,8 @@ export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Ba
                 <td className={'num' + (l.ytdRevenue - l.ytdCost < 0 ? ' alert' : '')}>{dollars(l.ytdRevenue - l.ytdCost, unit)}</td>
                 <td className="num">{dollars(l.lastYearRevenue - l.lastYearCost, unit)}</td>
                 <td>
-                  <button className="key" disabled={!available || (!l.on && bank.acct.cash < setupCost(key))} onClick={() => act((ctx) => toggleLine(ctx, bank, key))}>
-                    {l.on ? 'wind down' : `start (${short(setupCost(key))} setup)`}
+                  <button className={'btn small' + (l.on ? ' danger' : ' primary')} disabled={!available || (!l.on && bank.acct.cash < setupCost(key))} onClick={() => act((ctx) => toggleLine(ctx, bank, key))}>
+                    {l.on ? 'Wind down' : `Start (${short(setupCost(key))} setup)`}
                   </button>
                 </td>
               </tr>
@@ -55,7 +56,7 @@ export function LinesScreen({ world, bank, unit, act }: { world: World; bank: Ba
           })}
         </tbody>
       </table>
-      <p className="dim">
+      <p className="hint">
         Assets {short(assets)}. Mortgage banking: originate and sell, gain on sale, servicing and an MSR that moves with rates. Cards: receivables in a cards pool with card charge-offs, interchange less rewards and operations. Wealth: assets under management and fees. Investment banking: fees by cycle and a trading book with a fat left tail. Each line's cost includes a fixed staff. Card charge-offs and all lines flow through the income statement and the earnings review.
       </p>
       <p className="dim">{world.economy.regime === 'recession' ? 'In a recession, mortgage volume, IB fees and AUM all fall.' : ''}</p>
@@ -74,7 +75,7 @@ function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; un
         <table>
           <thead>
             <tr>
-              <th>COUNTRIES</th>
+              <th>Countries</th>
               <th>currency</th>
               <th className="num">per USD</th>
               <th className="num">vs start</th>
@@ -104,7 +105,7 @@ function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; un
         <table>
           <thead>
             <tr>
-              <th>SUBSIDIARIES ABROAD {unitLabel(unit)}</th>
+              <th>Subsidiaries abroad {unitLabel(unit)}</th>
               <th>country</th>
               <th className="num">assets</th>
               <th className="num">deposits</th>
@@ -142,7 +143,7 @@ function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; un
         <table>
           <thead>
             <tr>
-              <th>BANKS FOR SALE ABROAD</th>
+              <th>Banks for sale abroad</th>
               <th>country</th>
               <th className="num">assets (USD)</th>
               <th className="num">deposits (USD)</th>
@@ -164,7 +165,7 @@ function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; un
                   <td className="num">{cand.priceToBook.toFixed(2)}x</td>
                   <td className="num">{short(cand.priceUsd)}</td>
                   <td>
-                    <button className="key" onClick={() => act((ctx) => offerForeign(ctx, bank, cand))}>offer</button>
+                    <button className="btn primary small" onClick={() => act((ctx) => offerForeign(ctx, bank, cand))}>Offer</button>
                   </td>
                 </tr>
               )),

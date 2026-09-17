@@ -18,6 +18,7 @@ interface Props {
   geo: GeoCollection;
   mode: 'start' | 'play';
   shade: Shade;
+  onShade?: (s: Shade) => void;
   selectedMetro: string | null;
   onSelectMetro: (cbsa: string) => void;
   onOpenBranch?: (fips: string) => void;
@@ -30,7 +31,9 @@ interface CountyPath {
   d: string;
 }
 
-export function MapView({ world, geo, mode, shade, selectedMetro, onSelectMetro, onOpenBranch }: Props) {
+const SHADE_LABEL: Record<string, string> = { none: 'Plain', condition: 'Condition' };
+
+export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSelectMetro, onOpenBranch }: Props) {
   const [hover, setHover] = useState<string | null>(null);
   useEffect(() => {
     if (!onOpenBranch || mode !== 'play') return;
@@ -56,8 +59,23 @@ export function MapView({ world, geo, mode, shade, selectedMetro, onSelectMetro,
     return `rgba(213,216,220,${(t * 0.6).toFixed(2)})`;
   };
   const hovered = hover ? world.geo.counties[hover] : undefined;
+  const empty = paths.length === 0;
   return (
     <div className="mapwrap">
+      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers; open branches where you want deposits. Shade the map by a sector's share of jobs or by how each county is doing.</p>}
+      {empty && <p className="hint">This build has no county map: the playtest bank has no home town. The map fills in once the county data is built.</p>}
+      {onShade && !empty && (
+        <div className="toolbar">
+          <span className="seg-label">Shade by</span>
+          <div className="seg">
+            {SHADES.map((s) => (
+              <button key={s} className={shade === s ? 'on' : ''} onClick={() => onShade(s)}>
+                {SHADE_LABEL[s] ?? s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="map" role="img" aria-label="United States counties">
         <g>
           {paths.map((p) => (
@@ -107,10 +125,10 @@ export function MapView({ world, geo, mode, shade, selectedMetro, onSelectMetro,
           })}
       </svg>
       <div className="maphover">
-        {hovered ? <CountyStats c={hovered} world={world} /> : <span className="dim">hover a county for its real statistics{mode === 'play' ? '; press o to open a branch there' : ''}</span>}
+        {hovered ? <CountyStats c={hovered} world={world} /> : !empty && <span className="dim">hover a county for its real statistics{mode === 'start' ? '; click a green metro to start there' : ''}</span>}
         {hovered && mode === 'play' && onOpenBranch && (
-          <button className="key" onClick={() => onOpenBranch(hovered.fips)}>
-            o: open a branch in {hovered.name}
+          <button className="btn primary" onClick={() => onOpenBranch(hovered.fips)}>
+            Open a branch in {hovered.name}
           </button>
         )}
       </div>

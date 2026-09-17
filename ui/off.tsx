@@ -12,10 +12,11 @@ export function OfficersScreen({ world, bank, act }: { world: World; bank: Bank;
   const assets = totalAssets(bank.acct);
   return (
     <div>
+      <p className="hint">Your three officers. Skill drives the quality of loan memos, lending volume and funding costs; loyalty decides who stays when a rival calls.</p>
       <table>
         <thead>
           <tr>
-            <th>OFFICERS</th>
+            <th>Officers</th>
             <th>name</th>
             <th className="num">skill</th>
             <th className="num">salary</th>
@@ -37,7 +38,7 @@ export function OfficersScreen({ world, bank, act }: { world: World; bank: Bank;
                 <td className="num">{o ? num(officerSalary(o.skill, assets)) : ''}</td>
                 <td className="num">{o ? formatDate(o.hiredDay) : ''}</td>
                 <td className={'num' + (o && o.loyalty < 0.4 ? ' alert' : '')}>{o ? pct(o.loyalty, 0) : ''}</td>
-                <td>{o && <button className="key" onClick={() => act((ctx) => fire(ctx, bank, o.id))}>fire</button>}</td>
+                <td>{o && <button className="btn danger small" onClick={() => act((ctx) => fire(ctx, bank, o.id))}>Fire</button>}</td>
               </tr>
             );
           })}
@@ -51,7 +52,7 @@ export function OfficersScreen({ world, bank, act }: { world: World; bank: Bank;
       <table>
         <thead>
           <tr>
-            <th>CANDIDATES THIS MONTH</th>
+            <th>Candidates this month</th>
             <th>name</th>
             <th className="num">skill</th>
             <th className="num">salary</th>
@@ -68,14 +69,14 @@ export function OfficersScreen({ world, bank, act }: { world: World; bank: Bank;
               <td className="num">{num(c.salary)}</td>
               <td className="num">{num(Math.round(c.salary * 0.25))}</td>
               <td>
-                <button className="key" disabled={bank.acct.cash < c.salary * 0.25} onClick={() => act((ctx) => hire(ctx, bank, c.id))}>hire</button>
+                <button className="btn primary small" disabled={bank.acct.cash < c.salary * 0.25} onClick={() => act((ctx) => hire(ctx, bank, c.id))}>Hire</button>
               </td>
             </tr>
           ))}
           {bank.officerCandidates.length === 0 && (
             <tr>
-              <td colSpan={6} className="dim">
-                candidates arrive at the next month end
+              <td colSpan={6} className="empty">
+                Candidates arrive at the next month end.
               </td>
             </tr>
           )}

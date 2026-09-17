@@ -124,18 +124,21 @@ Locked design decisions. Add a new numbered entry to change one; do not edit old
 
 # Part 3: Desk style
 
-The desk is a terminal, not a dashboard. Reference points: a Bloomberg terminal, an FDIC call report (schedules RC, RI, RC-N, RC-C), a bank's internal ALCO packet, the old Wall Street Raider screens.
+The desk is a modern operator's console: a dark screen built for the mouse, with the substance of a call report behind every panel. Reference points: a trading desk's risk monitor, a well made brokerage app, and the schedules of an FDIC call report (RC, RI, RC-N, RC-C) for what the numbers are.
 
 ## Rules
-- Dark background, one accent color for alerts, one for positive. Nothing else colored.
-- Monospace for every number. Numbers right-aligned, thousands separators, negatives in parentheses. Dollars in thousands above $10M assets, in millions above $10B, in billions above $1T.
-- Tables, not tiles. Every screen is one or more tables with a header row. No cards, no gradients, no icons, no charts except sparklines beside a number and the map.
-- Keyboard first. Every screen has a key. Every decision can be answered with a key. Speed controls are number keys.
-- Dense. A screen shows as much as a call report page. Scrolling is fine; whitespace is not.
-- Every number is drillable. Click a total and see the lines. Click a line and see the loan, the branch, the officer.
-- The feed is a single column of one-line items with a timestamp, oldest at the bottom. Pauses are highlighted rows at the top.
-- The map is the one graphical surface: US county outlines, metro dots sized by real population, branch markers, rival markers, county shading by sector exposure or current condition. Hover shows the county's real stats. No decoration.
+- Mouse first, keyboard second. Every screen is a tab in a bar at the top; every action is a button; every decision is a dialog with buttons. Keyboard shortcuts remain for the same things and are shown as hints, never required.
+- A persistent top bar carries the bank's name, the date, the clock (pause, play, five speeds) and the numbers a CEO watches every day: assets, capital, cash, net worth, with a status pill for the capital category.
+- One dark palette: a blue-black ground, raised panels, one amber accent for what is active or wants attention, green for good, red for trouble. Nothing else colored. No gradients, no decorative art.
+- Sans-serif for words, monospace for numbers. Numbers right-aligned with tabular digits, thousands separators, negatives in parentheses. Dollars in thousands above $10M of assets, millions above $10B, billions above $1T.
+- Panels, not tiles: every panel is a titled table with a header row, and a panel can hold a form. No dashboards of big numbers except the strip in the top bar.
+- Every number is drillable. Click a total and see the lines. Click a row and see the loan, the branch, the officer.
+- A decision that pauses the clock opens a dialog in the middle of the screen with large labelled buttons. A decision that does not pause the clock (an offer) sits beside the feed as a card, and the Feed tab shows a count.
+- The feed is a list of one-line items with a date and a source, newest first, with a marker for good and bad news; the advisor and the economy sit beside it.
+- The map is the one graphical surface: county outlines, metro dots by real population, branches, rivals, shading by sector or condition chosen with buttons. Hover shows the county's real stats; a button opens a branch.
+- Comfortable density: readable at arm's length, with room between rows, and long pages scroll. A screen still shows as much as a call report page.
+- Every screen opens with one line saying what it is for.
 - No em dashes or en dashes.
 
 ## Screens (v1)
-FEED, BS (balance sheet), IS (income), LOANS (book, pools, policy, dial), FUND (deposits, rates, borrowings, securities), OFF (officers), RIVALS (every bank's call report, deals), ME (personal wealth, capital actions), QTR (earnings review), LINES (business lines, D44), MAP, DEBUG (calibration flags, seed, tick).
+Feed, Balance sheet, Income, Loans (book, pools, policy and dial), Funding (deposits, rates, borrowings, securities, branches), Officers, Rivals (every bank's call report, deals), You (personal wealth, capital actions), Quarter (earnings review), Lines (business lines, D44, countries), Map, Debug (calibration flags, seed, tick).

@@ -30,15 +30,18 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
   const total = rows.reduce((s, r) => s + r.balance, 0);
   return (
     <div>
-      <div className="keys-inline">
-        <button className={'key' + (tab === 'book' ? ' on' : '')} onClick={() => setTab('book')}>1 book</button>
-        <button className={'key' + (tab === 'pools' ? ' on' : '')} onClick={() => setTab('pools')}>2 pools</button>
-        <button className={'key' + (tab === 'policy' ? ' on' : '')} onClick={() => setTab('policy')}>3 policy and dial</button>
+      <p className="hint">The loans on your books by type, then the detail: the relationship book you decide loan by loan, the pooled book, and the written policy and dial that decide which loans reach your desk.</p>
+      <div className="toolbar">
+        <div className="seg">
+          <button className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>Relationship book</button>
+          <button className={tab === 'pools' ? 'on' : ''} onClick={() => setTab('pools')}>Pools</button>
+          <button className={tab === 'policy' ? 'on' : ''} onClick={() => setTab('policy')}>Policy and dial</button>
+        </div>
       </div>
       <table>
         <thead>
           <tr>
-            <th>BOOK BY TYPE {unitLabel(unit)}</th>
+            <th>Book by type {unitLabel(unit)}</th>
             <th className="num">balance</th>
             <th className="num">share</th>
             <th className="num">loans</th>
@@ -120,7 +123,7 @@ function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; o
     <table>
       <thead>
         <tr>
-          <th>RELATIONSHIP BOOK ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff').length} loans)</th>
+          <th>Relationship book ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff').length} loans)</th>
           <th>type</th>
           <th className="num">balance {unitLabel(unit)}</th>
           <th className="num">rate</th>
@@ -138,8 +141,8 @@ function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; o
         ))}
         {loans.length === 0 && (
           <tr>
-            <td colSpan={10} className="dim">
-              no relationship loans yet. applications arrive daily; the dial decides which reach you.
+            <td colSpan={10} className="empty">
+              No relationship loans yet. Applications arrive daily from the bank's home county; the dial decides which reach you.
             </td>
           </tr>
         )}
@@ -194,7 +197,7 @@ function Pools({ world, bank, unit, openPool, setOpenPool }: { world: World; ban
     <table>
       <thead>
         <tr>
-          <th>POOLS {unitLabel(unit)}</th>
+          <th>Pools {unitLabel(unit)}</th>
           <th className="num">vintage</th>
           <th className="num">loans</th>
           <th className="num">balance</th>
@@ -243,10 +246,10 @@ function PoolRows({ world, bank, p, unit, open, toggle }: { world: World; bank: 
       {open && (
         <tr>
           <td colSpan={16}>
-            <table className="stats">
+            <table className="inner stats">
               <thead>
                 <tr>
-                  <th>representative loans (generated from the pool, not stored)</th>
+                  <th>Representative loans (generated from the pool, not stored)</th>
                   <th className="num">balance {unitLabel(unit)}</th>
                   <th className="num">rate</th>
                   <th className="num">grade</th>
@@ -300,10 +303,10 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
   const ltv = (t: LoanType, d: number) => set({ maxLtv: { ...p.maxLtv, [t]: Math.max(0.1, Math.min(1.5, Math.round((p.maxLtv[t] + d) * 100) / 100)) } });
   return (
     <div className="cols">
-      <table>
+      <table className="wrap">
         <thead>
           <tr>
-            <th>DELEGATION DIAL (D20)</th>
+            <th>Delegation dial</th>
             <th className="num">value</th>
             <th></th>
           </tr>
@@ -315,7 +318,7 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
             <td>
               <button className="key" onClick={() => { setDial(world, bank.dial.maxAuto / 2, bank.dial.minGrade); refresh(); }}>halve</button>
               <button className="key" onClick={() => { setDial(world, bank.dial.maxAuto === 0 ? 50_000 : bank.dial.maxAuto * 2, bank.dial.minGrade); refresh(); }}>double</button>
-              <button className="key" onClick={() => { setDial(world, 0, 0); refresh(); }}>zero: every loan crosses the desk</button>
+              <button className="key" title="every loan crosses your desk" onClick={() => { setDial(world, 0, 0); refresh(); }}>all to me</button>
             </td>
           </tr>
           <tr>
@@ -328,10 +331,10 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
           </tr>
         </tbody>
       </table>
-      <table>
+      <table className="wrap">
         <thead>
           <tr>
-            <th>WRITTEN LOAN POLICY (version {p.version})</th>
+            <th>Written loan policy (version {p.version})</th>
             <th className="num">value</th>
             <th></th>
           </tr>
