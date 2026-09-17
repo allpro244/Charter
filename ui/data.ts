@@ -27,7 +27,7 @@ export async function loadData(): Promise<{ ok: true; loaded: Loaded } | { ok: f
   const results = await Promise.all(
     FILES.map(async (f) => {
       try {
-        const res = await fetch(`/${f}`);
+        const res = await fetch(`./${f}`);
         if (!res.ok) return { f, json: null };
         const text = await res.text();
         // Vite's dev server answers index.html for unknown paths.
@@ -43,7 +43,7 @@ export async function loadData(): Promise<{ ok: true; loaded: Loaded } | { ok: f
   const get = (f: string) => results.find((r) => r.f === f)!.json;
   let manifest: Record<string, unknown> | null = null;
   try {
-    const res = await fetch('/manifest.json');
+    const res = await fetch('./manifest.json');
     if (res.ok) {
       const text = await res.text();
       if (!text.trimStart().startsWith('<')) manifest = JSON.parse(text);

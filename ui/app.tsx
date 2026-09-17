@@ -84,21 +84,34 @@ export function App() {
     URL.revokeObjectURL(url);
   }, []);
 
-  const importSave = useCallback((file: File) => {
-    file.text().then((text) => {
-      try {
-        const w = JSON.parse(text) as World;
-        if (!w || w.version !== 1) return;
-        worldRef.current = w;
-        setPhase(w.playerBankId || !loadedRef.current ? 'play' : 'start');
-        setSpeedState(0);
-        speedRef.current = 0;
-        setVersion((v) => v + 1);
-      } catch {
-        // Not a save.
-      }
-    });
+  const loadSaveText = useCallback((text: string): boolean => {
+    try {
+      const w = JSON.parse(text) as World;
+      if (!w || w.version !== 1) return false;
+      worldRef.current = w;
+      setPhase(w.playerBankId || !loadedRef.current ? 'play' : 'start');
+      setSpeedState(0);
+      speedRef.current = 0;
+      setVersion((v) => v + 1);
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
+  const importSave = useCallback((file: File) => {
+    file.text().then(loadSaveText);
+  }, [loadSaveText]);
+  // A playtest world shipped next to the page: a small bank with no home
+  // county, so lending runs through pools and no applications arrive.
+  const [bundledNote, setBundledNote] = useState('');
+  const loadBundled = useCallback(() => {
+    fetch('./playtest-save.json')
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+      .then((text) => {
+        if (!loadSaveText(text)) setBundledNote('the playtest save next to this page is not a save file');
+      })
+      .catch(() => setBundledNote('no playtest save next to this page'));
+  }, [loadSaveText]);
 
   const setSpeed = useCallback((s: number) => {
     speedRef.current = s;
@@ -313,6 +326,13 @@ export function App() {
               continue saved game
             </button>
           )}
+          <button className="key" onClick={loadBundled}>
+            start with the playtest bank
+          </button>
+          {bundledNote && <span className="dim"> {bundledNote}</span>}
+        </p>
+        <p className="dim">The playtest bank is an $80M bank with no home county: it lends through pools, no applications reach the desk, and the map is empty. Everything else runs. Press space to start the clock, 1 to 5 for speed, and ? for the keys.</p>
+        <p>
           <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
         </p>
       </main>
