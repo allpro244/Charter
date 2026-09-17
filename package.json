@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "pack": "vite build && tsx scripts/playtest.ts 7 0 --save dist/playtest-save.json && tsx scripts/pack.ts --save dist/playtest-save.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fetch-data": "NODE_USE_ENV_PROXY=1 tsx scripts/fetch-data.ts",

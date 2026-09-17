@@ -105,6 +105,13 @@ export function App() {
   // county, so lending runs through pools and no applications arrive.
   const [bundledNote, setBundledNote] = useState('');
   const loadBundled = useCallback(() => {
+    // The single-file build carries the save inside the page, so it runs
+    // from a double-clicked file with nothing to fetch.
+    const inline = document.getElementById('playtest-save');
+    if (inline && inline.textContent) {
+      if (!loadSaveText(inline.textContent)) setBundledNote('the playtest save inside this page is not a save file');
+      return;
+    }
     fetch('./playtest-save.json')
       .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
       .then((text) => {
