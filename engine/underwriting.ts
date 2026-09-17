@@ -8,7 +8,7 @@ import { type Application, ccoReview, generateApplication } from './borrowers';
 import { TYPE } from './credit';
 import { type Ctx, addPending, emit } from './ctx';
 import { fundLoan, type FundTerms } from './loans';
-import { ccoSkill } from './officers';
+import { ccoSkill, cloAppetite, cloPricingEdge } from './officers';
 import { chance, pick, rand } from './rng';
 import { type Bank, type Decision, type LoanType, type Pending, type World, playerBank } from './state';
 import { money, pct } from './format';
@@ -30,7 +30,7 @@ export function arrivalRate(world: World, b: Bank): number {
   const assets = b.acct.cash + b.acct.loans + b.acct.securitiesAFS + b.acct.securitiesHTM;
   const size = Math.max(0.5, Math.min(3, Math.pow(Math.max(assets, 1) / 100_000_000, 0.3)));
   const branches = Math.max(1, b.branches.length);
-  return (0.25 + 0.3 * branches) * REGIME_DEMAND[world.economy.regime] * size * b.originationAppetite;
+  return (0.25 + 0.3 * branches) * REGIME_DEMAND[world.economy.regime] * size * b.originationAppetite * cloAppetite(b);
 }
 
 export function aboveDial(b: Bank, app: Application): boolean {
@@ -103,6 +103,7 @@ export function applicationsDaily(ctx: Ctx): void {
     const county = world.geo.counties[branch ? branch.county : b.homeCounty];
     if (!county) continue;
     const app = generateApplication(world, b, county, world.rng);
+    app.memo.rate = Math.round((app.memo.rate + cloPricingEdge(b)) * 10_000) / 10_000;
     ccoReview(app, b, skill, world.rng);
     b.applications.received += 1;
     if (aboveDial(b, app)) forPlayer.push(app);

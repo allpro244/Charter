@@ -48,14 +48,14 @@ Done: scripted energy bust produces plausible losses in a Midland start and near
 Feel gate (D36): one metro, one bank, one hour, played twice in two very different cities. Is underwriting fun? Can the player see themselves getting better? Does the earnings review explain every dollar? No Phase 3 until yes.
 
 ## Phase 3: Deposits and funding
-- [ ] Deposit types, rate sheet, betas, stickiness.
-- [ ] Branches on real counties: open, close, fixed cost from local wages, share capture from local deposit pool, distance penalty.
-- [ ] Brokered, FHLB, fed funds purchased.
-- [ ] Securities: treasuries/agencies/MBS, AFS vs HTM, unrealized loss vs equity.
-- [ ] Runs from confidence score.
-- [ ] Officers: CFO and CLO.
-- [ ] Event stream: depositor and officer events.
-- [ ] UI: FUND, OFF, branch placement on MAP.
+- [x] Deposit types, rate sheet, betas, stickiness.
+- [x] Branches on real counties: open, close, fixed cost from local wages, share capture from local deposit pool, distance penalty.
+- [x] Brokered, FHLB, fed funds purchased.
+- [x] Securities: treasuries/agencies/MBS, AFS vs HTM, unrealized loss vs equity.
+- [x] Runs from confidence score.
+- [x] Officers: CFO and CLO.
+- [x] Event stream: depositor and officer events.
+- [x] UI: FUND, OFF, branch placement on MAP.
 Done: Fed +400bp shock produces outflow and unrealized loss in plausible bands; thin bank with heavy uninsured deposits runs; perf passes.
 Play gate: 30 minutes. Does funding pressure feel real?
 

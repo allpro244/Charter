@@ -4,6 +4,7 @@
 import { type Accounts, type DepositType, type IncomeStatement, emptyAccounts, emptyIS } from './ledger';
 import { type Rng, derive, hashString, makeRng } from './rng';
 import { mixFor, seedPools } from './credit';
+import { seedLots } from './funding';
 import { SECTORS, type Sector, type WorldData } from '../data/types';
 
 import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from './loantypes';
@@ -113,7 +114,16 @@ export interface Bank {
   dividendsPaid: number; // lifetime
   failedBankRecord: string[]; // names of banks this one absorbed
   branches: Branch[];
-  franchise: { baseShare: number; openedDay: number }; // deposit franchise in the home county
+  // Deposit franchise in the home county: the share held when the
+  // franchise was set, the share it converges to (a de novo ramps toward
+  // the ceiling; a seasoned bank stays where it is), when it opened, and
+  // the addressable pool when there is no geography (tests).
+  franchise: { baseShare: number; targetShare: number; openedDay: number; pool: number };
+  lots: Lot[]; // securities, one record per purchase
+  brokeredRateOffered: number; // set when raising brokered deposits
+  fhlbCapacityUsed: number; // informational, advances are acct.fhlb
+  liquidityStress: number; // 0 to 1, rises when withdrawals exceed cash
+  officerCandidates: Officer[]; // available hires this month
   takeover: { criticizedShare: number; seed: number } | null; // inherited book condition, used by credit
   pools: Pool[];
   loans: Loan[]; // relationship book, player's bank only (D29)
@@ -270,6 +280,21 @@ export interface Branch {
   openedDay: number;
   deposits: number; // core deposits attributed to this branch
   fixedCost: number; // annual, dollars
+  distanceKm: number; // from the home county
+}
+
+export type LotKind = 'afs' | 'htm';
+export type Product = 'treasury' | 'agency' | 'mbs';
+
+export interface Lot {
+  id: string;
+  kind: LotKind;
+  product: Product;
+  cost: number; // amortized cost, dollars
+  coupon: number; // annual
+  duration: number; // years
+  purchasedDay: number;
+  fair: number; // last mark, dollars
 }
 
 export interface PlayerRecord {
@@ -705,7 +730,12 @@ export function createBank(world: World, spec: BankSpec): Bank {
     dividendsPaid: 0,
     failedBankRecord: [],
     branches: [],
-    franchise: { baseShare: 0, openedDay: world.day },
+    franchise: { baseShare: 0, targetShare: 0, openedDay: world.day, pool: 0 },
+    lots: [],
+    brokeredRateOffered: 0,
+    fhlbCapacityUsed: 0,
+    liquidityStress: 0,
+    officerCandidates: [],
     takeover: null,
     pools: [],
     loans: [],
@@ -735,11 +765,18 @@ export function createBank(world: World, spec: BankSpec): Bank {
       openedDay: world.day,
       deposits: core,
       fixedCost: county ? branchFixedCost(county) : 0,
+      distanceKm: 0,
     });
-    if (county && county.depositPool > 0) bank.franchise.baseShare = core / county.depositPool;
+    if (county && county.depositPool > 0) {
+      bank.franchise.baseShare = core / county.depositPool;
+      bank.franchise.targetShare = bank.franchise.baseShare;
+    }
+    // A bank created with deposits is a seasoned franchise.
+    if (core > 0) bank.franchise.openedDay = world.day - 20 * 365;
   }
   if (acct.loans > 0) seedPools(world, bank, acct.loans, derive(world.seed, hashString(`pools:${bank.id}:${bank.name}`)), spec.criticized ?? 0.05);
   else bank.loanMix = seedMix(world, bank);
+  seedLots(world, bank);
   return bank;
 }
 

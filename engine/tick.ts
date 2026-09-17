@@ -8,11 +8,12 @@
 import { calibration } from '../data/calibration';
 import { originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
 import { type Ctx } from './ctx';
-import { depositRatesMonthly, depositsDaily } from './deposits';
+import { decideRatePrompt, depositsDaily, depositsMonthly } from './deposits';
+import { markSecurities, securitiesRunoff } from './funding';
 import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
 import { loansDaily, loansMonthly } from './loans';
-import { officerPayroll } from './officers';
+import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
 import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
 import {
@@ -77,6 +78,12 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
       return;
     case 'loan_batch':
       decideBatch(ctx, pending, decision);
+      return;
+    case 'officer_event':
+      decideOfficerEvent(ctx, pending, decision);
+      return;
+    case 'rate_prompt':
+      decideRatePrompt(ctx, pending, decision);
       return;
     default:
       return;
@@ -211,7 +218,14 @@ function monthlyClose(ctx: Ctx): void {
     refreshLoanYield(b);
   }
   economyMonthly(ctx);
-  depositRatesMonthly(ctx);
+  for (const id of world.bankOrder) {
+    const b = world.banks[id] as Bank;
+    if (!isLive(b)) continue;
+    securitiesRunoff(world, b);
+    markSecurities(world, b);
+  }
+  depositsMonthly(ctx);
+  officersMonthly(ctx);
   wealthMonthly(ctx);
   regulationMonthly(ctx);
   for (const id of world.bankOrder) {

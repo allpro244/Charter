@@ -74,6 +74,10 @@ export function canPayDividend(b: Bank, amount: number): boolean {
   return tier1 / assets >= PCA_ADEQUATE;
 }
 
+export function leverageOf(b: Bank): number {
+  return leverageRatio(b.acct);
+}
+
 export function playerLeverage(world: World): number | null {
   const b = world.playerBankId ? world.banks[world.playerBankId] : undefined;
   return b ? leverageRatio(b.acct) : null;

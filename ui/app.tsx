@@ -16,6 +16,9 @@ import { BalanceSheetScreen, DebugScreen, FeedScreen, IncomeScreen, MeScreen, Pe
 import { StartPanel } from './start';
 import { LoansScreen } from './loans';
 import { QtrScreen } from './qtr';
+import { FundScreen } from './fund';
+import { OfficersScreen } from './off';
+import { openBranch } from '../engine/deposits';
 
 type Screen = 'FEED' | 'BS' | 'IS' | 'LOANS' | 'FUND' | 'OFF' | 'RIVALS' | 'ME' | 'QTR' | 'MAP' | 'DEBUG';
 const SCREEN_KEYS: Record<string, Screen> = { f: 'FEED', b: 'BS', i: 'IS', l: 'LOANS', u: 'FUND', o: 'OFF', r: 'RIVALS', w: 'ME', q: 'QTR', m: 'MAP', d: 'DEBUG' };
@@ -148,6 +151,19 @@ export function App() {
       refresh();
     },
     [setSpeed, refresh],
+  );
+
+  // Runs a desk action against the engine between ticks.
+  const act = useCallback(
+    (fn: (ctx: Ctx) => void) => {
+      const world = worldRef.current;
+      if (!world) return;
+      const ctx: Ctx = { world, events: [] };
+      fn(ctx);
+      world.feed.push(...ctx.events);
+      refresh();
+    },
+    [refresh],
   );
 
   const onCharter = useCallback((cbsa: string, name: string, invest: number) => begin((ctx) => startCharter(ctx, { mode: 'charter', cbsa, name, invest })), [begin]);
@@ -289,10 +305,25 @@ export function App() {
         />
       )}
       {screen === 'LOANS' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
+      {screen === 'FUND' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
+      {screen === 'OFF' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
       {screen === 'QTR' && bank && <QtrScreen bank={bank} unit={unit} />}
-      {screen === 'MAP' && <MapView world={world} geo={loaded.geo} mode="play" shade={shade} selectedMetro={null} onSelectMetro={() => undefined} />}
+      {screen === 'MAP' && (
+        <MapView
+          world={world}
+          geo={loaded.geo}
+          mode="play"
+          shade={shade}
+          selectedMetro={null}
+          onSelectMetro={() => undefined}
+          onOpenBranch={(fips) => {
+            const county = world.geo.counties[fips];
+            if (county) act((ctx) => openBranch(ctx, county));
+          }}
+        />
+      )}
       {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk />}
-      {(screen === 'FUND' || screen === 'OFF' || screen === 'RIVALS') && (
+      {screen === 'RIVALS' && (
         <p className="dim">{screen}: not built yet. See BUILD_PLAN.md.</p>
       )}
       <footer className="keys">

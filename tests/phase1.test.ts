@@ -69,7 +69,8 @@ describe('phase 1: ledger, wealth, feed', () => {
     world.player.cash = 1_000_000;
     setDividendPayout(world, 0.5);
     setSalary(world, 0);
-    let equityBefore = totalEquity(bank.acct);
+    const retained = () => totalEquity(bank.acct) - bank.acct.aoci;
+    let equityBefore = retained();
     let quarters = 0;
     for (let d = 0; d < 365; d++) {
       const cashBefore = world.player.cash;
@@ -85,11 +86,11 @@ describe('phase 1: ledger, wealth, feed', () => {
           const gross = world.player.dividendsGross - grossBefore;
           expect(gross).toBe(Math.round(paid * 0.3));
           expect(world.player.cash - cashBefore).toBe(Math.round(gross * (1 - world.player.taxRate)));
-          // Equity over the quarter moved by net income less the dividend.
-          expect(totalEquity(bank.acct) - equityBefore).toBe(ni - paid);
+          // Retained earnings over the quarter moved by net income less the dividend.
+          expect(retained() - equityBefore).toBe(ni - paid);
           quarters += 1;
         }
-        equityBefore = totalEquity(bank.acct);
+        equityBefore = retained();
       }
     }
     expect(quarters).toBeGreaterThanOrEqual(3);

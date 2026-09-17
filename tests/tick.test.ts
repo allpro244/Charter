@@ -66,7 +66,9 @@ describe('tick', () => {
       loans: 70_000_000,
       securitiesAFS: 15_000_000,
     });
-    const startEquity = totalEquity(bank.acct);
+    // Retained earnings move by net income less dividends. AOCI moves with
+    // the securities mark and is outside net income.
+    const startEquity = totalEquity(bank.acct) - bank.acct.aoci;
     expect(bank.pools.length).toBeGreaterThan(0);
     expect(bank.pools.reduce((s, p) => s + p.balance, 0)).toBe(70_000_000);
     // Pool interest is performing balance x rate x days/365, month by month.
@@ -91,7 +93,7 @@ describe('tick', () => {
     const ni = year!.interestLoans + year!.interestSecurities + year!.interestCash
       - (year!.interestChecking + year!.interestSavings + year!.interestMmda + year!.interestCd + year!.interestBrokered + year!.interestBorrowings)
       - year!.provision - (year!.salaries + year!.occupancy + year!.otherExpense + year!.assessment) - year!.tax;
-    expect(totalEquity(bank.acct) - startEquity).toBe(ni - bank.dividendsPaid);
+    expect(totalEquity(bank.acct) - bank.acct.aoci - startEquity).toBe(ni - bank.dividendsPaid);
     expect(bank.dividendsPaid).toBeGreaterThan(0);
     expect(bank.reports[3]!.roa).toBeGreaterThan(-0.02);
     expect(bank.reports[3]!.roa).toBeLessThan(0.03);

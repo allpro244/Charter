@@ -171,9 +171,13 @@ export function startCharter(ctx: Ctx, opts: StartCharter): Bank {
     shares: Math.round(terms.raise / terms.sharePrice),
   });
   bank.franchise.baseShare = 0;
+  bank.franchise.targetShare = calibration.deNovoShareCeiling.typical / 100;
   bank.franchise.openedDay = world.day;
   bank.dividendPayout = 0;
-  bank.officers.push(makeOfficer(world, pickRng(world, `cco:${bank.id}`), 'cco', terms.raise * 8, 50));
+  const rr = pickRng(world, `officers:${bank.id}`);
+  bank.officers.push(makeOfficer(world, rr, 'cco', terms.raise * 8, 50));
+  bank.officers.push(makeOfficer(world, rr, 'cfo', terms.raise * 8, 50));
+  bank.officers.push(makeOfficer(world, rr, 'clo', terms.raise * 8, 50));
   attachPlayer(ctx, bank, Math.round(invest / terms.sharePrice), invest);
   emit(ctx, 'system', `${bank.name} chartered in ${metro.name} with ${money(terms.raise)} of capital. You put in ${money(invest)} for ${((invest / terms.raise) * 100).toFixed(0)}% of the shares.`, {
     severity: 'good',
@@ -215,6 +219,8 @@ export function startTakeover(ctx: Ctx, opts: StartTakeover): Bank {
   // Someone else's problems: an existing CCO and a book of real loans.
   const r = derive(world.seed, c.seed);
   bank.officers.push(makeOfficer(world, r, 'cco', totalAssets(bank.acct), 45));
+  bank.officers.push(makeOfficer(world, r, 'cfo', totalAssets(bank.acct), 45));
+  bank.officers.push(makeOfficer(world, r, 'clo', totalAssets(bank.acct), 45));
   const county = world.geo.counties[bank.homeCounty as string];
   if (county) {
     const apps = [];

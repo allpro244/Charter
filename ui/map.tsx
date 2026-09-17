@@ -2,7 +2,7 @@
 // built GeoJSON, metro dots sized by real population, branch markers,
 // county shading by sector exposure or condition. Hover shows real stats.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Sector } from '../data/types';
 import { SECTORS } from '../data/types';
 import type { Bank, CountyState, MetroState, World } from '../engine/state';
@@ -20,6 +20,7 @@ interface Props {
   shade: Shade;
   selectedMetro: string | null;
   onSelectMetro: (cbsa: string) => void;
+  onOpenBranch?: (fips: string) => void;
 }
 
 interface CountyPath {
@@ -29,8 +30,16 @@ interface CountyPath {
   d: string;
 }
 
-export function MapView({ world, geo, mode, shade, selectedMetro, onSelectMetro }: Props) {
+export function MapView({ world, geo, mode, shade, selectedMetro, onSelectMetro, onOpenBranch }: Props) {
   const [hover, setHover] = useState<string | null>(null);
+  useEffect(() => {
+    if (!onOpenBranch || mode !== 'play') return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'o' && hover) onOpenBranch(hover);
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [hover, onOpenBranch, mode]);
   const paths = useMemo<CountyPath[]>(
     () => geo.features.map((f) => ({ fips: f.properties.fips, name: f.properties.name, state: f.properties.state, d: pathFor(f.geometry, f.properties.state) })),
     [geo],
@@ -98,7 +107,12 @@ export function MapView({ world, geo, mode, shade, selectedMetro, onSelectMetro 
           })}
       </svg>
       <div className="maphover">
-        {hovered ? <CountyStats c={hovered} world={world} /> : <span className="dim">hover a county for its real statistics</span>}
+        {hovered ? <CountyStats c={hovered} world={world} /> : <span className="dim">hover a county for its real statistics{mode === 'play' ? '; press o to open a branch there' : ''}</span>}
+        {hovered && mode === 'play' && onOpenBranch && (
+          <button className="key" onClick={() => onOpenBranch(hovered.fips)}>
+            o: open a branch in {hovered.name}
+          </button>
+        )}
       </div>
     </div>
   );
