@@ -9,7 +9,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fetch-data": "NODE_USE_ENV_PROXY=1 tsx scripts/fetch-data.ts",
+    "build-data": "tsx scripts/build-data.ts",
+    "calibrate": "NODE_USE_ENV_PROXY=1 tsx scripts/calibrate.ts"
   },
   "dependencies": {
     "react": "^19.3.0",
