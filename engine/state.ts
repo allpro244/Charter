@@ -6,6 +6,7 @@ import { type Rng, derive, hashString, makeRng } from './rng';
 import { mixFor, seedPools } from './credit';
 import { seedLots } from './funding';
 import { type BankSeed, SECTORS, type Sector, type WorldData } from '../data/types';
+import { calibration } from '../data/calibration';
 
 import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from './loantypes';
 export { GRADES, LOAN_TYPES, emptyByType };
@@ -161,6 +162,47 @@ export interface Bank {
   enforcementSince: number | null;
   stressTest: { day: number; passed: boolean; losses: number; buffer: number } | null; // last annual stress test
   swaps: Swap[];
+  foreign: ForeignOp[]; // subsidiaries abroad, books in local currency (D45)
+  gsib: { since: number; surcharge: number } | null;
+}
+
+export type CountryCode = 'GB' | 'JP' | 'DE' | 'HK';
+
+export interface Country {
+  code: CountryCode;
+  name: string;
+  city: string;
+  currency: string;
+  fx: number; // local units per USD
+  fxStart: number;
+  rate: number; // policy rate, ratio
+  y10: number;
+  index: number; // activity index, 100 at start
+  momentum: number; // last month log change
+  regime: Regime;
+  depositPool: number; // local currency
+  leverageMin: number; // ratio
+  sovereignSpread: number; // ratio
+  sovereignStress: number; // 0 to 1, rises before an event
+  lastEvent: number | null;
+}
+
+// A subsidiary's book, in local currency. Same accounts as the parent,
+// same pools and lots. Translated to dollars at every close.
+export interface ForeignOp {
+  id: string;
+  country: CountryCode;
+  name: string;
+  acct: Accounts; // local currency
+  pools: Pool[];
+  lots: Lot[];
+  rates: Record<DepositType, number>;
+  loanYield: number;
+  overheadRate: number;
+  franchise: { baseShare: number; targetShare: number; openedDay: number };
+  carried: Accounts; // dollars carried on the parent's ledger for each line
+  startedDay: number;
+  sovereignBonds: number; // local currency, part of securitiesHTM
 }
 
 export type Enforcement = 'none' | 'mou' | 'consent' | 'pca';
@@ -571,6 +613,8 @@ export interface World {
   bankSeeds: Record<string, BankSeed[]>; // real institution sizes by state, anonymized
   failures: { day: number; state: string; assets: number; name: string }[]; // every failure in the world
   deals: DealRecord[]; // closed deals, for the record
+  countries: Record<string, Country>; // the global stage (D45)
+  largestNational: number; // assets of the largest bank in America at the start, the bar to pass
 }
 
 export interface DealRecord {
@@ -760,6 +804,46 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
     bankSeeds: data?.banksByState ?? {},
     failures: [],
     deals: [],
+    countries: initialCountries(),
+    largestNational: largestSeed(data),
+  };
+}
+
+function largestSeed(data: WorldData | null): number {
+  let x = 0;
+  if (!data) return 3_400_000_000_000; // the largest US bank in 2024 by assets, used when there is no data (tests)
+  for (const list of Object.values(data.banksByState)) for (const s of list) if (s.assets > x) x = s.assets;
+  return x || 3_400_000_000_000;
+}
+
+export function initialCountries(): Record<string, Country> {
+  const c = calibration.countries;
+  const mk = (code: CountryCode, name: string, city: string, currency: string): Country => {
+    const band = c[code];
+    return {
+      code,
+      name,
+      city,
+      currency,
+      fx: band.fx.typical,
+      fxStart: band.fx.typical,
+      rate: band.rate.typical / 100,
+      y10: band.rate.typical / 100 + 0.005,
+      index: 100,
+      momentum: 0,
+      regime: 'late',
+      depositPool: Math.round(band.deposits.typical * 1e9 * band.fx.typical),
+      leverageMin: band.leverageMin.typical / 100,
+      sovereignSpread: band.sovereignSpread.typical / 10_000,
+      sovereignStress: 0,
+      lastEvent: null,
+    };
+  };
+  return {
+    GB: mk('GB', 'United Kingdom', 'London', 'GBP'),
+    JP: mk('JP', 'Japan', 'Tokyo', 'JPY'),
+    DE: mk('DE', 'Germany', 'Frankfurt', 'EUR'),
+    HK: mk('HK', 'Hong Kong', 'Hong Kong', 'HKD'),
   };
 }
 
@@ -880,6 +964,8 @@ export function createBank(world: World, spec: BankSpec): Bank {
     enforcementSince: null,
     stressTest: null,
     swaps: [],
+    foreign: [],
+    gsib: null,
   };
   world.banks[bank.id] = bank;
   world.bankOrder.push(bank.id);

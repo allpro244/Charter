@@ -91,15 +91,15 @@ Done: bad CRE concentration gets a finding; ignoring it escalates; failed stress
 Play gate: 30 minutes. Is the examiner a fair opponent?
 
 ## Phase 7: Global
-- [ ] Country layer with own indices, currency, regulator.
-- [ ] Cross-border deals, FX on the balance sheet, sovereign risk.
-- [ ] G-SIB designation and surcharge.
+- [x] Country layer with own indices, currency, regulator.
+- [x] Cross-border deals, FX on the balance sheet, sovereign risk.
+- [x] G-SIB designation and surcharge.
 Done: $1T+ bank in three countries with a reconciled multi-currency balance sheet.
 
 ## Phase 8: Polish and balance
-- [ ] Save/load/export, milestone log, advisor cards, keyboard map.
-- [ ] Every calibration constant verified or removed (D37).
-- [ ] Full runs: chartered, takeover, deliberate failure and restart, run past JPM.
+- [x] Save/load/export, milestone log, advisor cards, keyboard map.
+- [ ] Every calibration constant verified or removed (D37). Blocked: every data host returns 403 from this environment's network policy, so `scripts/calibrate.ts` has not run. All bands are hand-entered, marked unverified, and listed on DEBUG.
+- [ ] Full runs: chartered, takeover, deliberate failure and restart, run past JPM. Engine-level runs exist as tests (30 year growth by acquisition, failure and purchase, $1T in three countries, the largest-bank milestone); the played runs wait on the data files.
 
 ## Backlog (not v1)
 - Officer fraud.
@@ -112,3 +112,4 @@ Done: $1T+ bank in three countries with a reconciled multi-currency balance shee
 Claude Code appends one line per session here: date | phase and item | what passed | what is open.
 
 2026-09-16 | Phase 0, Vite + TypeScript + Vitest scaffold | typecheck, 3 scaffold tests (folders exist, engine never imports ui, no em or en dashes), vite build all pass | next: engine/state.ts, engine/rng.ts, engine/tick.ts with daily/monthly split (D30)
+2026-09-17 | Owner said keep going; Phases 0 to 7 built end to end, Phase 8 save/export/advisor/keys | 93 tests pass (14 fixture-gated tests skip), 300 banks x 40 years in about 12 s, build clean; every play gate skipped on the owner's instruction | open: data downloads blocked (403 on census.gov, bls.gov, bea.gov, fhfa.gov, fdic.gov, fred.stlouisfed.org); once the network policy allows them run npm run fetch-data, npm run build-data -- --fixtures, npm run calibrate, then the 14 skipped tests and the first real play

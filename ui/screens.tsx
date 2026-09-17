@@ -13,13 +13,31 @@ import { formatDate } from '../engine/time';
 import { playerStake } from '../engine/wealth';
 import { type Unit, dollars, num, pct, short, unitLabel } from './format';
 
-export function FeedScreen({ world, onDecide }: { world: World; onDecide: (p: Pending, key: string) => void }) {
+export function FeedScreen({ world, onDecide, cards, onDismiss }: { world: World; onDecide: (p: Pending, key: string) => void; cards?: { key: string; text: string }[]; onDismiss?: (key: string) => void }) {
   const items = world.feed.slice(-400).reverse();
   return (
     <div>
       {world.pending.map((p) => (
         <PendingPanel key={p.id} p={p} onDecide={onDecide} />
       ))}
+      {cards && cards.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>ADVISOR (x dismisses the first card, shift+a hides all)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {cards.map((c) => (
+              <tr key={c.key}>
+                <td>{c.text}</td>
+                <td className="num">{onDismiss && <button className="key" onClick={() => onDismiss(c.key)}>x</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <table>
         <thead>
           <tr>
@@ -485,7 +503,38 @@ export function Sparkline({ values, width = 320, height = 28 }: { values: number
   );
 }
 
-export function DebugScreen({ world, tickMs, manifest, dataOk }: { world: World; tickMs: number; manifest: Record<string, unknown> | null; dataOk: boolean }) {
+export function KeyMap() {
+  const rows: [string, string][] = [
+    ['f b i l u o r w q n m d', 'screens: feed, balance sheet, income, loans, funding, officers, rivals, me, quarter, lines, map, debug'],
+    ['space', 'pause and resume'],
+    ['0 to 5', 'speed: pause, half a day, one, two, three days per second (a year in two minutes), six'],
+    ['a c d', 'answer a loan application: approve, counter, decline; batches: approve within policy, decline, review'],
+    ['k', 'acknowledge an exam, an order, a failure'],
+    ['1 2 3 p', 'bid in an FDIC auction: 0.5%, 1.5%, 3% of deposits, or pass'],
+    ['+ - [ ]', 'on ME: salary up and down, dividend payout down and up'],
+    ['o', 'on MAP: open a branch in the county under the cursor; c cycles the shading'],
+    ['x, shift+a', 'dismiss the first advisor card; hide or show all cards'],
+    ['s n', 'save now; start a new world'],
+    ['?', 'this map'],
+  ];
+  return (
+    <div className="pending">
+      <div className="pending-title">KEYBOARD</div>
+      <table>
+        <tbody>
+          {rows.map(([k, v]) => (
+            <tr key={k}>
+              <td className="num">{k}</td>
+              <td>{v}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function DebugScreen({ world, tickMs, manifest, dataOk, onExport, onImport }: { world: World; tickMs: number; manifest: Record<string, unknown> | null; dataOk: boolean; onExport?: () => void; onImport?: (file: File) => void }) {
   const unverified = unverifiedBands();
   const banks = Object.values(world.banks);
   return (
@@ -511,6 +560,15 @@ export function DebugScreen({ world, tickMs, manifest, dataOk }: { world: World;
           <tr><td>unemployment / inflation / gdp</td><td className="num">{pct(world.economy.unemployment, 1)} / {pct(world.economy.inflation, 1)} / {pct(world.economy.gdpGrowth, 1)}</td></tr>
           <tr><td>oil / hpi / sp500</td><td className="num">{world.economy.oil.toFixed(0)} / {world.economy.hpi.toFixed(1)} / {world.economy.sp500.toFixed(0)}</td></tr>
           <tr><td>save</td><td className="num">s saves, n starts a new world</td></tr>
+          <tr>
+            <td>export / import</td>
+            <td className="num">
+              {onExport && <button className="key" onClick={onExport}>export save to file</button>}
+              {onImport && <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && onImport(e.target.files[0])} />}
+            </td>
+          </tr>
+          <tr><td>milestones</td><td className="num">{world.milestones.length}, on ME</td></tr>
+          <tr><td>deals / failures</td><td className="num">{world.deals.length} / {world.failures.length}</td></tr>
           {manifest && (
             <tr><td>manifest</td><td className="num">{String((manifest as { builtOn?: string }).builtOn ?? 'present')}</td></tr>
           )}

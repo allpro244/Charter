@@ -93,10 +93,12 @@ export function capitalStack(b: Bank): CapitalStack {
   else if (leverage <= PCA_CRITICAL || cet1Ratio < 0.02) category = 'critical';
   else if (cet1Ratio < 0.03 || tier1Ratio < 0.04 || totalRatio < 0.06 || leverage < PCA_SIGNIFICANT) category = 'significant';
   else category = 'under';
-  const buffer = cblr ? BUFFER : cet1Ratio - CET1_MIN;
-  const bufferShortfall = Math.max(0, BUFFER - buffer);
-  // Payout limits by quartile of the buffer (12 CFR 324.11).
-  const q = buffer / BUFFER;
+  const required = BUFFER + (b.gsib?.surcharge ?? 0) + (b.stressTest ? Math.max(0, b.stressTest.buffer - BUFFER) : 0);
+  const buffer = cblr ? required : cet1Ratio - CET1_MIN;
+  const bufferShortfall = Math.max(0, required - buffer);
+  // Payout limits by quartile of the buffer (12 CFR 324.11), the G-SIB
+  // surcharge and the stress capital buffer on top.
+  const q = buffer / required;
   const maxPayout = q >= 1 ? 1 : q > 0.75 ? 0.6 : q > 0.5 ? 0.4 : q > 0.25 ? 0.2 : 0;
   return { rwa, cet1, tier1, tier2, total, cet1Ratio, tier1Ratio, totalRatio, leverage, cblr, buffer, bufferShortfall, maxPayout, category };
 }

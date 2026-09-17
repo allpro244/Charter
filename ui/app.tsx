@@ -12,7 +12,8 @@ import { setDividendPayout, setSalary } from '../engine/wealth';
 import { type Loaded, loadData } from './data';
 import { type Unit, unitFor } from './format';
 import { MapView, SHADES, type Shade } from './map';
-import { BalanceSheetScreen, DebugScreen, FeedScreen, IncomeScreen, MeScreen, PendingPanel, StatusBar } from './screens';
+import { BalanceSheetScreen, DebugScreen, FeedScreen, IncomeScreen, KeyMap, MeScreen, PendingPanel, StatusBar } from './screens';
+import { adviceFor } from './advisor';
 import { StartPanel } from './start';
 import { LoansScreen } from './loans';
 import { QtrScreen } from './qtr';
@@ -64,6 +65,40 @@ export function App() {
   const [shade, setShade] = useState<Shade>('none');
   const [selectedMetro, setSelectedMetro] = useState<string | null>(null);
   const [hasSave, setHasSave] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
+  const [advisorOn, setAdvisorOn] = useState(true);
+  const [dismissed, setDismissed] = useState<Record<string, number>>({});
+
+  const dismissedRef = useRef<Record<string, number>>({});
+  dismissedRef.current = dismissed;
+
+  const exportSave = useCallback(() => {
+    const world = worldRef.current;
+    if (!world) return;
+    const blob = new Blob([JSON.stringify(world)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `charter-${world.seed}-${world.day}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const importSave = useCallback((file: File) => {
+    file.text().then((text) => {
+      try {
+        const w = JSON.parse(text) as World;
+        if (!w || w.version !== 1) return;
+        worldRef.current = w;
+        setPhase(w.playerBankId ? 'play' : 'start');
+        setSpeedState(0);
+        speedRef.current = 0;
+        setVersion((v) => v + 1);
+      } catch {
+        // Not a save.
+      }
+    });
+  }, []);
 
   const setSpeed = useCallback((s: number) => {
     speedRef.current = s;
@@ -215,6 +250,19 @@ export function App() {
           setHasSave(true);
           return;
         }
+        if (k === '?') {
+          setShowKeys((v) => !v);
+          return;
+        }
+        if (k === 'x') {
+          const first = adviceFor(world).find((c) => (dismissedRef.current[c.key] ?? -1) < world.day - 90);
+          if (first) setDismissed((d) => ({ ...d, [first.key]: world.day }));
+          return;
+        }
+        if (e.key === 'A') {
+          setAdvisorOn((v) => !v);
+          return;
+        }
         if (k === 'n') {
           if (confirm('Start a new world? The current save is replaced when you next save.')) {
             const loaded = loadedRef.current;
@@ -291,7 +339,15 @@ export function App() {
     <main className="desk">
       <StatusBar world={world} speed={speed} screen={screen} unit={unit} />
       {screen !== 'FEED' && world.pending.map((p) => <PendingPanel key={p.id} p={p} onDecide={decide} />)}
-      {screen === 'FEED' && <FeedScreen world={world} onDecide={decide} />}
+      {showKeys && <KeyMap />}
+      {screen === 'FEED' && (
+        <FeedScreen
+          world={world}
+          onDecide={decide}
+          cards={advisorOn ? adviceFor(world).filter((c) => (dismissed[c.key] ?? -1) < world.day - 90) : []}
+          onDismiss={(key) => setDismissed((d) => ({ ...d, [key]: world.day }))}
+        />
+      )}
       {screen === 'BS' && bank && <BalanceSheetScreen bank={bank} unit={unit} />}
       {screen === 'IS' && bank && <IncomeScreen bank={bank} unit={unit} />}
       {screen === 'ME' && (
@@ -327,7 +383,7 @@ export function App() {
           }}
         />
       )}
-      {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk />}
+      {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk onExport={exportSave} onImport={importSave} />}
       {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} act={act} />}
       <footer className="keys">
         <span>f feed</span>
@@ -345,6 +401,7 @@ export function App() {
         <span>space pause</span>
         <span>0-5 speed</span>
         <span>s save</span>
+        <span>? keys</span>
       </footer>
     </main>
   );

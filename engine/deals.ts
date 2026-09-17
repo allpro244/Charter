@@ -12,6 +12,7 @@ import { type Account, type Accounts, leverageRatio, post, totalAssets, totalDep
 import { GRADES } from './loantypes';
 import { PCA_WELL } from './regulation';
 import { expandState } from './rivals';
+import { type ForeignCandidate, closeForeign } from './global';
 import { chance, rand, randNormal } from './rng';
 import { type Bank, type Decision, type Lot, type Pending, type Pool, type World, playerBank } from './state';
 import { formatDate } from './time';
@@ -572,7 +573,10 @@ export function expireDeals(ctx: Ctx): void {
   world.pending = world.pending.filter((p) => !due.includes(p));
   for (const p of due) {
     if (p.kind === 'assisted_auction') decideAuction(ctx, p, null);
-    else if (p.kind === 'acquisition_offer') decideOffer(ctx, p, null);
+    else if (p.kind === 'acquisition_offer' && p.data.foreign) {
+      const buyer = p.bankId ? world.banks[p.bankId] : undefined;
+      if (buyer) closeForeign(ctx, buyer, p.data.foreign as ForeignCandidate);
+    } else if (p.kind === 'acquisition_offer') decideOffer(ctx, p, null);
   }
 }
 

@@ -19,6 +19,7 @@ import { rivalsMonthly, rivalsQuarterly } from './rivals';
 import { stockMonthly } from './capital';
 import { dealsMonthly, decideAuction, decideCompetingBid, decideOffer, expireDeals } from './deals';
 import { feesMonthly, linesMonthly, linesYearEnd } from './lines';
+import { closeForeign, countriesMonthly, foreignMonthly, globalQuarterly } from './global';
 import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
 import {
   type Accounts,
@@ -93,6 +94,11 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
       decideAuction(ctx, pending, decision);
       return;
     case 'acquisition_offer':
+      if (pending.data.foreign) {
+        const buyer = pending.bankId ? ctx.world.banks[pending.bankId] : undefined;
+        if (buyer && decision.choice !== 'w') closeForeign(ctx, buyer, pending.data.foreign as import('./global').ForeignCandidate);
+        return;
+      }
       decideOffer(ctx, pending, decision);
       return;
     case 'competing_bid':
@@ -233,12 +239,14 @@ function monthlyClose(ctx: Ctx): void {
     if (b.id === world.playerBankId) loansMonthly(ctx, b, days, b.losses);
     poolsMonthly(ctx, b, days);
     linesMonthly(ctx, b);
+    if (b.foreign.length > 0) foreignMonthly(ctx, b, days);
     // Rivals lend through pools. So does a player bank with no home county
     // (no applications can reach it), which only happens in tests.
     if ((b.id !== world.playerBankId || !b.homeCounty) && !growthRestricted(b)) originateToTarget(ctx, b);
     refreshLoanYield(b);
   }
   economyMonthly(ctx);
+  countriesMonthly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
@@ -275,6 +283,7 @@ function quarterlyClose(ctx: Ctx): void {
   wealthQuarterly(ctx);
   reviewQuarterly(ctx);
   rivalsQuarterly(ctx);
+  globalQuarterly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;

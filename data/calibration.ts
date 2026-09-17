@@ -110,6 +110,17 @@ export const calibration = {
   depositsPerBranch: hand(40, 400, 120, 'millions of dollars per branch', 'FDIC Summary of Deposits, deposits divided by offices'),
   deNovoShareCeiling: hand(1, 5, 2.5, 'percent of home county deposits after ramp', 'FDIC de novo studies, share after 5 years'),
   takeoverPremium: hand(100, 160, 125, 'percent of book value for a control stake', 'S&P bank M&A price to tangible book, small deals'),
+  // Global stage (D45). Start values for the countries the game opens
+  // with. Sources are FRED and BIS series; hand-entered until a script
+  // reads them.
+  countries: {
+    GB: { fx: hand(0.7, 0.9, 0.79, 'GBP per USD', 'FRED DEXUSUK inverted, 2024'), rate: hand(3, 6, 5.25, 'percent', 'Bank of England bank rate, 2024'), deposits: hand(2500, 3500, 3000, 'billions USD', 'BIS and BoE monetary statistics, sterling deposits'), leverageMin: hand(3, 4, 3.25, 'percent', 'PRA leverage ratio minimum'), sovereignSpread: hand(0, 50, 10, 'basis points over US', 'gilt spreads'), beta: hand(50, 90, 70, 'percent of US cycle', 'OECD business cycle correlation UK to US') },
+    JP: { fx: hand(120, 170, 150, 'JPY per USD', 'FRED DEXJPUS, 2024'), rate: hand(-0.1, 1, 0.1, 'percent', 'Bank of Japan policy rate, 2024'), deposits: hand(8000, 11000, 9500, 'billions USD', 'BoJ deposits at domestically licensed banks'), leverageMin: hand(3, 4, 3, 'percent', 'FSA leverage ratio'), sovereignSpread: hand(-100, 50, -30, 'basis points over US', 'JGB yields'), beta: hand(30, 70, 50, 'percent of US cycle', 'OECD business cycle correlation Japan to US') },
+    DE: { fx: hand(0.85, 1.0, 0.92, 'EUR per USD', 'FRED DEXUSEU inverted, 2024'), rate: hand(2, 4.5, 4, 'percent', 'ECB deposit facility rate, 2024'), deposits: hand(3500, 4500, 4000, 'billions USD', 'Bundesbank deposits of non banks'), leverageMin: hand(3, 3.5, 3, 'percent', 'CRR leverage ratio'), sovereignSpread: hand(-150, 0, -100, 'basis points over US', 'Bund yields'), beta: hand(50, 90, 70, 'percent of US cycle', 'OECD business cycle correlation Germany to US') },
+    HK: { fx: hand(7.75, 7.85, 7.8, 'HKD per USD', 'FRED DEXHKUS, peg band'), rate: hand(3, 6, 5.75, 'percent', 'HKMA base rate, 2024'), deposits: hand(1800, 2400, 2100, 'billions USD', 'HKMA total deposits'), leverageMin: hand(3, 3.5, 3, 'percent', 'HKMA Basel III leverage'), sovereignSpread: hand(0, 100, 30, 'basis points over US', 'HK government bond yields'), beta: hand(40, 90, 65, 'percent of US cycle', 'HK exposure to the global cycle and China') },
+  },
+  sovereignEventPerYear: hand(0.2, 2, 0.5, 'percent chance per country per year', 'Reinhart and Rogoff sovereign crisis frequency, advanced economies'),
+  fxVolatility: hand(6, 12, 8, 'percent per year', 'FRED major currency realized volatility'),
   // Economy. These are not FDIC bands and stay hand-entered with sources.
   recessionIntervalYears: hand(7, 12, 9, 'years', 'NBER business cycle dates, 1970 onward'),
   bankingCrisisShare: hand(0.25, 0.45, 0.33, 'fraction of recessions', 'NBER dates vs FDIC failure waves (S&L, 2008)'),
