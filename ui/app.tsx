@@ -139,11 +139,16 @@ export function App() {
         setPhase('start');
       } else {
         setMissing(r.missing);
-        setHasSave(readSave() !== null);
+        const saved = readSave() !== null;
+        setHasSave(saved);
+        // A packed build carries a world inside the page: open straight
+        // into it unless the browser already holds a saved game.
+        const inline = document.getElementById('playtest-save');
+        if (inline && inline.textContent && !saved && loadSaveText(inline.textContent)) return;
         setPhase('nodata');
       }
     });
-  }, []);
+  }, [loadSaveText]);
 
   // The ticker. Fractional days accumulate so slow speeds stay smooth.
   useEffect(() => {
@@ -316,17 +321,24 @@ export function App() {
 
   if (phase === 'loading') return <main className="desk">loading data</main>;
   if (phase === 'nodata') {
+    const packed = document.getElementById('playtest-save') !== null;
     return (
       <main className="desk">
         <header className="bar">
           <span className="title">CHARTER</span>
-          <span className="status">no data</span>
+          <span className="status">{packed ? 'playtest build' : 'no data'}</span>
         </header>
-        <p>The world is built from real public data and these files are missing:</p>
-        <pre className="memo">{missing.join('\n')}</pre>
-        <p>Claude Code builds them with:</p>
-        <pre className="memo">{'npm run fetch-data\nnpm run build-data'}</pre>
-        <p>A saved world carries its own geography, so a save still loads without the files. The map stays empty until they exist.</p>
+        {packed ? (
+          <p>This build has no county map yet, so it runs the playtest bank: an $80M bank with no home town. Lending runs through pools, no applications reach the desk, and the map stays empty. Everything else runs.</p>
+        ) : (
+          <>
+            <p>The world is built from real public data and these files are missing:</p>
+            <pre className="memo">{missing.join('\n')}</pre>
+            <p>A note for Claude Code, not for the player: the files come from</p>
+            <pre className="memo">{'npm run fetch-data\nnpm run build-data'}</pre>
+            <p>A saved world carries its own geography, so a save still loads without the files. The map stays empty until they exist.</p>
+          </>
+        )}
         <p>
           {hasSave && (
             <button className="key" onClick={onContinue}>
@@ -334,13 +346,13 @@ export function App() {
             </button>
           )}
           <button className="key" onClick={loadBundled}>
-            start with the playtest bank
+            {hasSave ? 'start a new playtest bank' : 'start with the playtest bank'}
           </button>
           {bundledNote && <span className="dim"> {bundledNote}</span>}
         </p>
-        <p className="dim">The playtest bank is an $80M bank with no home county: it lends through pools, no applications reach the desk, and the map is empty. Everything else runs. Press space to start the clock, 1 to 5 for speed, and ? for the keys.</p>
-        <p>
-          <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
+        <p className="dim">Space starts the clock, 1 to 5 set the speed, s saves, and ? shows the keys.</p>
+        <p className="dim">
+          or load a save file: <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
         </p>
       </main>
     );
