@@ -40,6 +40,20 @@ describe('scaffold', () => {
     expect(offenders).toEqual([]);
   });
 
+  // CLAUDE.md rules 1, 8, 9: no browser APIs, no unseeded randomness, no
+  // wall clock in the engine. Same seed, same world, every time.
+  it('engine uses no Math.random, Date.now, performance.now, or DOM globals', () => {
+    const offenders: string[] = [];
+    const banned = [/Math\.random\(/, /Date\.now\(/, /performance\.now\(/, /\bdocument\./, /\bwindow\./, /localStorage/];
+    for (const file of sourceFiles('engine')) {
+      const lines = readFileSync(join(ROOT, file), 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        for (const re of banned) if (re.test(line)) offenders.push(`${file}:${i + 1} ${re.source}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
   // CLAUDE.md rule 16 and D18: no em dashes or en dashes in player-facing text.
   it('has no em dashes or en dashes in engine or ui source', () => {
     const offenders: string[] = [];

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Built data files are served at the root: /counties.json is data/counties.json.
+  publicDir: 'data',
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',

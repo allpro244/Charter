@@ -7,6 +7,7 @@
   --fg: #d5d8dc;
   --dim: #7a8087;
   --rule: #23282e;
+  --row: #12161b;
   --alert: #ff5c3a;
   --positive: #3ad07a;
   --font: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -28,15 +29,18 @@ body {
 }
 
 .desk {
-  padding: 8px 12px;
+  padding: 6px 12px 40px;
 }
 
 .bar {
   display: flex;
-  justify-content: space-between;
+  gap: 18px;
+  align-items: baseline;
   border-bottom: 1px solid var(--rule);
   padding-bottom: 4px;
   margin-bottom: 8px;
+  white-space: nowrap;
+  overflow-x: auto;
 }
 
 .title {
@@ -45,11 +49,17 @@ body {
 
 .status {
   color: var(--dim);
+  margin-left: auto;
+}
+
+.dim {
+  color: var(--dim);
 }
 
 table {
   border-collapse: collapse;
   width: 100%;
+  margin-bottom: 12px;
 }
 
 th,
@@ -57,6 +67,7 @@ td {
   padding: 1px 8px;
   text-align: left;
   white-space: nowrap;
+  vertical-align: top;
 }
 
 th {
@@ -65,15 +76,194 @@ th {
   border-bottom: 1px solid var(--rule);
 }
 
+td.indent {
+  padding-left: 24px;
+}
+
+tr.total td {
+  border-top: 1px solid var(--rule);
+  font-weight: bold;
+}
+
+tr.memo-row td {
+  color: var(--dim);
+}
+
+tr.row {
+  cursor: pointer;
+}
+
+tr.row:hover td {
+  background: var(--row);
+}
+
 .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.alert {
+.alert,
+tr.alert td {
   color: var(--alert);
 }
 
-.positive {
+.positive,
+tr.positive td {
   color: var(--positive);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.cols > table {
+  min-width: 0;
+}
+
+.start-cols {
+  grid-template-columns: 3fr 2fr;
+}
+
+.pending {
+  border: 1px solid var(--alert);
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.pending-title {
+  color: var(--alert);
+  font-weight: bold;
+}
+
+.options {
+  margin-top: 4px;
+}
+
+.key {
+  background: none;
+  border: 1px solid var(--rule);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 1px 8px;
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.key:hover {
+  border-color: var(--fg);
+}
+
+.keys {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+  padding: 4px 12px;
+  color: var(--dim);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.keys-inline {
+  margin-top: 8px;
+}
+
+input,
+.filter {
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 2px 6px;
+  margin: 4px 0;
+  width: 100%;
+  max-width: 420px;
+}
+
+pre.memo {
+  border: 1px solid var(--rule);
+  padding: 6px 10px;
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+
+.mapwrap {
+  width: 100%;
+}
+
+.map {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--bg);
+}
+
+.county {
+  fill: #151a20;
+  stroke: #2b323a;
+  stroke-width: 0.3;
+}
+
+.county.hover {
+  stroke: var(--fg);
+  stroke-width: 0.8;
+}
+
+.metro {
+  fill: var(--dim);
+  stroke: var(--bg);
+  stroke-width: 0.5;
+}
+
+.metro.startable {
+  fill: var(--positive);
+  cursor: pointer;
+}
+
+.metro.selected {
+  fill: var(--alert);
+  stroke: var(--fg);
+}
+
+.branch line {
+  stroke: var(--positive);
+  stroke-width: 1.2;
+}
+
+.rival {
+  fill: var(--alert);
+}
+
+.maphover {
+  min-height: 60px;
+  margin-top: 6px;
+}
+
+.stats {
+  width: auto;
+}
+
+.spark {
+  display: block;
+}
+
+.spark polyline {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 1;
+}
+
+@media (max-width: 900px) {
+  .cols,
+  .start-cols {
+    grid-template-columns: 1fr;
+  }
 }

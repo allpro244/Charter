@@ -20,13 +20,13 @@ Claude Code downloads, builds, and calibrates. The owner pastes the files, opens
 Done: `raw/manifest.json` lists every source with a status 200 and a hash; tests pass; map renders every US county with real population on hover; every startable metro has all SYSTEMS.md (Part 2) fields; `data/calibration.ts` has at least charge-off, ROA, and NIM bands marked verified; perf harness reports a time.
 
 ## Phase 1: Ledger, wealth, feed skeleton
-- [ ] Player bank in the chosen metro, cash and deposits sized from local data, Fed funds rate, monthly accrual and close, quarterly call report.
-- [ ] Leverage ratio and closure below 2%.
-- [ ] Start choice: charter new or take over a generated bank.
-- [ ] Personal wealth: cash, shares, salary, dividends, net worth.
-- [ ] Failure sequence v1.
-- [ ] Event stream skeleton: feed, pending queue, market events only.
-- [ ] UI per DESIGN.md Part 3: FEED, BS, IS, ME, MAP, DEBUG, ticker with speed keys.
+- [x] Player bank in the chosen metro, cash and deposits sized from local data, Fed funds rate, monthly accrual and close, quarterly call report.
+- [x] Leverage ratio and closure below 2%.
+- [x] Start choice: charter new or take over a generated bank.
+- [x] Personal wealth: cash, shares, salary, dividends, net worth.
+- [x] Failure sequence v1.
+- [x] Event stream skeleton: feed, pending queue, market events only.
+- [x] UI per DESIGN.md Part 3: FEED, BS, IS, ME, MAP, DEBUG, ticker with speed keys.
 Done: 30 year random run, A = L + E every tick; dividends reconcile; 300 banks x 40 years under 60 seconds.
 Play gate: 30 minutes. Does the ticker feel right? Is the desk readable?
 
