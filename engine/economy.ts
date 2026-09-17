@@ -204,8 +204,11 @@ export function economyMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const e = world.economy;
   const r = world.rng;
-  e.oilPrev = e.oil;
-  e.hpiPrev = e.hpi;
+  // Previous values are last month's recorded ones, so a shock applied
+  // between closes (a scripted bust, a test) is seen by the sector step.
+  const last = e.hist[e.hist.length - 1];
+  e.oilPrev = last ? last.oil : e.oil;
+  e.hpiPrev = last ? last.hpi : e.hpi;
   step(e, r, ctx);
   fedStep(e, r, ctx);
   nationalStep(e, r, ctx);
@@ -222,7 +225,22 @@ export function economyMonthly(ctx: Ctx): void {
   }
   e.nationalMomentum = w > 0 ? nm / w : 0;
   countyStep(world);
+  e.hist.push({ month: e.month, sectors: { ...e.sectors }, hpi: e.hpi, unemployment: e.unemployment, oil: e.oil });
+  if (e.hist.length > 13) e.hist.shift();
   e.month += 1;
+}
+
+// Twelve month log return of a sector index, or of home prices.
+export function sectorReturn12(e: Economy, s: Sector): number {
+  const first = e.hist[0];
+  if (!first) return 0;
+  return Math.log(e.sectors[s] / first.sectors[s]);
+}
+
+export function hpiReturn12(e: Economy): number {
+  const first = e.hist[0];
+  if (!first) return 0;
+  return Math.log(e.hpi / first.hpi);
 }
 
 // Pure helper for tests and the desk: the local move for an exposure vector.

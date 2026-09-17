@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { totalAssets, totalEquity, totalLiabilities } from '../engine/ledger';
 import { createBank, createWorld } from '../engine/state';
 import { assertWorldBalanced, tick } from '../engine/tick';
-import { dateOf, dayOf, formatDate, isMonthEnd, isQuarterEnd, monthIndex } from '../engine/time';
+import { dateOf, dayOf, daysInMonth, formatDate, isMonthEnd, isQuarterEnd, monthIndex } from '../engine/time';
+import { poolInterest } from '../engine/credit';
 
 describe('time', () => {
   it('day 0 is Monday 2024-01-01', () => {
@@ -66,20 +67,18 @@ describe('tick', () => {
       securitiesAFS: 15_000_000,
     });
     const startEquity = totalEquity(bank.acct);
-    // Rivals reprice monthly with the Fed, so track the yield in force.
+    expect(bank.pools.length).toBeGreaterThan(0);
+    expect(bank.pools.reduce((s, p) => s + p.balance, 0)).toBe(70_000_000);
+    // Pool interest is performing balance x rate x days/365, month by month.
     let expectedLoanInterest = 0;
-    let yieldInForce = bank.loanYield;
-    let daysInMonth = 0;
     for (let i = 0; i < 366; i++) {
+      if (isMonthEnd(world.day + 1)) {
+        const { y, m } = dateOf(world.day + 1);
+        for (const p of bank.pools) expectedLoanInterest += poolInterest(p, daysInMonth(y, m));
+      }
       tick(world);
-      daysInMonth += 1;
       const a = bank.acct;
       expect(totalAssets(a)).toBe(totalLiabilities(a) + totalEquity(a));
-      if (isMonthEnd(world.day)) {
-        expectedLoanInterest += Math.round((70_000_000 * yieldInForce * daysInMonth) / 365);
-        yieldInForce = bank.loanYield;
-        daysInMonth = 0;
-      }
     }
     assertWorldBalanced(world);
     expect(bank.reports.length).toBe(4);
@@ -91,7 +90,7 @@ describe('tick', () => {
     // A plausible community bank earns something, and equity moved by exactly net income after tax.
     const ni = year!.interestLoans + year!.interestSecurities + year!.interestCash
       - (year!.interestChecking + year!.interestSavings + year!.interestMmda + year!.interestCd + year!.interestBrokered + year!.interestBorrowings)
-      - (year!.salaries + year!.occupancy + year!.otherExpense + year!.assessment) - year!.tax;
+      - year!.provision - (year!.salaries + year!.occupancy + year!.otherExpense + year!.assessment) - year!.tax;
     expect(totalEquity(bank.acct) - startEquity).toBe(ni - bank.dividendsPaid);
     expect(bank.dividendsPaid).toBeGreaterThan(0);
     expect(bank.reports[3]!.roa).toBeGreaterThan(-0.02);

@@ -11,6 +11,10 @@ import { type Rng, derive, hashString, pick, randLogNormal, randNormal, rand } f
 import { type Bank, type CountyState, type MetroState, type World, createBank, nextId } from './state';
 import { defaultSalary } from './wealth';
 import { money } from './format';
+import { makeOfficer } from './officers';
+import { generateApplication, ccoReview } from './borrowers';
+import { inheritBook } from './loans';
+import { totalAssets } from './ledger';
 
 export function startableMetros(world: World): MetroState[] {
   return Object.values(world.geo.metros)
@@ -169,6 +173,7 @@ export function startCharter(ctx: Ctx, opts: StartCharter): Bank {
   bank.franchise.baseShare = 0;
   bank.franchise.openedDay = world.day;
   bank.dividendPayout = 0;
+  bank.officers.push(makeOfficer(world, pickRng(world, `cco:${bank.id}`), 'cco', terms.raise * 8, 50));
   attachPlayer(ctx, bank, Math.round(invest / terms.sharePrice), invest);
   emit(ctx, 'system', `${bank.name} chartered in ${metro.name} with ${money(terms.raise)} of capital. You put in ${money(invest)} for ${((invest / terms.raise) * 100).toFixed(0)}% of the shares.`, {
     severity: 'good',
@@ -202,10 +207,25 @@ export function startTakeover(ctx: Ctx, opts: StartTakeover): Bank {
     securitiesAFS: Math.round(c.securities * 0.7),
     securitiesHTM: c.securities - Math.round(c.securities * 0.7),
     shares: Math.round(c.equity / 10),
+    criticized: c.criticizedShare,
   });
   bank.charteredDay = world.day - c.yearsOld * 365;
   bank.franchise.openedDay = bank.charteredDay;
   bank.takeover = { criticizedShare: c.criticizedShare, seed: c.seed };
+  // Someone else's problems: an existing CCO and a book of real loans.
+  const r = derive(world.seed, c.seed);
+  bank.officers.push(makeOfficer(world, r, 'cco', totalAssets(bank.acct), 45));
+  const county = world.geo.counties[bank.homeCounty as string];
+  if (county) {
+    const apps = [];
+    const n = Math.min(120, Math.max(25, Math.round(c.assets / 4_000_000)));
+    for (let i = 0; i < n; i++) {
+      const app = generateApplication(world, bank, county, r);
+      ccoReview(app, bank, bank.officers[0]?.skill ?? 40, r);
+      apps.push(app);
+    }
+    inheritBook(ctx, bank, apps, r, c.criticizedShare);
+  }
   const shares = Math.round(bank.shares * c.stake);
   // A secondary purchase: cash goes to the selling holders, not the bank.
   attachPlayer(ctx, bank, shares, c.price);

@@ -157,6 +157,16 @@ tr.positive td {
   border-color: var(--fg);
 }
 
+.key.on {
+  border-color: var(--fg);
+  font-weight: bold;
+}
+
+.key:disabled {
+  color: var(--dim);
+  cursor: default;
+}
+
 .keys {
   position: fixed;
   left: 0;

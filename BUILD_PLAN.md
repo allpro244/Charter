@@ -31,19 +31,19 @@ Done: 30 year random run, A = L + E every tick; dividends reconcile; 300 banks x
 Play gate: 30 minutes. Does the ticker feel right? Is the desk readable?
 
 ## Phase 2: Credit engine and earnings review
-- [ ] Borrower generator per county from real industry shares, income distribution, and home prices (D43).
-- [ ] Credit memo per D32: visible fields, small hidden term, CCO summary and red flags.
-- [ ] Application flow: pause, approve / counter / decline, decision record on the loan.
-- [ ] Delegation dial and written loan policy; auto-decisions under policy with CCO error.
-- [ ] Relationship book with cap and roll-to-pool (D29). Pools with grade buckets, vintages, monthly migration matrix.
-- [ ] Loan lifecycle: funding, amortization, payment, delinquency, default, workout, foreclosure, REO, sale.
-- [ ] Loss model from sector index, national cycle, borrower fields, collateral. Concentration correlation.
-- [ ] CECL-style reserve, quarterly.
-- [ ] Attribution events on every default (D34).
-- [ ] Earnings review screen (QTR) with full attribution, ties to ledger to the dollar.
-- [ ] Officers v1: CCO only.
-- [ ] Event stream: borrower events (applications, missed payments, payoffs, exception requests).
-- [ ] UI: LOANS (book, pools, policy, dial), QTR, drill from pool to sample loans.
+- [x] Borrower generator per county from real industry shares, income distribution, and home prices (D43).
+- [x] Credit memo per D32: visible fields, small hidden term, CCO summary and red flags.
+- [x] Application flow: pause, approve / counter / decline, decision record on the loan.
+- [x] Delegation dial and written loan policy; auto-decisions under policy with CCO error.
+- [x] Relationship book with cap and roll-to-pool (D29). Pools with grade buckets, vintages, monthly migration matrix.
+- [x] Loan lifecycle: funding, amortization, payment, delinquency, default, workout, foreclosure, REO, sale.
+- [x] Loss model from sector index, national cycle, borrower fields, collateral. Concentration correlation.
+- [x] CECL-style reserve, quarterly.
+- [x] Attribution events on every default (D34).
+- [x] Earnings review screen (QTR) with full attribution, ties to ledger to the dollar.
+- [x] Officers v1: CCO only.
+- [x] Event stream: borrower events (applications, missed payments, payoffs, exception requests).
+- [x] UI: LOANS (book, pools, policy, dial), QTR, drill from pool to sample loans.
 Done: scripted energy bust produces plausible losses in a Midland start and near-zero energy losses in a Boston start; charge-offs by type in FDIC bands across 50 seeds; disciplined-underwriter test beats approve-everything test; dial at zero routes every loan; perf test passes with pools.
 Feel gate (D36): one metro, one bank, one hour, played twice in two very different cities. Is underwriting fun? Can the player see themselves getting better? Does the earnings review explain every dollar? No Phase 3 until yes.
 

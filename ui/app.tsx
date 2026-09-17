@@ -14,6 +14,8 @@ import { type Unit, unitFor } from './format';
 import { MapView, SHADES, type Shade } from './map';
 import { BalanceSheetScreen, DebugScreen, FeedScreen, IncomeScreen, MeScreen, PendingPanel, StatusBar } from './screens';
 import { StartPanel } from './start';
+import { LoansScreen } from './loans';
+import { QtrScreen } from './qtr';
 
 type Screen = 'FEED' | 'BS' | 'IS' | 'LOANS' | 'FUND' | 'OFF' | 'RIVALS' | 'ME' | 'QTR' | 'MAP' | 'DEBUG';
 const SCREEN_KEYS: Record<string, Screen> = { f: 'FEED', b: 'BS', i: 'IS', l: 'LOANS', u: 'FUND', o: 'OFF', r: 'RIVALS', w: 'ME', q: 'QTR', m: 'MAP', d: 'DEBUG' };
@@ -286,9 +288,11 @@ export function App() {
           }}
         />
       )}
+      {screen === 'LOANS' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
+      {screen === 'QTR' && bank && <QtrScreen bank={bank} unit={unit} />}
       {screen === 'MAP' && <MapView world={world} geo={loaded.geo} mode="play" shade={shade} selectedMetro={null} onSelectMetro={() => undefined} />}
       {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk />}
-      {(screen === 'LOANS' || screen === 'FUND' || screen === 'OFF' || screen === 'RIVALS' || screen === 'QTR') && (
+      {(screen === 'FUND' || screen === 'OFF' || screen === 'RIVALS') && (
         <p className="dim">{screen}: not built yet. See BUILD_PLAN.md.</p>
       )}
       <footer className="keys">

@@ -2,11 +2,13 @@
 // No classes, no methods, no Dates. Save is JSON.stringify(world).
 
 import { type Accounts, type DepositType, type IncomeStatement, emptyAccounts, emptyIS } from './ledger';
-import { type Rng, makeRng } from './rng';
+import { type Rng, derive, hashString, makeRng } from './rng';
+import { mixFor, seedPools } from './credit';
 import { SECTORS, type Sector, type WorldData } from '../data/types';
 
-export const LOAN_TYPES = ['ci', 'cre_oo', 'cre_inv', 'construction', 'resi', 'consumer', 'ag', 'energy'] as const;
-export type LoanType = (typeof LOAN_TYPES)[number];
+import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from './loantypes';
+export { GRADES, LOAN_TYPES, emptyByType };
+export type { LoanType };
 
 export type BankKind = 'player' | 'rival' | 'aggregate';
 export type BankStatus = 'open' | 'closing' | 'failed' | 'acquired';
@@ -113,6 +115,153 @@ export interface Bank {
   branches: Branch[];
   franchise: { baseShare: number; openedDay: number }; // deposit franchise in the home county
   takeover: { criticizedShare: number; seed: number } | null; // inherited book condition, used by credit
+  pools: Pool[];
+  loans: Loan[]; // relationship book, player's bank only (D29)
+  loanMix: Record<LoanType, number>; // origination mix for pooled lending
+  loansToDeposits: number; // target for pooled origination
+  policy: LoanPolicy;
+  dial: { maxAuto: number; minGrade: number }; // above maxAuto dollars or worse than minGrade comes to the player (D20)
+  officers: Officer[];
+  reviews: QuarterReview[]; // earnings reviews, player's bank only (D34)
+  interestByType: Record<LoanType, number>; // quarter to date
+  chargeOffsByType: Record<LoanType, number>; // quarter to date
+  recoveriesByType: Record<LoanType, number>; // quarter to date
+  originationsByType: Record<LoanType, number>; // year to date
+  originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
+  applications: { received: number; toDesk: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
+  losses: LossRecordState[]; // relationship book losses, quarter to date
+  lifetimeChargeOffsByType: Record<LoanType, number>;
+}
+
+export interface LossRecordState {
+  day: number;
+  loanId: string;
+  borrower: string;
+  type: LoanType;
+  amount: number;
+  decidedBy: string;
+  decidedOn: number;
+  signal: string;
+}
+
+// A pool: many loans of one type and vintage as one record (D29).
+export interface Pool {
+  type: LoanType;
+  vintage: number; // year
+  count: number;
+  balance: number;
+  grades: number[]; // GRADES balances by grade, sum = balance
+  rate: number; // weighted annual coupon
+  origBalance: number;
+  cumLoss: number;
+  termMonths: number;
+  ageMonths: number;
+}
+
+export type LoanStatus = 'current' | 'late30' | 'late60' | 'late90' | 'nonaccrual' | 'workout' | 'reo' | 'paid' | 'chargedOff';
+
+export interface Memo {
+  purpose: string;
+  amount: number;
+  termMonths: number;
+  rate: number; // requested
+  dscr: number; // debt service coverage (businesses) or inverse of DTI for households
+  ltv: number;
+  leverage: number; // debt to EBITDA for businesses, debt to income for households
+  guarantor: boolean;
+  collateralType: string;
+  collateralValue: number;
+  paymentHistory: 'clean' | 'minor' | 'poor' | 'none';
+  tenureYears: number;
+  sector: Sector;
+  income: number; // revenue or household income
+  netWorth: number;
+  employees: number;
+  summary: string; // CCO summary, quality by skill
+  redFlags: string[]; // what the CCO caught
+  suggestedGrade: number;
+}
+
+export interface Loan {
+  id: string;
+  type: LoanType;
+  county: string;
+  borrower: string;
+  memo: Memo;
+  originated: number; // day
+  principal: number;
+  balance: number;
+  rate: number;
+  termMonths: number;
+  paymentDay: number; // 1 to 28
+  payment: number; // monthly P and I
+  grade: number;
+  status: LoanStatus;
+  monthsLate: number;
+  accrued: number; // interest accrued and unpaid, part of interestReceivable
+  truePd: number; // annual, hidden from the desk
+  trueLgd: number;
+  hidden: number; // the small hidden term (D32)
+  decision: { by: 'player' | 'auto' | 'inherited'; day: number; countered: boolean; note: string };
+  attribution: string | null; // set on default
+  lossToDate: number;
+  reoValue: number;
+  signals: { field: string; contribution: number; text: string }[]; // visible score at approval
+}
+
+export interface LoanPolicy {
+  maxLtv: Record<LoanType, number>;
+  minDscr: number;
+  maxLeverage: number;
+  requireGuarantor: boolean;
+  maxSize: number; // dollars, single loan
+  allowed: Record<LoanType, boolean>;
+  sectorCap: number; // share of loans in one sector
+  version: number;
+}
+
+export type OfficerRole = 'cco' | 'cfo' | 'clo' | 'coo';
+
+export interface Officer {
+  id: string;
+  role: OfficerRole;
+  name: string;
+  skill: number; // 0 to 100
+  salary: number; // annual
+  hiredDay: number;
+  loyalty: number; // 0 to 1
+}
+
+export interface QuarterReview {
+  quarter: string;
+  day: number;
+  netIncome: number;
+  interestByBook: { book: string; amount: number }[];
+  depositCostByType: { type: string; amount: number }[];
+  otherInterestExpense: number;
+  otherInterestIncome: number;
+  lossesByLoan: { loan: string; type: LoanType; amount: number; decidedBy: string; decidedOn: number; signal: string }[];
+  lossesByPool: { type: LoanType; amount: number }[];
+  recoveries: number;
+  provision: number;
+  feeIncome: number;
+  securitiesGains: number;
+  overhead: { salaries: number; occupancy: number; other: number; assessment: number };
+  tax: number;
+  ledgerNetIncome: number; // must equal netIncome
+}
+
+export function defaultPolicy(): LoanPolicy {
+  return {
+    maxLtv: { ci: 0.8, cre_oo: 0.8, cre_inv: 0.75, construction: 0.8, resi: 0.9, consumer: 1.0, ag: 0.7, energy: 0.65 },
+    minDscr: 1.2,
+    maxLeverage: 4,
+    requireGuarantor: false,
+    maxSize: 5_000_000,
+    allowed: { ci: true, cre_oo: true, cre_inv: true, construction: true, resi: true, consumer: true, ag: true, energy: true },
+    sectorCap: 0.35,
+    version: 1,
+  };
 }
 
 export interface Branch {
@@ -170,6 +319,15 @@ export interface Economy {
   nationalMomentum: number; // employment-weighted sector move last month
   oilPrev: number | null;
   hpiPrev: number | null;
+  hist: EconomySnapshot[]; // last 13 month ends, oldest first
+}
+
+export interface EconomySnapshot {
+  month: number;
+  sectors: Record<Sector, number>;
+  hpi: number;
+  unemployment: number;
+  oil: number;
 }
 
 export interface CountyState {
@@ -354,6 +512,7 @@ export function initialEconomy(data: WorldData | null): Economy {
     nationalMomentum: 0,
     oilPrev: null,
     hpiPrev: null,
+    hist: [],
   };
 }
 
@@ -484,6 +643,7 @@ export interface BankSpec {
   securitiesAFS?: number;
   securitiesHTM?: number;
   shares?: number;
+  criticized?: number; // share of loans graded 6 or worse at creation
 }
 
 export function createBank(world: World, spec: BankSpec): Bank {
@@ -547,6 +707,22 @@ export function createBank(world: World, spec: BankSpec): Bank {
     branches: [],
     franchise: { baseShare: 0, openedDay: world.day },
     takeover: null,
+    pools: [],
+    loans: [],
+    loanMix: emptyByType(0),
+    loansToDeposits: 0.8,
+    policy: defaultPolicy(),
+    dial: { maxAuto: 250_000, minGrade: 5 },
+    officers: [],
+    reviews: [],
+    interestByType: emptyByType(0),
+    chargeOffsByType: emptyByType(0),
+    recoveriesByType: emptyByType(0),
+    originationsByType: emptyByType(0),
+    originationAppetite: 1,
+    applications: { received: 0, toDesk: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
+    losses: [],
+    lifetimeChargeOffsByType: emptyByType(0),
   };
   world.banks[bank.id] = bank;
   world.bankOrder.push(bank.id);
@@ -562,7 +738,15 @@ export function createBank(world: World, spec: BankSpec): Bank {
     });
     if (county && county.depositPool > 0) bank.franchise.baseShare = core / county.depositPool;
   }
+  if (acct.loans > 0) seedPools(world, bank, acct.loans, derive(world.seed, hashString(`pools:${bank.id}:${bank.name}`)), spec.criticized ?? 0.05);
+  else bank.loanMix = seedMix(world, bank);
   return bank;
+}
+
+function seedMix(world: World, bank: Bank): Record<LoanType, number> {
+  const county = bank.homeCounty ? world.geo.counties[bank.homeCounty] : undefined;
+  // Same rule as the pooled book, kept in credit.ts.
+  return mixFor(county);
 }
 
 // A branch costs about six full-time salaries at the county's real wage

@@ -6,10 +6,15 @@
 // 11, 21; D30.)
 
 import { calibration } from '../data/calibration';
+import { originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
 import { type Ctx } from './ctx';
 import { depositRatesMonthly, depositsDaily } from './deposits';
 import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
+import { loansDaily, loansMonthly } from './loans';
+import { officerPayroll } from './officers';
+import { reviewQuarterly } from './review';
+import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
 import {
   type Accounts,
   type DepositType,
@@ -28,7 +33,7 @@ import {
 } from './ledger';
 import { regulationMonthly } from './regulation';
 import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP } from './state';
-import { dateOf, formatDate, isMonthEnd, isQuarterEnd, isYearEnd, quarterOf } from './time';
+import { dateOf, daysInMonth, formatDate, isMonthEnd, isQuarterEnd, isYearEnd, quarterOf } from './time';
 import { wealthMonthly, wealthQuarterly } from './wealth';
 
 export interface TickResult {
@@ -67,9 +72,13 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
     case 'failure':
       // Acknowledged. The desk returns to the map.
       return;
+    case 'loan_application':
+      decideApplication(ctx, pending, decision);
+      return;
+    case 'loan_batch':
+      decideBatch(ctx, pending, decision);
+      return;
     default:
-      void ctx;
-      void decision;
       return;
   }
 }
@@ -100,6 +109,9 @@ function daily(ctx: Ctx): void {
     adb.subDebt += a.subDebt;
   }
   depositsDaily(ctx);
+  applicationsDaily(ctx);
+  const player = world.playerBankId ? world.banks[world.playerBankId] : undefined;
+  if (player && isLive(player)) loansDaily(ctx, player);
   failuresDaily(ctx);
 }
 
@@ -119,13 +131,8 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
   const m = b.is.month;
   m.days += days;
 
-  // Interest income. Loans accrue to a receivable and pools pay at the close.
-  // The credit system keeps b.loanYield on the accruing balance only.
-  const loanInterest = accrue(adb.loans / days, b.loanYield, days);
-  if (loanInterest !== 0) {
-    post(a, { interestReceivable: loanInterest, retainedEarnings: loanInterest });
-    m.interestLoans += loanInterest;
-  }
+  // Loan interest is posted by the credit system (pools pay at the close,
+  // relationship loans accrue to the receivable). Securities and cash here.
   const secInterest = accrue(adb.securitiesAFS / days, b.afsYield, days) + accrue(adb.securitiesHTM / days, b.htmYield, days);
   if (secInterest !== 0) {
     post(a, { cash: secInterest, retainedEarnings: secInterest });
@@ -165,7 +172,7 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
   const avgAssets = (Math.max(0, adb.cash) + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
   let branchCost = 0;
   for (const br of b.branches) branchCost += br.fixedCost;
-  const overhead = accrue(avgAssets, b.overheadRate, days) + accrue(branchCost, 1, days);
+  const overhead = accrue(avgAssets, b.overheadRate, days) + accrue(branchCost + officerPayroll(b), 1, days);
   if (overhead > 0) {
     const salaries = Math.round((overhead * calibration.salariesShareOfNie.typical) / 100);
     const occupancy = Math.round((overhead * calibration.occupancyShareOfNie.typical) / 100);
@@ -190,18 +197,18 @@ function isKey(t: DepositType): 'interestChecking' | 'interestSavings' | 'intere
   }
 }
 
-function collectReceivable(b: Bank): void {
-  const x = b.acct.interestReceivable;
-  if (x !== 0) post(b.acct, { cash: x, interestReceivable: -x });
-}
-
 function monthlyClose(ctx: Ctx): void {
   const { world } = ctx;
+  const { y, m } = dateOf(world.day);
+  const days = daysInMonth(y, m);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
     accrueMonth(ctx, b);
-    collectReceivable(b);
+    if (b.id === world.playerBankId) loansMonthly(ctx, b, days, b.losses);
+    poolsMonthly(ctx, b, days);
+    if (b.id !== world.playerBankId) originateToTarget(ctx, b);
+    refreshLoanYield(b);
   }
   economyMonthly(ctx);
   depositRatesMonthly(ctx);
@@ -223,10 +230,12 @@ function quarterlyClose(ctx: Ctx): void {
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
+    reserveQuarterly(ctx, b);
     assess(b);
     taxQuarter(b);
   }
   wealthQuarterly(ctx);
+  reviewQuarterly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
