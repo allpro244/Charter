@@ -7,7 +7,7 @@ Claude Code downloads, builds, and calibrates. The owner pastes the files, opens
 
 ## Phase 0: Scaffold
 - [x] Vite + TypeScript + Vitest. `engine/`, `ui/`, `data/`, `tests/`.
-- [ ] `engine/state.ts`, `engine/rng.ts`, `engine/tick.ts` with daily/monthly split (D30).
+- [x] `engine/state.ts`, `engine/rng.ts`, `engine/tick.ts` with daily/monthly split (D30).
 - [ ] `data/calibration.ts` with the source-and-verified format (D37), populated by `scripts/calibrate.ts`.
 - [ ] `scripts/fetch-data.ts` per SYSTEMS.md (Part 2): downloads every raw file to `raw/`, logs to `raw/manifest.json`, idempotent.
 - [ ] `scripts/calibrate.ts` per SYSTEMS.md (Part 2): computes verified bands from the FDIC API into `data/calibration.ts`.
@@ -15,8 +15,8 @@ Claude Code downloads, builds, and calibrates. The owner pastes the files, opens
 - [ ] County GeoJSON for the US, simplified for the browser.
 - [ ] Start screen: US map with startable metros (D39).
 - [ ] `data/fixtures/` built from the real subset; every test imports fixtures, never full data.
-- [ ] Empty world runs 365 ticks and round-trips through JSON.
-- [ ] Big-world perf harness: 300 empty banks, 40 years, timer.
+- [x] Empty world runs 365 ticks and round-trips through JSON.
+- [x] Big-world perf harness: 300 empty banks, 40 years, timer.
 Done: `raw/manifest.json` lists every source with a status 200 and a hash; tests pass; map renders every US county with real population on hover; every startable metro has all SYSTEMS.md (Part 2) fields; `data/calibration.ts` has at least charge-off, ROA, and NIM bands marked verified; perf harness reports a time.
 
 ## Phase 1: Ledger, wealth, feed skeleton
