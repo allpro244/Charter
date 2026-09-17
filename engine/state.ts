@@ -576,6 +576,7 @@ export interface Pending {
   day: number;
   kind: PendingKind;
   expires: number | null; // day after which the item resolves itself (auctions close Monday)
+  blocking: boolean; // pauses the ticker until answered; an offer in approval does not
   bankId: string | null;
   title: string;
   lines: string[]; // the body, one line each, terminal style

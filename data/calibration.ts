@@ -104,6 +104,8 @@ export const calibration = {
   cashYieldVsFedFunds: hand(-15, 15, 7, 'basis points', 'Fed IORB minus effective fed funds, 2022 onward'),
   loanSpreadOverFedFunds: hand(150, 350, 250, 'basis points', 'FDIC QBP loan yield vs FEDFUNDS, community banks'),
   rivalDividendPayout: hand(20, 50, 35, 'percent of quarterly earnings', 'FDIC QBP dividends vs net income'),
+  rivalLeverageTarget: hand(7.5, 11, 9, 'percent of assets before a 1.5 point buffer, thinner with risk appetite', 'FDIC QBP community bank leverage ratios: median near 10.5, tenth percentile near 8.5'),
+  rivalSecuritiesShare: hand(12, 28, 20, 'percent of assets, lower with risk appetite', 'FDIC QBP securities to assets at community banks'),
   ceoSalaryPerBillionAssets: hand(150, 400, 250, 'thousands of dollars per year at $1B assets, log scaled', 'Bank CEO pay surveys, community banks'),
   founderCash: hand(2, 10, 5, 'millions of dollars', 'Design choice, no public source: what a de novo organizer group member typically commits'),
   depositRateElasticity: hand(3, 15, 8, 'percent change in deposit share per 100bp above market', 'Fed and FDIC deposit competition studies, community banks'),

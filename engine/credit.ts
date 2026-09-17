@@ -55,6 +55,13 @@ const UP = [0, 0.10, 0.10, 0.10, 0.08, 0.2, 0.12, 0.05, 0];
 export const PD_BY_GRADE = [0.001, 0.002, 0.004, 0.008, 0.015, 0.05, 0.15, 0.4, 1];
 const PD_M = PD_BY_GRADE.map(monthly);
 
+// Macro stress moves the best grades most in relative terms: a pass loan's
+// default risk can rise many times over in a crisis, while a substandard
+// loan's is already high and saturates. Each grade's hazard scales with
+// stress to this power. Downgrades respond to the square root of the
+// grade's multiplier: the 2009 peak moved pass loans into criticized
+// grades at five to six times the normal pace, not twenty five.
+const STRESS_POWER = [1, 1, 1, 0.9, 0.8, 0.6, 0.4, 0.25, 0];
 const NONACCRUAL_GRADE = 7; // grades 7 to 9 do not accrue
 const G = GRADES; // local copy: hot loops must not read a module binding
 const DOWN_M = DOWN.map(monthly);
@@ -241,19 +248,24 @@ export function stressFor(world: World, b: Bank, t: LoanType): number {
     const c = world.geo.counties[b.homeCounty];
     if (c) logS += -5 * p.local * Math.log(c.condition / 100);
   }
+  // A banking crisis adds stress of its own, fading over the three years
+  // after the recession: charge-offs peaked in 2010, after the 2009 trough.
   if (e.crisis && e.regime === 'recession') logS += 0.8;
-  if (e.crisis && e.regime === 'recovery' && e.monthsSinceRecession < 12) logS += 0.4;
-  // Underwriting quality, and concentration: a book heavy in one type
-  // moves together (SYSTEMS.md system 3).
-  logS += Math.log(b.riskTilt);
+  if (e.crisis && e.regime === 'recovery') logS += 0.8 * Math.max(0, 1 - e.monthsSinceRecession / 36);
+  // The environment is clamped to the type's 2009 peak against normal.
+  const macro = Math.max(0.6, Math.min(p.crisisCap, Math.exp(logS)));
+  // The bank's own underwriting quality and concentration are not: a book
+  // heavy in one type moves together (SYSTEMS.md system 3), and one bank
+  // loses three times what its neighbor does in the same year.
+  let own = Math.log(b.riskTilt);
   const loans = b.acct.loans;
   if (loans > 0) {
     let typeBal = 0;
     for (const p of b.pools) if (p.type === t) typeBal += p.balance;
     const share = typeBal / loans;
-    if (share > 0.25) logS += (share - 0.25) * 2;
+    if (share > 0.25) own += (share - 0.25) * 2;
   }
-  return Math.max(0.6, Math.min(p.crisisCap, Math.exp(logS)));
+  return macro * Math.exp(own);
 }
 
 // Interest for one pool over a month: performing balance x rate x days/365.
@@ -298,7 +310,8 @@ export function poolsMonthly(ctx: Ctx, b: Bank, days: number): void {
       g[k] = (g[k] ?? 0) - x;
       paid += x;
     }
-    // Migration. Downgrades scaled by stress, upgrades by its inverse.
+    // Migration. Defaults and downgrades scaled by stress, upgrades by
+    // its inverse; no grade moves more than a quarter of itself a month.
     const s = stress[p.type] * tp.downScale;
     const sInv = 1 / Math.sqrt(s);
     const next = scratch;
@@ -306,8 +319,9 @@ export function poolsMonthly(ctx: Ctx, b: Bank, days: number): void {
     for (let k = 0; k < G; k++) {
       const bal = g[k] as number;
       if (bal <= 0) continue;
-      const pDefault = k < G - 1 ? Math.min(0.5, (PD_M[k] as number) * s) : 0;
-      const pDown = k < G - 2 ? Math.min(0.8, (DOWN_M[k] as number) * s) : 0;
+      const sk = k < 3 ? s : Math.pow(s, STRESS_POWER[k] as number);
+      const pDefault = k < G - 1 ? Math.min(0.25, (PD_M[k] as number) * sk) : 0;
+      const pDown = k < G - 2 ? Math.min(0.25, (DOWN_M[k] as number) * Math.sqrt(sk)) : 0;
       const pUp = k > 0 ? Math.min(0.5, (UP_M[k] as number) * sInv) : 0;
       const dflt = Math.round(bal * pDefault);
       const down = Math.round((bal - dflt) * pDown);
@@ -341,8 +355,18 @@ export function poolsMonthly(ctx: Ctx, b: Bank, days: number): void {
     principal += paid;
     let bal = 0;
     for (let k = 0; k < G; k++) bal += g[k] as number;
+    // A residual under a thousand dollars is written off rather than carried
+    // as a pool of its own.
+    if (bal > 0 && bal < 1_000) {
+      for (let k = 0; k < G; k++) g[k] = 0;
+      chargeOffs += bal;
+      b.chargeOffsByType[p.type] += bal;
+      b.lifetimeChargeOffsByType[p.type] += bal;
+      p.cumLoss += bal;
+      bal = 0;
+    }
     p.balance = bal;
-    p.count = Math.max(0, Math.round(p.count * (p.origBalance > 0 ? Math.min(1, bal / Math.max(1, p.origBalance)) + 0.05 : 1)));
+    p.count = bal > 0 ? Math.max(1, Math.round(bal / tp.avgSize)) : 0;
     if (bal > 0) survivors.push(p);
   }
   b.pools = survivors;
@@ -361,9 +385,28 @@ export function poolsMonthly(ctx: Ctx, b: Bank, days: number): void {
       b.is.month.recoveries += reimb;
     }
   }
-  if (chargeOffs > 0 && b.id === world.playerBankId && chargeOffs > 0.0005 * Math.max(1, a.loans)) {
+  if (chargeOffs > 0 && b.id === world.playerBankId && chargeOffs > 0.001 * Math.max(1, a.loans)) {
     emit(ctx, 'borrower', `Pooled charge-offs of ${money(chargeOffs)} this month`, { severity: 'alert', bankId: b.id });
   }
+}
+
+// Folds one pool into the bank's book: into the pool of the same type and
+// vintage if there is one (an acquired book shares vintages with the
+// buyer's), otherwise as a pool of its own.
+export function absorbPool(b: Bank, q: Pool): void {
+  const p = findPool(b, q.type, q.vintage);
+  if (!p) {
+    b.pools.push(q);
+    return;
+  }
+  const total = p.balance + q.balance;
+  p.rate = total > 0 ? (p.rate * p.balance + q.rate * q.balance) / total : p.rate;
+  p.ageMonths = total > 0 ? Math.round((p.ageMonths * p.balance + q.ageMonths * q.balance) / total) : p.ageMonths;
+  for (let k = 0; k < G; k++) p.grades[k] = (p.grades[k] as number) + (q.grades[k] as number);
+  p.balance = total;
+  p.count += q.count;
+  p.origBalance += q.origBalance;
+  p.cumLoss += q.cumLoss;
 }
 
 // Keeps the newest vintages of each type and merges the older ones into one
@@ -424,17 +467,27 @@ export function originateToTarget(ctx: Ctx, b: Bank): void {
   const target = Math.round(deposits * b.loansToDeposits);
   const gap = target - a.loans;
   if (gap <= 0) return;
-  // Lend up to a twelfth of the gap plus runoff, limited by cash on hand
-  // above a liquidity cushion.
+  // Lend a third of the gap each month, limited by cash on hand above a
+  // liquidity cushion: fast enough to replace the runoff of a book with
+  // short construction and consumer loans in it.
   const cushion = Math.round(0.06 * (a.cash + a.loans + a.securitiesAFS + a.securitiesHTM));
   const room = Math.max(0, a.cash - cushion);
-  const amount = Math.min(room, Math.round(gap / 6));
+  const amount = Math.min(room, Math.round(gap / 3));
   if (amount < 10_000) return;
   let assigned = 0;
   const types = LOAN_TYPES.filter((t) => b.loanMix[t] > 0);
+  // The mix describes the book, not the month's originations: short
+  // types like construction run off faster than mortgages, so each type
+  // gets the month's lending in proportion to its shortfall against its
+  // share of the target book.
+  const held = emptyByType(0);
+  for (const p of b.pools) held[p.type] += p.balance;
+  const short = types.map((t) => Math.max(0, target * b.loanMix[t] - held[t]));
+  const shortSum = short.reduce((s, x) => s + x, 0);
   for (let i = 0; i < types.length; i++) {
     const t = types[i] as LoanType;
-    const x = i === types.length - 1 ? amount - assigned : Math.round(amount * b.loanMix[t]);
+    const weight = shortSum > 0 ? (short[i] as number) / shortSum : b.loanMix[t];
+    const x = i === types.length - 1 ? amount - assigned : Math.round(amount * weight);
     if (x <= 0) continue;
     const rate = baseRate(world, t) + randNormal(world.rng, 0, 0.003);
     addToPool(world, b, t, x, Math.max(0.01, rate), Math.max(1, Math.round(x / TYPE[t].avgSize)), 3);

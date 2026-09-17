@@ -10,8 +10,8 @@ import { chance, randNormal } from './rng';
 import { pct } from './format';
 
 // Monthly transition probabilities. Expansion about 4 years, late cycle about
-// 2, recession about 1, recovery about 1.5: a cycle near 8.5 years, inside
-// the 7 to 12 year band from NBER dates.
+// 2, recession about 1 (a crisis recession about 1.5), recovery about 1.5:
+// a cycle near 8.5 years, inside the 7 to 12 year band from NBER dates.
 const P_EXPANSION_TO_LATE = 1 / 48;
 const P_LATE_TO_RECESSION = 1 / 24;
 const P_LATE_TO_EXPANSION = 1 / 72;
@@ -77,12 +77,26 @@ function step(e: Economy, r: World['rng'], ctx: Ctx): void {
       if (chance(r, P_LATE_TO_RECESSION)) next = 'recession';
       else if (chance(r, P_LATE_TO_EXPANSION)) next = 'expansion';
       break;
-    case 'recession':
-      if (chance(r, e.crisis ? P_CRISIS_TO_RECOVERY : P_RECESSION_TO_RECOVERY)) next = 'recovery';
+    case 'recession': {
+      // Recessions end with a hazard that rises with age rather than a
+      // memoryless draw: post-war recessions ran 6 to 18 months and none
+      // passed two years. A banking crisis recession runs longer (2008
+      // was 18 months) and never ends inside its first year.
+      const floor = e.crisis ? 12 : 6;
+      if (e.regimeMonths >= floor) {
+        const base = e.crisis ? P_CRISIS_TO_RECOVERY : P_RECESSION_TO_RECOVERY;
+        if (chance(r, Math.min(0.6, base * (1 + (e.regimeMonths - floor) / 4)))) next = 'recovery';
+      }
       break;
-    case 'recovery':
-      if (chance(r, P_RECOVERY_TO_EXPANSION)) next = 'expansion';
+    }
+    case 'recovery': {
+      // Recoveries run one to three years with the same rising hazard.
+      // After a banking crisis the first two years are never called an
+      // expansion: unemployment was still above 8 percent in 2011.
+      const floor = e.crisis ? 24 : 6;
+      if (e.regimeMonths >= floor && chance(r, Math.min(0.6, P_RECOVERY_TO_EXPANSION * (1 + (e.regimeMonths - floor) / 6)))) next = 'expansion';
       break;
+    }
   }
   if (next !== prev) {
     e.regime = next;
@@ -112,10 +126,10 @@ function fedStep(e: Economy, r: World['rng'], ctx: Ctx): void {
   const before = e.fedFunds;
   // The Fed moves in 25bp steps most months when away from target, and in
   // 50bp steps when far away or in a recession.
-  if (Math.abs(gap) >= 0.00125 && chance(r, 0.6)) {
+  if (Math.abs(gap) > 0.0015 && chance(r, 0.6)) {
     const size = Math.abs(gap) > 0.015 || e.regime === 'recession' ? 0.005 : 0.0025;
-    const move = Math.sign(gap) * Math.min(size, Math.abs(gap));
-    e.fedFunds = Math.round((e.fedFunds + move) * 10_000) / 10_000;
+    const step = Math.abs(gap) >= size ? size : 0.0025;
+    e.fedFunds = Math.round((e.fedFunds + Math.sign(gap) * step) * 10_000) / 10_000;
   }
   e.fedFunds = Math.max(0.001, e.fedFunds);
   e.fedPath.push(e.fedFunds);
@@ -139,9 +153,13 @@ function fedStep(e: Economy, r: World['rng'], ctx: Ctx): void {
 function nationalStep(e: Economy, r: World['rng'], ctx: Ctx): void {
   const p = REGIME[e.regime];
   const crisisPull = e.crisis && e.regime === 'recession' ? 1 : 0;
+  // A recovery from a banking crisis is jobless and housing keeps falling:
+  // unemployment stayed above 8 percent for three years after 2009 and
+  // home prices fell until 2012. The pull fades over three years.
+  const afterCrisis = e.crisis && e.regime === 'recovery' ? Math.max(0, 1 - e.monthsSinceRecession / 36) : 0;
   const gdpTarget = p.gdp - 0.015 * crisisPull;
   e.gdpGrowth += 0.25 * (gdpTarget - e.gdpGrowth) + randNormal(r, 0, 0.004);
-  const uTarget = p.unemployment + 0.03 * crisisPull;
+  const uTarget = p.unemployment + 0.03 * crisisPull + 0.025 * afterCrisis;
   const prevU = e.unemployment;
   e.unemployment += (e.regime === 'recession' ? 0.15 : 0.06) * (uTarget - e.unemployment) + randNormal(r, 0, 0.0008);
   e.unemployment = Math.max(0.025, e.unemployment);
@@ -150,7 +168,7 @@ function nationalStep(e: Economy, r: World['rng'], ctx: Ctx): void {
   }
   e.inflation += 0.1 * (p.inflation - e.inflation) + randNormal(r, 0, 0.0015);
   e.inflation = Math.max(-0.01, e.inflation);
-  const hpiMonthly = (p.hpiGrowth - 0.1 * crisisPull) / 12 + randNormal(r, 0, 0.004);
+  const hpiMonthly = (p.hpiGrowth - 0.1 * crisisPull - 0.06 * afterCrisis) / 12 + randNormal(r, 0, 0.004);
   e.hpi *= 1 + hpiMonthly;
   e.hpiGrowth = e.hpiGrowth * (11 / 12) + hpiMonthly;
   if (e.month % 12 === 11) {

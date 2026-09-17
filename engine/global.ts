@@ -140,6 +140,7 @@ export function offerForeign(ctx: Ctx, b: Bank, cand: ForeignCandidate): { ok: b
     options: [{ key: 'w', label: 'Walk away (break fee)' }],
     data: { foreign: cand },
     expires: world.day + 182,
+    blocking: false,
   });
   emit(ctx, 'system', `Agreed to buy ${cand.name} in ${c.city} for ${money(cand.priceUsd)}`, { severity: 'good', bankId: b.id });
   return { ok: true, why: 'agreed' };

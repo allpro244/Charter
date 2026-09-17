@@ -247,7 +247,7 @@ function PoolRows({ world, bank, p, unit, open, toggle }: { world: World; bank: 
               <thead>
                 <tr>
                   <th>representative loans (generated from the pool, not stored)</th>
-                  <th className="num">balance</th>
+                  <th className="num">balance {unitLabel(unit)}</th>
                   <th className="num">rate</th>
                   <th className="num">grade</th>
                 </tr>
@@ -256,9 +256,9 @@ function PoolRows({ world, bank, p, unit, open, toggle }: { world: World; bank: 
                 {sample.map((s, i) => (
                   <tr key={i}>
                     <td>{s.name}</td>
-                    <td className="num">{num(s.balance)}</td>
+                    <td className="num">{dollars(s.balance, unit)}</td>
                     <td className="num">{pct(s.rate)}</td>
-                    <td className="num">{s.grade}</td>
+                    <td className="num">g{s.grade}</td>
                   </tr>
                 ))}
               </tbody>

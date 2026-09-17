@@ -6,15 +6,16 @@
 
 import { calibration } from '../data/calibration';
 import { fairPrice, ownership, priceToBook, tangibleEquity } from './capital';
-import { TYPE, consolidatePools, lgdNow, PD_BY_GRADE, stressFor } from './credit';
+import { TYPE, absorbPool, consolidatePools, lgdNow, PD_BY_GRADE, stressFor } from './credit';
 import { type Ctx, addPending, emit, milestone } from './ctx';
 import { type Account, type Accounts, leverageRatio, post, totalAssets, totalDeposits } from './ledger';
 import { GRADES } from './loantypes';
 import { PCA_WELL } from './regulation';
+import { marketYield } from './funding';
 import { expandState } from './rivals';
 import { type ForeignCandidate, closeForeign } from './global';
 import { chance, rand, randNormal } from './rng';
-import { type Bank, type Decision, type Lot, type Pending, type Pool, type World, playerBank } from './state';
+import { type Bank, type Decision, type Lot, type LotKind, type Pending, type Pool, type World, nextId, playerBank } from './state';
 import { formatDate } from './time';
 import { money, pct } from './format';
 
@@ -119,7 +120,7 @@ export function assume(ctx: Ctx, buyer: Bank, snap: Snapshot, premium: number, l
     const q: Pool = { ...p, grades: p.grades.map((g) => Math.round(g * scale)) };
     q.balance = q.grades.reduce((x, y) => x + y, 0);
     pooled += q.balance;
-    buyer.pools.push(q);
+    absorbPool(buyer, q);
   }
   const diff = fairLoans - pooled;
   if (diff !== 0 && buyer.pools.length > 0) {
@@ -128,9 +129,29 @@ export function assume(ctx: Ctx, buyer: Bank, snap: Snapshot, premium: number, l
     big.grades[2] = (big.grades[2] ?? 0) + diff;
   }
   consolidatePools(buyer);
+  const taken: Record<LotKind, { sum: number; first: Lot | null }> = { afs: { sum: 0, first: null }, htm: { sum: 0, first: null } };
   for (const l of snap.lots) {
     const fair = l.kind === 'afs' ? Math.round(l.cost * (afsFair / Math.max(1, s.securitiesAFS))) : Math.round(l.cost * (htmFair / Math.max(1, s.securitiesHTM)));
-    if (fair > 0) buyer.lots.push({ ...l, cost: fair, fair, purchasedDay: world.day });
+    if (fair > 0) {
+      const lot: Lot = { ...l, cost: fair, fair, purchasedDay: world.day };
+      buyer.lots.push(lot);
+      taken[l.kind].sum += fair;
+      taken[l.kind].first ??= lot;
+    }
+  }
+  // Lots are rounded one by one and the account took the total: the
+  // difference lands on one lot, or a lot is made for a book the target
+  // carried without lots, so lots and the ledger agree to the dollar.
+  for (const kind of ['afs', 'htm'] as const) {
+    const diff = (kind === 'afs' ? afsFair : htmFair) - taken[kind].sum;
+    const first = taken[kind].first;
+    if (diff === 0) continue;
+    if (first) {
+      first.cost += diff;
+      first.fair += diff;
+    } else if (diff > 0) {
+      buyer.lots.push({ id: nextId(world, 's'), kind, product: 'agency', cost: diff, coupon: marketYield(world, 3), duration: 3, purchasedDay: world.day, fair: diff });
+    }
   }
   for (const br of snap.branches) {
     if (buyer.branches.some((x) => x.county === br.county)) {
@@ -370,11 +391,13 @@ export function makeOffer(ctx: Ctx, buyer: Bank, targetId: string, priceToBookOf
     options: [{ key: 'w', label: 'Walk away (break fee)' }],
     data: { targetId, price, stockShare, priceToBook: priceToBookOffered, mark },
     expires: closing,
+    blocking: false,
   });
   emit(ctx, 'system', `Agreed to buy ${target.name} for ${money(price)} (${priceToBookOffered.toFixed(2)}x book). Approval pending.`, { severity: 'good', bankId: buyer.id });
-  // A rival may top the bid within the month.
+  // The most acquisitive larger rival in the state may top the bid.
   const rivals = world.bankOrder.map((id) => world.banks[id] as Bank).filter((b) => b.kind === 'rival' && b.status === 'open' && b.ai && b.state === target.state && b.id !== buyer.id && totalAssets(b.acct) > totalAssets(target.acct) * 1.5 && leverageRatio(b.acct) >= PCA_WELL);
-  const challenger = rivals.find((b) => chance(world.rng, 0.35 * (b.ai?.acquisitive ?? 0)));
+  const keenest = rivals.length > 0 ? rivals.reduce((x, y) => ((y.ai?.acquisitive ?? 0) > (x.ai?.acquisitive ?? 0) ? y : x)) : undefined;
+  const challenger = keenest && chance(world.rng, 0.35 * (keenest.ai?.acquisitive ?? 0)) ? keenest : undefined;
   if (challenger) {
     const topped = Math.round(priceToBookOffered * 1.1 * 100) / 100;
     addPending(ctx, {

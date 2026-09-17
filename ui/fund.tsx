@@ -31,7 +31,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
   const county = bank.homeCounty ? world.geo.counties[bank.homeCounty] : undefined;
   return (
     <div>
-      <div className="cols">
+      <div>
         <table>
           <thead>
             <tr>

@@ -70,7 +70,7 @@ function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; un
   const ok = canGoGlobal(bank);
   return (
     <div>
-      <div className="cols">
+      <div>
         <table>
           <thead>
             <tr>

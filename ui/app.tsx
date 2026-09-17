@@ -90,7 +90,7 @@ export function App() {
         const w = JSON.parse(text) as World;
         if (!w || w.version !== 1) return;
         worldRef.current = w;
-        setPhase(w.playerBankId ? 'play' : 'start');
+        setPhase(w.playerBankId || !loadedRef.current ? 'play' : 'start');
         setSpeedState(0);
         speedRef.current = 0;
         setVersion((v) => v + 1);
@@ -119,6 +119,7 @@ export function App() {
         setPhase('start');
       } else {
         setMissing(r.missing);
+        setHasSave(readSave() !== null);
         setPhase('nodata');
       }
     });
@@ -144,7 +145,7 @@ export function App() {
       while (n-- > 0) {
         const r = tick(world);
         if (isYearEnd(world.day)) writeSave(world);
-        if (r.pending.length > 0 || world.playerBankId === null) {
+        if (r.pending.some((p) => p.blocking) || world.playerBankId === null) {
           paused = true;
           break;
         }
@@ -167,7 +168,7 @@ export function App() {
       if (p.kind === 'failure') {
         setPhase('start');
         setSelectedMetro(null);
-      } else if (world.pending.length === 0) {
+      } else if (!world.pending.some((x) => x.blocking)) {
         setSpeed(resumeRef.current);
       }
       refresh();
@@ -210,7 +211,8 @@ export function App() {
     const save = readSave();
     if (!save) return;
     worldRef.current = save;
-    setPhase(save.playerBankId ? 'play' : 'start');
+    // Without data files there is no start screen; a save with no bank shows the feed.
+    setPhase(save.playerBankId || !loadedRef.current ? 'play' : 'start');
     setSpeed(0);
     refresh();
   }, [setSpeed, refresh]);
@@ -223,8 +225,9 @@ export function App() {
       const world = worldRef.current;
       const k = e.key.toLowerCase();
       if (phase === 'play' && world) {
-        if (world.pending.length > 0) {
-          const p = world.pending[0] as Pending;
+        const blocking = world.pending.find((p) => p.blocking);
+        if (blocking) {
+          const p = blocking;
           const opt = p.options.find((o) => o.key === k);
           if (opt) {
             decide(p, opt.key);
@@ -303,11 +306,20 @@ export function App() {
         <pre className="memo">{missing.join('\n')}</pre>
         <p>Claude Code builds them with:</p>
         <pre className="memo">{'npm run fetch-data\nnpm run build-data'}</pre>
+        <p>A saved world carries its own geography, so a save still loads without the files. The map stays empty until they exist.</p>
+        <p>
+          {hasSave && (
+            <button className="key" onClick={onContinue}>
+              continue saved game
+            </button>
+          )}
+          <input type="file" accept="application/json,.json" onChange={(e) => e.target.files && e.target.files[0] && importSave(e.target.files[0])} />
+        </p>
       </main>
     );
   }
   const world = worldRef.current as World;
-  const loaded = loadedRef.current as Loaded;
+  const loaded: Loaded = loadedRef.current ?? { data: { counties: [], metros: [], states: [], banksByState: {}, national: { asOf: '', fedFunds: 0, dgs3mo: 0, dgs2: 0, dgs10: 0, dgs30: 0, cpiYoY: 0, unemploymentRate: 0, wti: 0, caseShillerYoY: 0, sp500: 0 } }, geo: { type: 'FeatureCollection', features: [] }, manifest: null };
   const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
   const unit: Unit = bank ? unitFor(totalAssets(bank.acct)) : 1;
   void version;
@@ -383,7 +395,7 @@ export function App() {
           }}
         />
       )}
-      {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk onExport={exportSave} onImport={importSave} />}
+      {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk={loadedRef.current !== null} onExport={exportSave} onImport={importSave} />}
       {screen === 'RIVALS' && <RivalsScreen world={world} unit={unit} act={act} />}
       <footer className="keys">
         <span>f feed</span>

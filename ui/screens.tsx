@@ -360,7 +360,7 @@ export function MeScreen({ world, onSalary, onPayout, capital }: { world: World;
   const perShare = bank ? (bank.isPublic && bank.price !== null ? bank.price : bookValuePerShare(bank)) : 0;
   const stakeValue = bank ? Math.round(p.shares * perShare) : 0;
   return (
-    <div className="cols">
+    <div>
       <table>
         <thead>
           <tr>

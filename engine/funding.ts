@@ -131,7 +131,7 @@ export function securitiesRunoff(world: World, b: Bank): void {
   if (htm > 0) post(a, { cash: htm, securitiesHTM: -htm });
 }
 
-export function buySecurities(ctx: Ctx, b: Bank, kind: LotKind, product: Product, amount: number, duration: number): Lot | null {
+export function buySecurities(ctx: Ctx, b: Bank, kind: LotKind, product: Product, amount: number, duration: number, quiet = false): Lot | null {
   const { world } = ctx;
   const a = b.acct;
   amount = Math.round(amount);
@@ -147,7 +147,7 @@ export function buySecurities(ctx: Ctx, b: Bank, kind: LotKind, product: Product
   }
   b.lots.push(lot);
   refreshYields(b);
-  emit(ctx, 'system', `Bought ${money(amount)} of ${duration} year ${PRODUCT_LABEL[product]} at ${pct(coupon)}, ${kind.toUpperCase()}`, { bankId: b.id });
+  if (!quiet) emit(ctx, 'system', `Bought ${money(amount)} of ${duration} year ${PRODUCT_LABEL[product]} at ${pct(coupon)}, ${kind.toUpperCase()}`, { bankId: b.id });
   return lot;
 }
 

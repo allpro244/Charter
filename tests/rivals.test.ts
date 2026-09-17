@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { attractiveness, coreDeposits, splitCounty } from '../engine/deposits';
 import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../engine/ledger';
-import { expandState, randomPolicy, tiltMix } from '../engine/rivals';
+import { adoptPolicy, expandState, randomPolicy } from '../engine/rivals';
 import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
 import { newPlayer, startCharter, startableMetros } from '../engine/start';
@@ -19,14 +19,12 @@ describe('rivals', () => {
     // Give every rival an AI so it prices and grows like a rival.
     const r = makeRng(5);
     for (const id of world.bankOrder) {
-      const b = world.banks[id]!;
-      b.ai = randomPolicy(r);
-      b.riskTilt = 0.5 + 1.3 * b.ai.riskAppetite;
-      tiltMix(b, b.ai.riskAppetite);
-      b.loansToDeposits = 0.65 + 0.3 * b.ai.riskAppetite;
+      adoptPolicy(world.banks[id]!, randomPolicy(r), r);
     }
-    // Failures lag the recession: the capital restoration window runs a
-    // year. A recession's window is its months plus the 24 after it.
+    // Failures lag the recession: losses run for three years after a
+    // banking crisis and the capital restoration window a year more, as
+    // in 2010 to 2012. A recession's window is its months plus the 48
+    // after it.
     const monthly: { recession: boolean; crisis: boolean }[] = [];
     for (let d = 0; d < 40 * 365; d++) {
       tick(world);
@@ -36,7 +34,7 @@ describe('rivals', () => {
     for (let m = 0; m < monthly.length; m++) {
       if (!monthly[m]!.recession) continue;
       const kind = monthly[m]!.crisis ? 2 : 1;
-      for (let k = m; k < Math.min(monthly.length, m + 25); k++) inWindow[k] = Math.max(inWindow[k] ?? 0, kind);
+      for (let k = m; k < Math.min(monthly.length, m + 49); k++) inWindow[k] = Math.max(inWindow[k] ?? 0, kind);
     }
     const months = [0, 0, 0];
     const failures = [0, 0, 0];

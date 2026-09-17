@@ -140,7 +140,10 @@ export function linesMonthly(ctx: Ctx, b: Bank): void {
           const room = Math.max(0, b.acct.cash - Math.round(assets * 0.05));
           const amount = Math.min(grow, room);
           if (amount > 0) {
-            addToPool(world, b, 'cards', amount, baseRate(world, 'cards'), Math.max(1, Math.round(amount / 5000)), 3);
+            // A card book is a blend of prime and subprime accounts that
+            // loses 3 to 4 percent a year in normal times, so it enters the
+            // pool two grades below a commercial origination.
+            addToPool(world, b, 'cards', amount, baseRate(world, 'cards'), Math.max(1, Math.round(amount / 5000)), 4);
             post(b.acct, { loans: amount, cash: -amount });
             b.originationsByType.cards += amount;
           }

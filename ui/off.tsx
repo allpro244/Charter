@@ -11,7 +11,7 @@ import { num, pct } from './format';
 export function OfficersScreen({ world, bank, act }: { world: World; bank: Bank; act: (fn: (ctx: Ctx) => void) => void }) {
   const assets = totalAssets(bank.acct);
   return (
-    <div className="cols">
+    <div>
       <table>
         <thead>
           <tr>

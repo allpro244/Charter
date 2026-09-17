@@ -13,7 +13,8 @@ import { DEPOSIT_TYPES, leverageRatio, netIncome, post, totalAssets, totalDeposi
 import { generateBankName } from './names';
 import { ROLE_LABEL, officerSalary } from './officers';
 import { type Rng, chance, derive, hashString, rand, randNormal } from './rng';
-import { type AiPolicy, type Bank, type CountyState, type World, createBank, nextId, playerBank } from './state';
+import { type AiPolicy, type Bank, type CountyState, type LotKind, type Product, type World, createBank, nextId, playerBank } from './state';
+import { buySecurities } from './funding';
 import { money, pct } from './format';
 import { calibration } from '../data/calibration';
 
@@ -62,13 +63,8 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
     securitiesHTM: securities - Math.round(securities * 0.7),
     criticized: 0.03 + 0.07 * ai.riskAppetite,
   });
-  bank.ai = ai;
   bank.national = opts.national ?? false;
-  bank.riskTilt = 0.5 + 1.3 * ai.riskAppetite;
-  // Appetite tilts the book toward construction and investor CRE, where
-  // the money is made in expansions and lost in busts.
-  tiltMix(bank, ai.riskAppetite);
-  bank.loansToDeposits = 0.65 + 0.3 * ai.riskAppetite;
+  adoptPolicy(bank, ai, r);
   bank.overheadRate = Math.max(0.015, randNormal(r, 0.025, 0.004));
   bank.dividendPayout = calibration.rivalDividendPayout.typical / 100;
   bank.charteredDay = world.day - Math.round((20 + 80 * rand(r)) * 365);
@@ -82,9 +78,24 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
   return bank;
 }
 
+// A bank takes on a policy: underwriting quality follows appetite, with a
+// lognormal spread around it that puts a few banks at two to three times
+// the industry's loss rate in the same environment, as in every failure
+// wave. Appetite also tilts the book toward construction and investor
+// CRE, where the money is made in expansions and lost in busts.
+export function adoptPolicy(bank: Bank, ai: AiPolicy, r: Rng): void {
+  bank.ai = ai;
+  bank.riskTilt = Math.round((0.5 + 1.3 * ai.riskAppetite) * Math.exp(randNormal(r, 0, 0.35)) * 100) / 100;
+  tiltMix(bank, ai.riskAppetite);
+  bank.loansToDeposits = 0.65 + 0.3 * ai.riskAppetite;
+}
+
 export function tiltMix(bank: Bank, appetite: number): void {
   const m = bank.loanMix;
-  const extra = 0.6 * Math.max(0, appetite - 0.4);
+  // Convex in appetite: before 2008 the median bank held construction
+  // near a tenth of loans, the top decile a quarter, the top percentile
+  // near half.
+  const extra = 1.2 * Math.pow(Math.max(0, appetite - 0.4), 1.5);
   if (extra <= 0) return;
   const from = (['resi', 'ci', 'cre_oo', 'consumer'] as const).filter((t) => m[t] > 0);
   const take = extra / Math.max(1, from.length);
@@ -230,6 +241,7 @@ export function rivalsMonthly(ctx: Ctx): void {
     // Growth: the loans to deposits target drifts with appetite and the cycle.
     const cycle = world.economy.regime === 'recession' ? -0.05 : world.economy.regime === 'late' ? 0.03 : 0;
     b.loansToDeposits = Math.max(0.5, Math.min(1.05, 0.65 + 0.3 * ai.riskAppetite + cycle));
+    investIdleCash(ctx, b, ai);
     // Branches against the player: a pushy rival in the same state opens
     // where the player is.
     if (player && b.kind === 'rival' && b.state === player.state && ai.branchPush > 0.5 && b.branches.length < 12 && chance(r, 0.004 * ai.branchPush) && ff >= 0) {
@@ -274,7 +286,28 @@ function distanceKm(a: CountyState, b: CountyState): number {
 // buffer, the excess goes out as a special dividend.
 export function capitalTarget(b: Bank): number {
   const appetite = b.ai?.riskAppetite ?? 0.45;
-  return 0.085 + 0.035 * (1 - appetite);
+  const band = calibration.rivalLeverageTarget;
+  return (band.low + (band.high - band.low) * (1 - appetite)) / 100;
+}
+
+// Rivals keep a bond book: cash above a 6 percent cushion goes into
+// securities in lots of at least 1 percent of assets, up to a share of
+// assets that is lower for banks with more appetite for loans. Lots, so
+// the marks, AOCI and runoff work as they do for the player.
+function investIdleCash(ctx: Ctx, b: Bank, ai: AiPolicy): void {
+  const a = b.acct;
+  const assets = totalAssets(a);
+  if (assets <= 0) return;
+  const band = calibration.rivalSecuritiesShare;
+  const share = (band.low + (band.high - band.low) * (1 - ai.riskAppetite)) / 100;
+  const gap = Math.round(share * assets - (a.securitiesAFS + a.securitiesHTM));
+  const room = a.cash - Math.round(assets * 0.06);
+  const amount = Math.min(gap, room);
+  if (amount < Math.max(10_000, Math.round(assets * 0.01))) return;
+  const duration = Math.round(2 + 5 * ai.riskAppetite);
+  const product: Product = ai.riskAppetite > 0.6 ? 'mbs' : ai.riskAppetite > 0.3 ? 'agency' : 'treasury';
+  const kind: LotKind = chance(ctx.world.rng, 0.3) ? 'htm' : 'afs';
+  buySecurities(ctx, b, kind, product, amount, duration, true);
 }
 
 export function manageCapital(b: Bank): void {
@@ -314,7 +347,7 @@ export function rivalsQuarterly(ctx: Ctx): void {
       const wasForSale = b.forSale;
       b.forSale = b.weakQuarters >= 3 || (b.ai !== null && b.ai.acquisitive < 0.1 && b.weakQuarters >= 1);
       if (b.forSale && !wasForSale && player && (b.state === player.state || (world.geo.states[player.state]?.neighbors.includes(b.state) ?? false))) {
-        emit(ctx, 'rival', `${b.name} (${money(totalAssets(b.acct))}) is quietly for sale after ${b.weakQuarters} weak quarters`, { bankId: b.id });
+        emit(ctx, 'rival', `${b.name} (${money(totalAssets(b.acct))}) is quietly for sale after ${b.weakQuarters} weak quarter${b.weakQuarters === 1 ? '' : 's'}`, { bankId: b.id });
       }
     } else if (b.kind === 'aggregate' && b.represents > 1) {
       // Failures inside the aggregate: the expected count for the quarter.

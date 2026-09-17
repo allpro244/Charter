@@ -61,8 +61,15 @@ export function tangibleBookPerShare(b: Bank): number {
   return b.shares > 0 ? tangibleEquity(b) / b.shares : 0;
 }
 
+// Fair value per share: price to tangible book, but never below what the
+// earnings support or a fifth of total book. A bank whose tangible book
+// is thin from goodwill still trades on its earnings.
 export function fairPrice(world: World, b: Bank): number {
-  return Math.max(0.01, priceToBook(world, b) * tangibleBookPerShare(b));
+  const onBook = priceToBook(world, b) * tangibleBookPerShare(b);
+  const eps = b.shares > 0 ? trailingNetIncome(b) / b.shares : 0;
+  const onEarnings = eps > 0 ? 10 * eps : 0;
+  const floor = 0.2 * bookValuePerShare(b);
+  return Math.max(0.01, onBook, onEarnings, floor);
 }
 
 export function marketCap(b: Bank): number {
@@ -184,13 +191,18 @@ export function ipo(ctx: Ctx, b: Bank, primary: number, playerSharesSold: number
 }
 
 export function buyback(ctx: Ctx, b: Bank, amount: number): number {
+  const { world } = ctx;
   if (!b.isPublic || b.price === null) return 0;
   amount = Math.min(Math.round(amount), Math.max(0, b.acct.cash));
   if (amount <= 0) return 0;
   const after = (tier1Capital(b.acct) - amount) / Math.max(1, totalAssets(b.acct) - b.acct.goodwill - amount);
   if (after < PCA_WELL) return 0;
-  const n = Math.min(b.shares - 1, Math.round(amount / b.price));
+  // At most a twentieth of the shares in one program, and never the
+  // shares the player holds.
+  const held = world.playerBankId === b.id ? world.player.shares : 0;
+  const n = Math.min(Math.round(b.shares * 0.05), b.shares - held - 1, Math.round(amount / b.price));
   if (n <= 0) return 0;
+  amount = Math.round(n * b.price);
   const fromStock = Math.min(b.acct.commonStock, amount);
   post(b.acct, { cash: -amount, commonStock: -fromStock, retainedEarnings: -(amount - fromStock) });
   b.shares -= n;
@@ -200,7 +212,8 @@ export function buyback(ctx: Ctx, b: Bank, amount: number): number {
 
 export function secondary(ctx: Ctx, b: Bank, amount: number): number {
   if (!b.isPublic || b.price === null) return 0;
-  amount = Math.round(amount);
+  // No more than a fifth of the market cap in one offering.
+  amount = Math.min(Math.round(amount), Math.round(marketCap(b) * 0.2));
   if (amount <= 0) return 0;
   const price = b.price * SECONDARY_DISCOUNT;
   const n = Math.round(amount / price);

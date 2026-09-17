@@ -19,6 +19,7 @@ import { rivalsMonthly, rivalsQuarterly } from './rivals';
 import { stockMonthly } from './capital';
 import { dealsMonthly, decideAuction, decideCompetingBid, decideOffer, expireDeals } from './deals';
 import { feesMonthly, linesMonthly, linesYearEnd } from './lines';
+import { emptyByType } from './loantypes';
 import { closeForeign, countriesMonthly, foreignMonthly, globalQuarterly } from './global';
 import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
 import {
@@ -293,6 +294,7 @@ function quarterlyClose(ctx: Ctx): void {
     if (isYearEnd(world.day)) {
       b.is.lastYear = b.is.year;
       b.is.year = emptyIS();
+      b.originationsByType = emptyByType(0);
       linesYearEnd(b);
     }
   }

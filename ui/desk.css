@@ -117,10 +117,21 @@ tr.positive td {
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   align-items: start;
+  overflow-x: auto;
 }
 
-.cols > table {
-  min-width: 0;
+.nowrap {
+  white-space: nowrap;
+}
+
+input.short {
+  width: 6em;
+  margin-right: 6px;
+}
+
+input.amount {
+  width: 11em;
+  margin-right: 6px;
 }
 
 .start-cols {

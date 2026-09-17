@@ -31,7 +31,8 @@ function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; ta
         <tr>
           <td>Price to tangible book (boards ask about {reservationPriceToBook(world, target).toFixed(2)}x in this cycle)</td>
           <td className="num">
-            <input type="number" step={0.05} min={0.3} max={3} value={pb} onChange={(e) => setPb(Number(e.target.value))} /> = {short(Math.round(book * pb))}
+            <input className="short" type="number" step={0.05} min={0.3} max={3} value={pb} onChange={(e) => setPb(Number(e.target.value))} />
+            <span className="nowrap">= {short(Math.round(book * pb))}</span>
           </td>
           <td>
             <button className="key" onClick={() => act((ctx) => setLast(makeOffer(ctx, buyer, target.id, pb, stock).why))}>offer</button>
@@ -120,7 +121,7 @@ function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<
           {r.name}
           {r.national ? ' (national)' : ''}
           {r.kind === 'aggregate' ? ` (${num(r.represents)} banks)` : ''}
-          {r.forSale ? ' [for sale]' : ''}
+          {r.forSale && r.status === 'open' ? ' [for sale]' : ''}
         </td>
         <td>{r.state}</td>
         <td>{r.county}</td>
@@ -137,7 +138,7 @@ function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<
       {open && (
         <tr>
           <td colSpan={12}>
-            <div className="cols">
+            <div>
               <ReportsTable bank={bank} unit={unit} />
               <table>
                 <thead>
