@@ -142,6 +142,7 @@ export interface Bank {
   originationsByType: Record<LoanType, number>; // year to date
   applicationsByType: Record<LoanType, number>; // year to date, received
   declinedForFunding: number; // year to date: auto-declined because cash was short of the working cushion
+  desk: DeskRecord; // the player's own calls, lifetime
   pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
@@ -327,6 +328,21 @@ export interface Memo {
   suggestedGrade: number;
 }
 
+// What the player decided at the desk and how it turned out (D49).
+export interface DeskRecord {
+  approved: number;
+  approvedAmount: number;
+  countered: number;
+  declined: number;
+  paidOff: number;
+  wentBad: number; // reached nonaccrual
+  lost: number; // dollars charged off on the player's own approvals
+}
+
+export function emptyDesk(): DeskRecord {
+  return { approved: 0, approvedAmount: 0, countered: 0, declined: 0, paidOff: 0, wentBad: 0, lost: 0 };
+}
+
 export interface Loan {
   id: string;
   type: LoanType;
@@ -483,6 +499,7 @@ export interface Economy {
   oilPrev: number | null;
   hpiPrev: number | null;
   hist: EconomySnapshot[]; // last 13 month ends, oldest first
+  nominalIndex: number; // cumulative nominal growth since the start, 1 at day one; scales the bank ladder
 }
 
 export interface EconomySnapshot {
@@ -624,6 +641,7 @@ export interface World {
   deals: DealRecord[]; // closed deals, for the record
   countries: Record<string, Country>; // the global stage (D45)
   largestNational: number; // assets of the largest bank in America at the start, the bar to pass
+  ladder: { rank: number; total: number; crossed: number[] }; // the player's place among America's banks by assets (D49)
 }
 
 export interface DealRecord {
@@ -695,6 +713,7 @@ export function initialEconomy(data: WorldData | null): Economy {
     oilPrev: null,
     hpiPrev: null,
     hist: [],
+    nominalIndex: 1,
   };
 }
 
@@ -826,6 +845,7 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
     deals: [],
     countries: initialCountries(),
     largestNational: largestSeed(bankSeeds),
+    ladder: { rank: 0, total: 0, crossed: [] },
   };
 }
 
@@ -962,6 +982,7 @@ export function createBank(world: World, spec: BankSpec): Bank {
     originationsByType: emptyByType(0),
     applicationsByType: emptyByType(0),
     declinedForFunding: 0,
+    desk: emptyDesk(),
     pricing: emptyByType(0),
     originationAppetite: 1,
     applications: { received: 0, toDesk: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },

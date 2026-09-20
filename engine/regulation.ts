@@ -139,6 +139,11 @@ export function canPayDividend(b: Bank, amount: number): boolean {
   return true;
 }
 
+// The legal lending limit: 15% of capital and surplus to one borrower.
+export function lendingLimit(b: Bank): number {
+  return Math.round(0.15 * Math.max(0, tier1Capital(b.acct) + b.acct.allowance));
+}
+
 export function growthRestricted(b: Bank): boolean {
   return b.enforcement === 'consent' || b.enforcement === 'pca';
 }

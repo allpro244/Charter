@@ -46,7 +46,7 @@ export function bankDepositRate(b: Bank): number {
   return r;
 }
 
-function km(a: [number, number], b: [number, number]): number {
+export function km(a: [number, number], b: [number, number]): number {
   const R = 6371;
   const dLat = ((b[1] - a[1]) * Math.PI) / 180;
   const dLon = ((b[0] - a[0]) * Math.PI) / 180;
@@ -198,7 +198,9 @@ export function depositsDaily(ctx: Ctx): void {
     entry.cash = flow;
     post(b.acct, entry);
     allocateToBranches(world, b, flow);
-    if (current > 0 && Math.abs(flow) > 0.025 * current) {
+    // Only the player's own big days make the feed: a twentieth of the
+    // book in one day, not every rival's ordinary week.
+    if (b.id === world.playerBankId && current > 0 && Math.abs(flow) > 0.05 * current) {
       emit(ctx, 'depositor', `${b.name}: ${flow > 0 ? 'inflow' : 'outflow'} of ${money(Math.abs(flow))} in a day${b.confidence < 0.8 ? ' as uninsured depositors leave' : ''}`, {
         severity: flow < 0 ? 'alert' : 'info',
         bankId: b.id,
@@ -256,7 +258,7 @@ export function coverCash(ctx: Ctx, b: Bank): void {
     for (const lot of [...b.lots]) {
       if (need <= 0) break;
       if (lot.kind !== 'afs') continue;
-      const proceeds = sellSecurities(ctx, b, lot.id, Math.min(lot.cost, Math.round(need * 1.05)));
+      const proceeds = sellSecurities(ctx, b, lot.id, Math.min(lot.cost, Math.round(need * 1.05)), true);
       need -= proceeds;
     }
   }

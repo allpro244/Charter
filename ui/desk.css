@@ -830,6 +830,10 @@ pre.memo {
   stroke-width: 0.8;
 }
 
+.county.mine {
+  fill: rgba(76, 201, 138, 0.35);
+}
+
 .metro {
   fill: var(--muted);
   stroke: var(--bg);
@@ -1203,4 +1207,11 @@ th.subhead {
 
 .health-table td.nowrap {
   white-space: nowrap;
+}
+
+.alertpill {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-color: rgba(242, 103, 77, 0.4);
+  align-self: center;
 }

@@ -79,12 +79,14 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
               <tr className="row" onClick={() => setMode('charter')}>
                 <td>
                   <button className="btn primary">Charter a new bank</button>
+                  <div className="dim">Start from nothing with your investors' money. A slow first year: deposits come in as the town gets to know you, and every loan is yours to make.</div>
                 </td>
                 <td className="dim">raise {short(terms.raise)}; you put in {short(terms.minInvest)} to {short(terms.maxInvest)} and run it from day one</td>
               </tr>
               <tr className="row" onClick={() => setMode('takeover')}>
                 <td>
                   <button className="btn">Take over an existing bank</button>
+                  <div className="dim">Buy control of a running bank: a book of loans, deposits, officers and someone else's problems from day one. The busier start.</div>
                 </td>
                 <td className="dim">buy a control stake in one of {candidates.length} banks for sale here</td>
               </tr>

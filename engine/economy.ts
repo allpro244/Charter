@@ -211,6 +211,7 @@ export function countyStep(world: World): void {
   const e = world.economy;
   // Deposit pools grow with nominal income: real growth plus inflation.
   const nominal = 1 + (e.gdpGrowth + e.inflation) / 12;
+  e.nominalIndex = (e.nominalIndex ?? 1) * nominal;
   for (const id of world.bankOrder) {
     const b = world.banks[id];
     if (b && b.franchise.pool > 0) b.franchise.pool = Math.round(b.franchise.pool * nominal);

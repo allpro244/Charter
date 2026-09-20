@@ -10,7 +10,7 @@ import { type Ctx, emit } from './ctx';
 import { sectorReturn12 } from './economy';
 import { post } from './ledger';
 import { type Rng, chance, rand, randInt, randNormal } from './rng';
-import { type Bank, type Loan, type LoanType, type World, nextId } from './state';
+import { type Bank, type Loan, type LoanType, type World, emptyDesk, nextId } from './state';
 import { dateOf, daysInMonth, formatDate } from './time';
 import { money } from './format';
 
@@ -175,6 +175,7 @@ function receivePayment(ctx: Ctx, b: Bank, l: Loan): void {
   if (l.balance <= 0) {
     l.status = 'paid';
     l.balance = 0;
+    if (l.decision.by === 'player') (b.desk ??= emptyDesk()).paidOff += 1;
     emit(ctx, 'borrower', `${l.borrower} paid off the ${TYPE[l.type].label} loan`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
   }
 }
@@ -203,6 +204,7 @@ function missPayment(ctx: Ctx, b: Bank, l: Loan): void {
     }
     l.grade = Math.max(l.grade, 7);
     l.attribution = attributionFor(l);
+    if (l.decision.by === 'player') (b.desk ??= emptyDesk()).wentBad += 1;
     emit(ctx, 'borrower', `${l.borrower} is 90 days past due on ${money(l.balance)}: nonaccrual. ${l.attribution} predicted it. ${decidedText(l)}.`, {
       severity: 'alert',
       bankId: b.id,
@@ -316,6 +318,7 @@ function resolveDefault(ctx: Ctx, b: Bank, l: Loan, losses: LossRecord[]): void 
     l.reoValue = recovery;
     l.balance = 0;
     l.status = 'reo';
+    if (l.decision.by === 'player') (b.desk ??= emptyDesk()).lost += loss;
     emit(ctx, 'borrower', `Foreclosed on ${l.borrower}: ${money(loss)} charged off, ${money(recovery)} of ${l.memo.collateralType} to REO. ${decidedText(l)}.`, {
       severity: 'alert',
       bankId: b.id,
@@ -325,6 +328,7 @@ function resolveDefault(ctx: Ctx, b: Bank, l: Loan, losses: LossRecord[]): void 
     if (recovery > 0) post(a, { cash: recovery, loans: -recovery });
     l.balance = 0;
     l.status = 'chargedOff';
+    if (l.decision.by === 'player') (b.desk ??= emptyDesk()).lost += loss;
     emit(ctx, 'borrower', `Charged off ${money(loss)} on ${l.borrower}, recovered ${money(recovery)}. ${l.attribution ?? attributionFor(l)} predicted it. ${decidedText(l)}.`, {
       severity: 'alert',
       bankId: b.id,

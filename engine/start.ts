@@ -125,8 +125,12 @@ export function takeoverCandidates(world: World, metro: MetroState, seeds: BankS
     const leverage = 0.07 + 0.05 * quality + randNormal(r, 0, 0.005);
     const equity = Math.round(assets * Math.max(0.045, leverage));
     const deposits = Math.round(Math.min(s.deposits > 0 ? s.deposits * (assets / s.assets) : assets * 0.85, assets - equity));
-    const loans = Math.round(assets * (0.55 + 0.2 * rand(r)));
-    const securities = Math.round(assets * (0.1 + 0.15 * rand(r)));
+    // The bank carries no wholesale funding at the takeover, so its balance
+    // sheet is deposits plus equity, with at least three percent held as cash.
+    const total = deposits + equity;
+    const room = total - Math.round(total * 0.03);
+    let loans = Math.min(room, Math.round(total * (0.55 + 0.2 * rand(r))));
+    const securities = Math.min(room - loans, Math.round(total * (0.1 + 0.15 * rand(r))));
     const criticized = Math.max(0.005, 0.12 * (1 - quality) + randNormal(r, 0, 0.01));
     const premium = (calibration.takeoverPremium.low + (calibration.takeoverPremium.high - calibration.takeoverPremium.low) * quality) / 100;
     const price = Math.round(equity * CONTROL_STAKE * premium);
@@ -136,12 +140,12 @@ export function takeoverCandidates(world: World, metro: MetroState, seeds: BankS
       key: String(out.length + 1),
       name,
       county: s.county && world.geo.counties[s.county] ? s.county : county.fips,
-      assets,
+      assets: total,
       deposits,
       loans,
       securities,
       equity,
-      leverage: equity / assets,
+      leverage: equity / total,
       criticizedShare: criticized,
       yearsOld: Math.round(15 + 60 * rand(r)),
       stake: CONTROL_STAKE,

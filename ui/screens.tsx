@@ -15,18 +15,21 @@ import { playerStake } from '../engine/wealth';
 import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
 import { Pill, Stepper, Term } from './parts';
 import { previewFor } from './preview';
-import { healthTone, loanHealth } from './health';
+import { healthTone, loanHealth } from '../engine/health';
 import type { Application } from '../engine/borrowers';
 import { TYPE } from '../engine/credit';
-import { policyCheck, termsFrom } from '../engine/underwriting';
+import { counterTerms, fundable, policyCheck, termsFrom } from '../engine/underwriting';
+import { lendingLimit } from '../engine/regulation';
+import { ladder } from '../engine/ladder';
 
 // Days per real second by speed. Speed 4 is D3's top speed: a year in
 // two minutes. Speed 5 is for skipping ahead.
 export const SPEEDS = [0, 0.5, 1, 2, 3, 6];
 const SPEED_LABELS = ['', 'Slow', 'Normal', 'Fast', 'Faster', 'Max'];
 
-export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp }: { world: World; speed: number; onSpeed: (n: number) => void; onToggle: () => void; onSave: () => void; saved: boolean; onHelp: () => void }) {
+export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp, alerts = 0, onAlerts }: { world: World; speed: number; onSpeed: (n: number) => void; onToggle: () => void; onSave: () => void; saved: boolean; onHelp: () => void; alerts?: number; onAlerts?: () => void }) {
   const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
+  const rank = world.ladder?.rank ?? 0;
   const assets = bank ? totalAssets(bank.acct) : 0;
   const lev = bank ? leverageRatio(bank.acct) : 0;
   const cat = bank ? pcaCategory(lev) : null;
@@ -67,6 +70,15 @@ export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp 
             <span className="k">Cash</span>
             <span className="v">{pct(assets > 0 ? bank.acct.cash / assets : 0, 1)}</span>
           </div>
+          <div className="stat" title="Your place among America's banks by assets. The You tab has the ladder.">
+            <span className="k">Rank</span>
+            <span className="v">{rank > 0 ? `#${num(rank)}` : 'soon'}</span>
+          </div>
+          {alerts > 0 && (
+            <button className="btn small alertpill" onClick={onAlerts} title="Things to look at, on the Overview">
+              {alerts} {alerts === 1 ? 'alert' : 'alerts'}
+            </button>
+          )}
           <div className="stat">
             <span className="k">Net worth</span>
             <span className="v">{usd(playerNetWorth(world))}</span>
@@ -163,13 +175,24 @@ function DecisionBody({ world, p, onDecide }: { world: World; p: Pending; onDeci
           ))}
         </div>
       )}
+      {app && bank && (() => {
+        const limit = lendingLimit(bank);
+        const room = fundable(bank);
+        const need = app.memo.amount;
+        if (need > limit) return <p className="alert">Cannot be made: {usd(need)} is over the legal lending limit of {usd(limit)} to one borrower. A counter offer cuts the loan to {usd(counterTerms(app).amount)}{counterTerms(app).amount > limit ? ', still over the limit' : ''}.</p>;
+        if (need > room) return <p className="alert">Cannot be funded: it needs {usd(need)} and the bank can lend {usd(room)} today from cash above the cushion and half the Home Loan Bank line (the other half is kept for withdrawals). Gather deposits or sell bonds first.</p>;
+        return <p className="dim">Funding: {usd(need)} of {usd(room)} the bank can lend today{need > Math.max(0, bank.acct.cash - 0.03 * totalAssets(bank.acct)) ? ', part of it drawn from the Home Loan Bank line' : ''}.</p>;
+      })()}
       <div className="options">
-        {p.options.map((o) => (
-          <button key={o.key} className="btn option" onClick={() => onDecide(p, o.key)}>
-            <kbd>{o.key}</kbd>
-            {o.label}
-          </button>
-        ))}
+        {p.options.map((o) => {
+          const blocked = app && bank ? (o.key === 'a' && (app.memo.amount > lendingLimit(bank) || app.memo.amount > fundable(bank))) || (o.key === 'c' && (counterTerms(app).amount > lendingLimit(bank) || counterTerms(app).amount > fundable(bank))) : false;
+          return (
+            <button key={o.key} className="btn option" disabled={blocked} title={blocked ? 'Over the legal limit or beyond what the bank can fund today' : undefined} onClick={() => onDecide(p, o.key)}>
+              <kbd>{o.key}</kbd>
+              {o.label}
+            </button>
+          );
+        })}
       </div>
     </>
   );
@@ -730,11 +753,54 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
   const stake = playerStake(world);
   const perShare = bank ? (bank.isPublic && bank.price !== null ? bank.price : bookValuePerShare(bank)) : 0;
   const stakeValue = bank ? Math.round(p.shares * perShare) : 0;
+  const l = bank ? ladder(world) : null;
+  const myAssets = bank ? totalAssets(bank.acct) : 0;
   return (
     <div>
       <p className="hint">
-        Your own money: salary, dividends and your stake in the bank. <Term k="net worth">Net worth</Term> is the score. Raising capital, selling shares and going public live under Money, balance sheet and capital.
+        Your own money: salary, dividends and your stake in the bank. <Term k="net worth">Net worth</Term> is the score; the ladder is the goal. Raising capital, selling shares and going public live under Money, balance sheet and capital.
       </p>
+      {l && (
+        <table className="wrap">
+          <thead>
+            <tr>
+              <th>The ladder: America's banks by assets</th>
+              <th className="num">assets</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>The largest bank in America</td>
+              <td className="num">{l.largest ? usd(l.largest.assets) : ''}</td>
+              <td className="dim">{l.largest && myAssets > 0 ? `${num(Math.round(l.largest.assets / myAssets))} times your size` : ''}</td>
+            </tr>
+            <tr>
+              <td>The top 100</td>
+              <td className="num">{usd(l.top100)}</td>
+              <td className="dim">{l.rank <= 100 ? 'You are in it.' : `${usd(Math.max(0, l.top100 - myAssets))} to go`}</td>
+            </tr>
+            <tr>
+              <td>Next to pass</td>
+              <td className="num">{l.ahead ? usd(l.ahead.assets) : ''}</td>
+              <td className="dim">{l.ahead ? `${l.ahead.name ?? 'a bank'} in ${l.ahead.state}: ${usd(Math.max(0, l.ahead.assets - myAssets))} to go` : 'Nobody. You are the largest.'}</td>
+            </tr>
+            <tr className="total">
+              <td>You, {bank!.name}</td>
+              <td className="num">{usd(myAssets)}</td>
+              <td className="positive">#{num(l.rank)} of {num(l.total)} banks</td>
+            </tr>
+            <tr>
+              <td>Just passed</td>
+              <td className="num">{l.behind ? usd(l.behind.assets) : ''}</td>
+              <td className="dim">{l.behind ? `${l.behind.name ?? 'a bank'} in ${l.behind.state}` : 'Nobody yet.'}</td>
+            </tr>
+            <tr className="memo-row">
+              <td colSpan={3}>Other banks grow with the economy. Milestones fire at the top 1,000, 500, 250, 100, 50, 25, 10 and 5, and once more at the top.</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
       <div className="cols">
         <div>
           <table className="wrap">

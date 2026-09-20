@@ -22,6 +22,7 @@ import { feesMonthly, linesMonthly, linesYearEnd } from './lines';
 import { emptyByType } from './loantypes';
 import { closeForeign, countriesMonthly, foreignMonthly, globalQuarterly } from './global';
 import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
+import { ladderMonthly } from './ladder';
 import {
   type Accounts,
   type DepositType,
@@ -249,6 +250,7 @@ function monthlyClose(ctx: Ctx): void {
     refreshLoanYield(b);
   }
   economyMonthly(ctx);
+  ladderMonthly(ctx);
   countriesMonthly(ctx);
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;

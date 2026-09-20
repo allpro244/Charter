@@ -2,9 +2,9 @@
 // default, dismissible. No scripted flavor; every card names a number
 // on the desk and what to do about it.
 
-import { unrealizedToCapital } from '../engine/funding';
+import { fhlbCapacity, unrealizedToCapital } from '../engine/funding';
 import { bankDepositRate, marketDepositRate } from '../engine/deposits';
-import { leverageRatio, totalAssets } from '../engine/ledger';
+import { leverageRatio, totalAssets, totalDeposits } from '../engine/ledger';
 import { capitalStack, creConcentration } from '../engine/regulation';
 import { type World, playerBank } from '../engine/state';
 import { pct, short } from './format';
@@ -25,6 +25,11 @@ export function adviceFor(world: World): Card[] {
   if (lev < 0.06) out.push({ key: 'lev', text: `Leverage ${pct(lev, 1)}: below 5% dividends stop and the examiner arrives. Raise capital on the You tab or slow lending on the Lending tab.` });
   if (stack.bufferShortfall > 0 && lev >= 0.06) out.push({ key: 'buffer', text: `CET1 buffer short by ${pct(stack.bufferShortfall, 1)}: payouts capped at ${pct(stack.maxPayout, 0)} of earnings.` });
   if (a.cash / Math.max(1, assets) < 0.03) out.push({ key: 'cash', text: `Cash is ${pct(a.cash / Math.max(1, assets), 1)} of assets. Below 3% a bad week means borrowing or selling bonds at a loss. See the Money tab.` });
+  const line = a.fhlb + fhlbCapacity(b);
+  if (line > 0 && a.fhlb / line > 0.5) out.push({ key: 'fhlb', text: `Home Loan Bank line ${pct(a.fhlb / line, 0)} used (${short(a.fhlb)} of ${short(line)}). What is left is what covers a bad week of withdrawals. Gather deposits on the Money tab or slow lending on the Lending tab.` });
+  const last = b.reports[b.reports.length - 1];
+  const prior = b.reports[b.reports.length - 2];
+  if (last && prior && prior.deposits > 0 && last.deposits < prior.deposits * 0.95 && totalDeposits(a) < last.deposits) out.push({ key: 'runoff', text: `Deposits fell ${pct(1 - last.deposits / prior.deposits, 1)} last quarter and are still falling. Depositors leave for rate, for confidence, or for a rival's branch; the Money tab shows which.` });
   const gap = marketDepositRate(world) - bankDepositRate(b);
   if (gap > 0.0075) out.push({ key: 'rates', text: `You pay ${pct(bankDepositRate(b))} against a market at ${pct(marketDepositRate(world))}. Money market and CD money leaves first. The Money tab has the sheet.` });
   if (b.confidence < 0.85) out.push({ key: 'conf', text: `Depositor confidence ${pct(b.confidence, 0)}. Uninsured balances (${pct(b.uninsuredShare, 0)} of deposits) move first. Capital and cash calm it; nothing else does.` });

@@ -448,7 +448,7 @@ export function App() {
   return (
     <div className="desk">
       <div className="chrome">
-        <TopBar world={world} speed={speed} onSpeed={setSpeed} onToggle={togglePlay} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} />
+        <TopBar world={world} speed={speed} onSpeed={setSpeed} onToggle={togglePlay} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} alerts={cards.length} onAlerts={() => setScreen('OVERVIEW')} />
         <nav className="tabs" aria-label="Screens">
           {SCREENS.map((s) => (
             <button key={s.id} className={'tab' + (screen === s.id ? ' on' : '')} onClick={() => setScreen(s.id)}>

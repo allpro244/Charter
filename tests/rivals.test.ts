@@ -1,6 +1,7 @@
 // Rival invariants (SYSTEMS.md Part 1, system 6; D35, D42).
 
 import { describe, expect, it } from 'vitest';
+import { calibration } from '../data/calibration';
 import { attractiveness, coreDeposits, splitCounty } from '../engine/deposits';
 import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../engine/ledger';
 import { adoptPolicy, expandState, randomPolicy } from '../engine/rivals';
@@ -114,10 +115,11 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
   });
 
   it('the player loses deposits to a rival that prices higher in the same county', () => {
-    // A seasoned bank (a takeover, not a ramping charter) prices 100bp
-    // under the market while a home county rival pushes 150bp over. Its
-    // deposit target falls at once, and a year on it holds less than the
-    // same bank left alone.
+    // A seasoned bank (a takeover, not a ramping charter) sits at the
+    // market after a year, then prices 100bp under it while a home county
+    // rival pushes 150bp over. Its deposit target falls at once by at least
+    // half of what the calibrated elasticity says a point is worth, and a
+    // year on it holds less than the same bank left at the market.
     const run = (contest: boolean) => {
       const data = loadFixtures();
       const world = createWorld(3, data);
@@ -127,6 +129,7 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
       const c = candidates.find((x) => x.price <= world.player.cash) ?? candidates[0]!;
       const bank = startTakeover({ world, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate: c });
       for (let d = 0; d < 365; d++) tick(world);
+      for (const t of DEPOSIT_TYPES) setRate(world, t, marketRate(world, t));
       const before = coreDeposits(bank);
       const targetBefore = Object.values(depositTargets(world, bank)).reduce((x, y) => x + y, 0);
       if (contest) {
@@ -142,7 +145,10 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
     const alone = run(false);
     const contested = run(true);
     expect(contested.before).toBe(alone.before);
-    expect(contested.targetAfter).toBeLessThan(contested.targetBefore * 0.9);
+    // Checking pays nothing either way; the other seven tenths of the book
+    // move at the elasticity, weighted by how rate-sensitive each type is.
+    const elasticity = calibration.depositRateElasticity.typical / 100;
+    expect(contested.targetAfter).toBeLessThan(contested.targetBefore * (1 - 0.5 * elasticity * 0.7));
     expect(contested.after).toBeLessThan(alone.after * 0.97);
   });
 

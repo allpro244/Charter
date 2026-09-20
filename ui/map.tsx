@@ -4,11 +4,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { Sector } from '../data/types';
+import { calibration } from '../data/calibration';
+import { km } from '../engine/deposits';
+import { branchFixedCost } from '../engine/state';
 import { SECTORS } from '../data/types';
 import type { Bank, CountyState, MetroState, World } from '../engine/state';
 import type { GeoCollection } from './data';
 import { HEIGHT, WIDTH, pathFor, projectPoint } from './projection';
-import { num, pct, short } from './format';
+import { num, pct, short, usd } from './format';
 
 export type Shade = 'none' | 'condition' | Sector;
 export const SHADES: Shade[] = ['none', 'condition', ...SECTORS];
@@ -63,6 +66,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   };
   const hovered = hover ? world.geo.counties[hover] : undefined;
   const pinned = picked ? world.geo.counties[picked] : undefined;
+  const mine = new Set((bank?.branches ?? []).map((br) => br.county));
   const shown = pinned ?? hovered;
   const empty = paths.length === 0;
   return (
@@ -87,7 +91,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
             <path
               key={p.fips}
               d={p.d}
-              className={'county' + (hover === p.fips || picked === p.fips ? ' hover' : '')}
+              className={'county' + (hover === p.fips || picked === p.fips ? ' hover' : '') + (mine.has(p.fips) ? ' mine' : '')}
               style={shade !== 'none' ? { fill: shadeOf(p.fips) } : undefined}
               onMouseEnter={() => setHover(p.fips)}
               onMouseLeave={() => setHover((h) => (h === p.fips ? null : h))}
@@ -177,11 +181,27 @@ function BranchMarkers({ world, bank }: { world: World; bank: Bank }) {
   );
 }
 
+// What a branch in this county would be worth: the de novo ceiling of the
+// county's pool, faded by distance from home and capped by what one branch
+// can gather, against the real local cost of running it.
+function branchCase(c: CountyState, world: World): { deposits: number; cost: number; distanceKm: number; existing: number } | null {
+  const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
+  if (!bank) return null;
+  const home = bank.homeCounty ? world.geo.counties[bank.homeCounty] : null;
+  const distanceKm = home ? km(home.centroid, c.centroid) : 0;
+  const ceiling = calibration.deNovoShareCeiling.typical / 100;
+  const wageIndex = Math.max(0.5, Math.min(2, c.wage / 1300));
+  const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex;
+  const deposits = Math.round(Math.min(c.depositPool * ceiling * Math.exp(-distanceKm / 1500), perBranch));
+  return { deposits, cost: branchFixedCost(c), distanceKm, existing: bank.branches.filter((br) => br.county === c.fips).length };
+}
+
 function CountyStats({ c, world }: { c: CountyState; world: World }) {
   const top = SECTORS.map((s) => [s, c.sectors[s] ?? 0] as const)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
   const metro = c.cbsa ? world.geo.metros[c.cbsa] : undefined;
+  const branch = branchCase(c, world);
   return (
     <table className="stats">
       <tbody>
@@ -192,6 +212,14 @@ function CountyStats({ c, world }: { c: CountyState; world: World }) {
             {c.imputed ? ' [imputed cells]' : ''}
           </th>
         </tr>
+        {branch && (
+          <tr className="total">
+            <td>{branch.existing > 0 ? `your branch here (${branch.existing})` : 'a branch here'}</td>
+            <td className="num">
+              about {usd(branch.deposits)} of deposits in 3 years, {usd(branch.cost)} a year to run{branch.distanceKm > 0 ? `, ${Math.round(branch.distanceKm)} km from home` : ''}
+            </td>
+          </tr>
+        )}
         <tr><td>population</td><td className="num">{num(c.population)}</td></tr>
         <tr><td>median household income</td><td className="num">{num(c.income)}</td></tr>
         <tr><td>average weekly wage</td><td className="num">{num(c.wage)}</td></tr>

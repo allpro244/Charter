@@ -153,7 +153,7 @@ export function buySecurities(ctx: Ctx, b: Bank, kind: LotKind, product: Product
 
 // Sells all or part of an AFS lot at fair value. The gain or loss moves
 // from AOCI to earnings. HTM cannot be sold (it taints the portfolio).
-export function sellSecurities(ctx: Ctx, b: Bank, lotId: string, amount: number): number {
+export function sellSecurities(ctx: Ctx, b: Bank, lotId: string, amount: number, quiet = false): number {
   const { world } = ctx;
   const a = b.acct;
   const lot = b.lots.find((l) => l.id === lotId);
@@ -176,7 +176,8 @@ export function sellSecurities(ctx: Ctx, b: Bank, lotId: string, amount: number)
   lot.fair = remainingCost + remainingUnrealized;
   if (lot.cost <= 0) b.lots = b.lots.filter((l) => l.id !== lotId);
   refreshYields(b);
-  emit(ctx, 'system', `Sold ${money(amount)} of ${PRODUCT_LABEL[lot.product]} for ${money(proceeds)}, ${gain >= 0 ? 'gain' : 'loss'} ${money(Math.abs(gain))}`, { severity: gain < 0 ? 'alert' : 'info', bankId: b.id });
+  // Another bank's forced sales are its own business; the player's show.
+  if (!quiet || b.id === world.playerBankId) emit(ctx, 'system', `Sold ${money(amount)} of ${PRODUCT_LABEL[lot.product]} for ${money(proceeds)}, ${gain >= 0 ? 'gain' : 'loss'} ${money(Math.abs(gain))}`, { severity: gain < 0 ? 'alert' : 'info', bankId: b.id });
   return proceeds;
 }
 
@@ -194,8 +195,9 @@ export function borrowFhlb(ctx: Ctx, b: Bank, amount: number, quiet = false): nu
   amount = Math.min(Math.round(amount), fhlbCapacity(b));
   if (amount <= 0) return 0;
   post(b.acct, { cash: amount, fhlb: amount });
-  // Automatic draws to cover withdrawals only show when they are large.
-  if (!quiet || amount > 0.01 * totalAssets(b.acct)) emit(ctx, 'system', `Drew ${money(amount)} of FHLB advances at ${pct(b.fhlbRate)}`, { bankId: b.id });
+  // Automatic draws to cover withdrawals show for the player's bank only,
+  // and only when they are large.
+  if (!quiet || (b.id === ctx.world.playerBankId && amount > 0.01 * totalAssets(b.acct))) emit(ctx, 'system', `Drew ${money(amount)} of FHLB advances at ${pct(b.fhlbRate)}`, { bankId: b.id });
   return amount;
 }
 

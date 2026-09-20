@@ -10,11 +10,13 @@ import { type Ctx, addPending, emit } from './ctx';
 import { fundLoan, type FundTerms } from './loans';
 import { ccoSkill, cloAppetite, cloPricingEdge } from './officers';
 import { chance, pick, rand } from './rng';
-import { type Bank, type Decision, type LoanType, type Pending, type World, playerBank } from './state';
+import { type Bank, type Decision, type LoanType, type Pending, type World, emptyDesk, playerBank } from './state';
 import { LOAN_TYPES, emptyByType } from './loantypes';
 import { money, pct } from './format';
-import { creConcentration, growthRestricted } from './regulation';
+import { creConcentration, growthRestricted, lendingLimit } from './regulation';
 import { tier1Capital } from './ledger';
+import { borrowFhlb, fhlbCapacity } from './funding';
+import { loanHealth } from './health';
 
 export const REGIME_DEMAND = { expansion: 1.1, late: 1.0, recession: 0.65, recovery: 0.9 } as const;
 
@@ -77,6 +79,8 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
   if (terms.amount > p.maxSize) reasons.push(`size ${money(terms.amount)} over ${money(p.maxSize)}`);
   const maxGrade = p.maxGrade ?? 6;
   if (m.suggestedGrade > maxGrade) reasons.push(`grade ${m.suggestedGrade} is worse than policy grade ${maxGrade}`);
+  const limit = lendingLimit(b);
+  if (terms.amount > limit) reasons.push(`over the legal lending limit of ${money(limit)} to one borrower`);
   const sectorShare = sectorExposure(b, m.sector) ;
   if (sectorShare > p.sectorCap && b.acct.loans > 0) reasons.push(`${m.sector} concentration ${(sectorShare * 100).toFixed(0)}% over ${(p.sectorCap * 100).toFixed(0)}%`);
   // The interagency commercial real estate guidance is part of every
@@ -90,6 +94,52 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
     if (conc.cre + after > 3.0) reasons.push(`investor CRE would be ${((conc.cre + after) * 100).toFixed(0)}% of capital, guidance 300%`);
   }
   return { pass: reasons.length === 0, reasons };
+}
+
+// What the desk can fund today: cash above the working cushion plus the
+// Home Loan Bank line. A loan beyond it is not made; one that needs the
+// line borrows it on the spot.
+export function fundable(b: Bank): number {
+  const assets = b.acct.cash + b.acct.loans + b.acct.securitiesAFS + b.acct.securitiesHTM;
+  return Math.max(0, b.acct.cash - Math.round(0.03 * assets)) + deskLine(b);
+}
+
+// The part of the Home Loan Bank line the desk may lend against: up to
+// half of the whole line. The other half is the contingency funding plan,
+// kept for the week the deposits leave.
+export function deskLine(b: Bank): number {
+  const line = b.acct.fhlb + fhlbCapacity(b);
+  return Math.max(0, Math.floor(line / 2) - b.acct.fhlb);
+}
+
+// Funds a desk approval, drawing the Home Loan Bank line for any part the
+// cash cushion cannot cover. False when the loan cannot be made at all.
+function fundFromDesk(ctx: Ctx, b: Bank, app: Application, terms: FundTerms, note: string, countered: boolean): boolean {
+  const limit = lendingLimit(b);
+  if (terms.amount > limit) {
+    (b.desk ??= emptyDesk()).declined += 1;
+    b.applications.playerDeclined += 1;
+    emit(ctx, 'regulator', `${app.borrower} not made: ${money(terms.amount)} is over the legal lending limit of ${money(limit)} to one borrower`, { severity: 'alert', bankId: b.id });
+    return false;
+  }
+  const room = fundable(b);
+  if (terms.amount > room) {
+    (b.desk ??= emptyDesk()).declined += 1;
+    b.applications.playerDeclined += 1;
+    b.declinedForFunding = (b.declinedForFunding ?? 0) + 1;
+    emit(ctx, 'borrower', `${app.borrower} not funded: the loan needs ${money(terms.amount)} and the bank can lend ${money(room)} today from cash above the cushion and half the Home Loan Bank line`, { severity: 'alert', bankId: b.id });
+    return false;
+  }
+  const assets = b.acct.cash + b.acct.loans + b.acct.securitiesAFS + b.acct.securitiesHTM;
+  const short = terms.amount - Math.max(0, b.acct.cash - Math.round(0.03 * assets));
+  if (short > 0) borrowFhlb(ctx, b, short, true);
+  fundLoan(ctx, b, app, terms, 'player', note, countered);
+  const desk = (b.desk ??= emptyDesk());
+  desk.approved += 1;
+  desk.approvedAmount += terms.amount;
+  if (countered) desk.countered += 1;
+  b.applications.playerApproved += 1;
+  return true;
 }
 
 export function sectorExposure(b: Bank, sector: string): number {
@@ -163,6 +213,7 @@ export function applicationsDaily(ctx: Ctx): void {
       title: `${forPlayer.length} applications above the dial today, ${money(forPlayer.reduce((s, a) => s + a.memo.amount, 0))} in total`,
       lines: forPlayer.map((a) => `${a.borrower}  ${TYPE[a.type].label}  ${money(a.memo.amount)}  grade ${a.memo.suggestedGrade}  coverage ${a.memo.dscr.toFixed(2)}x  LTV ${(a.memo.ltv * 100).toFixed(0)}%${policyCheck(b, a, termsFrom(a)).pass ? '' : '  (policy exception)'}`),
       options: [
+        { key: 's', label: 'Approve the sound ones within policy (health 65 and up), decline the rest' },
         { key: 'a', label: 'Approve all within policy, decline the rest' },
         { key: 'd', label: 'Decline all' },
         { key: 'r', label: 'Review one by one' },
@@ -252,9 +303,9 @@ export function decideApplication(ctx: Ctx, pending: Pending, d: Decision): void
   switch (d.choice) {
     case 'a': {
       const terms = termsFrom(app);
-      fundLoan(ctx, b, app, terms, 'player', policyCheck(b, app, terms).pass ? 'approved' : 'approved as a policy exception', false);
-      b.applications.playerApproved += 1;
-      emit(ctx, 'borrower', `Approved ${money(terms.amount)} ${TYPE[app.type].label} to ${app.borrower}`, { severity: 'good', bankId: b.id });
+      if (fundFromDesk(ctx, b, app, terms, policyCheck(b, app, terms).pass ? 'approved' : 'approved as a policy exception', false)) {
+        emit(ctx, 'borrower', `Approved ${money(terms.amount)} ${TYPE[app.type].label} to ${app.borrower}`, { severity: 'good', bankId: b.id });
+      }
       return;
     }
     case 'c': {
@@ -262,17 +313,19 @@ export function decideApplication(ctx: Ctx, pending: Pending, d: Decision): void
       const accept = chance(world.rng, 0.55 - (app.memo.guarantor ? 0 : 0.15) + (app.memo.suggestedGrade >= 5 ? 0.15 : 0));
       if (accept) {
         const tightened = { ...app, truePd: app.truePd * Math.exp(-0.45 * (app.memo.guarantor ? 0 : 1)) * Math.exp(-2.2 * 0.1), trueLgd: Math.max(0.05, app.trueLgd - 0.08) };
-        fundLoan(ctx, b, tightened, terms, 'player', 'countered', true);
-        b.applications.playerApproved += 1;
-        emit(ctx, 'borrower', `${app.borrower} accepted the counter: ${money(terms.amount)} at ${pct(terms.rate)}, LTV ${(terms.ltv * 100).toFixed(0)}%, guaranteed`, { severity: 'good', bankId: b.id });
+        if (fundFromDesk(ctx, b, tightened, terms, 'countered', true)) {
+          emit(ctx, 'borrower', `${app.borrower} accepted the counter: ${money(terms.amount)} at ${pct(terms.rate)}, LTV ${(terms.ltv * 100).toFixed(0)}%, guaranteed`, { severity: 'good', bankId: b.id });
+        }
       } else {
         b.applications.playerDeclined += 1;
+        (b.desk ??= emptyDesk()).declined += 1;
         emit(ctx, 'borrower', `${app.borrower} walked away from the counter`, { bankId: b.id });
       }
       return;
     }
     default:
       b.applications.playerDeclined += 1;
+      (b.desk ??= emptyDesk()).declined += 1;
       emit(ctx, 'borrower', `Declined ${app.borrower}`, { bankId: b.id });
       return;
   }
@@ -284,21 +337,26 @@ export function decideBatch(ctx: Ctx, pending: Pending, d: Decision): void {
   const apps = pending.data.apps as Application[] | undefined;
   if (!b || !apps || b.status !== 'open') return;
   switch (d.choice) {
-    case 'a': {
+    case 'a':
+    case 's': {
+      // Within policy, and for the sound option a health of 65 or better:
+      // what a loan committee approves on the credit staff's word.
       let n = 0;
       let total = 0;
       for (const app of apps) {
         const terms = termsFrom(app);
-        if (policyCheck(b, app, terms).pass) {
-          fundLoan(ctx, b, app, terms, 'player', 'batch approval within policy', false);
-          n += 1;
-          total += terms.amount;
-          b.applications.playerApproved += 1;
+        const ok = policyCheck(b, app, terms).pass && (d.choice === 'a' || loanHealth(world, b, app).score >= 65);
+        if (ok) {
+          if (fundFromDesk(ctx, b, app, terms, d.choice === 's' ? 'batch approval, sound and within policy' : 'batch approval within policy', false)) {
+            n += 1;
+            total += terms.amount;
+          }
         } else {
           b.applications.playerDeclined += 1;
+          (b.desk ??= emptyDesk()).declined += 1;
         }
       }
-      emit(ctx, 'borrower', `Approved ${n} of ${apps.length} applications within policy, ${money(total)}`, { severity: 'good', bankId: b.id });
+      emit(ctx, 'borrower', `Approved ${n} of ${apps.length} applications${d.choice === 's' ? ' that were sound and within policy' : ' within policy'}, ${money(total)}`, { severity: 'good', bankId: b.id });
       return;
     }
     case 'r':
@@ -306,6 +364,7 @@ export function decideBatch(ctx: Ctx, pending: Pending, d: Decision): void {
       return;
     default:
       b.applications.playerDeclined += apps.length;
+      (b.desk ??= emptyDesk()).declined += apps.length;
       emit(ctx, 'borrower', `Declined ${apps.length} applications`, { bankId: b.id });
       return;
   }

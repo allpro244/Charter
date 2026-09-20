@@ -5,8 +5,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Application } from '../engine/borrowers';
 import { createBank, createWorld } from '../engine/state';
-import { policyCheck, termsFrom } from '../engine/underwriting';
-import { healthLabel, loanHealth, ramp } from '../ui/health';
+import { decideApplication, fundable, policyCheck, termsFrom } from '../engine/underwriting';
+import { lendingLimit } from '../engine/regulation';
+import type { Pending } from '../engine/state';
+import { healthLabel, loanHealth, ramp } from '../engine/health';
 
 function memo(over: Partial<Application['memo']> = {}): Application {
   return {
@@ -94,5 +96,25 @@ describe('loan health meter', () => {
     const check = policyCheck(bank, weak, termsFrom(weak));
     expect(check.pass).toBe(false);
     expect(check.reasons.join(' ')).toMatch(/grade 7 is worse than policy grade 6/);
+  });
+
+  it('the desk cannot lend over the legal limit or beyond what it can fund', () => {
+    const limit = lendingLimit(bank);
+    expect(limit).toBe(Math.round(0.15 * (bank.acct.commonStock + bank.acct.retainedEarnings + bank.acct.allowance)));
+    const big = memo({ amount: limit + 1, collateralValue: (limit + 1) / 0.6 });
+    expect(policyCheck(bank, big, termsFrom(big)).reasons.join(' ')).toMatch(/legal lending limit/);
+    const pending = (app: Application): Pending => ({ id: 'p1', day: 0, kind: 'loan_application', bankId: bank.id, title: '', lines: [], options: [], data: { app }, expires: null, blocking: true });
+    const loansBefore = bank.acct.loans;
+    decideApplication({ world, events: [] }, pending(big), { pendingId: 'p1', choice: 'a' });
+    expect(bank.acct.loans).toBe(loansBefore);
+    expect(bank.desk.declined).toBe(1);
+    // Within the limit but beyond cash and the credit line: not funded either.
+    const room = fundable(bank);
+    expect(room).toBeGreaterThan(0);
+    const ok = memo({ amount: Math.min(limit, Math.round(room * 0.5)) });
+    decideApplication({ world, events: [] }, pending(ok), { pendingId: 'p1', choice: 'a' });
+    expect(bank.acct.loans).toBe(loansBefore + ok.memo.amount);
+    expect(bank.desk.approved).toBe(1);
+    expect(bank.desk.approvedAmount).toBe(ok.memo.amount);
   });
 });

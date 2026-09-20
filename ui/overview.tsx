@@ -10,9 +10,9 @@ import { bankDepositRate, marketDepositRate } from '../engine/deposits';
 import { fhlbCapacity } from '../engine/funding';
 import { type IncomeStatement, interestExpense, interestIncome, leverageRatio, netIncome, noninterestExpense, tier1Capital, totalAssets, totalDeposits } from '../engine/ledger';
 import { PCA_LABEL, pcaCategory } from '../engine/regulation';
-import { type Bank, type Pending, type World } from '../engine/state';
+import { type Bank, type FeedItem, type Pending, type World, emptyDesk } from '../engine/state';
 import { formatDate } from '../engine/time';
-import { pct, usd } from './format';
+import { num, pct, usd } from './format';
 import { Pill, Term } from './parts';
 import { DecisionCard, FeedList, Sparkline } from './screens';
 
@@ -148,8 +148,16 @@ export function OverviewScreen({
   const [fullFeed, setFullFeed] = useState(false);
   const g = gauges(world, bank);
   const waiting = world.pending.filter((p) => !p.blocking);
+  // The recent feed is what touches this bank: its own events, the
+  // economy, the regulator, and any bank that failed or was sold. The full
+  // feed has everything.
+  const relevant = (f: FeedItem) => f.bankId === bank.id || f.bankId === null || f.source === 'market' || f.source === 'system' || f.source === 'regulator' || f.severity === 'alert';
+  const recentRelevant = world.feed.filter(relevant).slice(-10).reverse();
+  const desk = bank.desk ?? emptyDesk();
+  const mine = bank.loans.filter((l) => l.decision.by === 'player');
+  const late = mine.filter((l) => l.status === 'late30' || l.status === 'late60').length;
+  const nonaccrual = mine.filter((l) => l.status === 'nonaccrual').length;
   const reports = bank.reports.slice(-40);
-  const recent = world.feed.slice(-8).reverse();
   return (
     <div>
       <p className="hint">How the bank is doing, in five numbers. Hover any underlined word for what it means; click a gauge to open the tab that changes it.</p>
@@ -204,9 +212,46 @@ export function OverviewScreen({
               {fullFeed ? 'Show recent only' : 'Show the full feed'}
             </button>
           </div>
-          <FeedList items={fullFeed ? world.feed.slice(-300).reverse() : recent} speed={speed} onPlay={onPlay} />
+          <FeedList items={fullFeed ? world.feed.slice(-300).reverse() : recentRelevant} speed={speed} onPlay={onPlay} />
         </div>
         <aside>
+          <table className="wrap">
+            <thead>
+              <tr>
+                <th>Your calls</th>
+                <th className="num"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Approved at your desk</td>
+                <td className="num">{num(desk.approved)}{desk.approved > 0 ? `, ${usd(desk.approvedAmount)}` : ''}</td>
+              </tr>
+              <tr>
+                <td>Declined</td>
+                <td className="num">{num(desk.declined)}</td>
+              </tr>
+              <tr>
+                <td>Paid off in full</td>
+                <td className="num positive">{num(desk.paidOff)}</td>
+              </tr>
+              <tr>
+                <td>Late right now</td>
+                <td className={'num' + (late > 0 ? ' alert' : '')}>{num(late)}</td>
+              </tr>
+              <tr>
+                <td>Went bad</td>
+                <td className={'num' + (desk.wentBad > 0 ? ' alert' : '')}>{num(desk.wentBad)}{nonaccrual > 0 ? ` (${nonaccrual} still on the books)` : ''}</td>
+              </tr>
+              <tr className="total">
+                <td>Lost on your approvals</td>
+                <td className={'num' + (desk.lost > 0 ? ' alert' : '')}>{usd(desk.lost)}</td>
+              </tr>
+              <tr className="memo-row">
+                <td colSpan={2}>{desk.approved === 0 ? 'Nothing decided yet. Loans above the size line on the Lending tab come to you.' : desk.lost === 0 ? 'Not a dollar lost yet on your own calls.' : `${pct(desk.approvedAmount > 0 ? desk.lost / desk.approvedAmount : 0, 1)} of what you approved has been written off.`}</td>
+              </tr>
+            </tbody>
+          </table>
           {waiting.length > 0 && <div className="side-title">Waiting for you</div>}
           {waiting.map((p) => (
             <DecisionCard key={p.id} world={world} p={p} onDecide={onDecide} />

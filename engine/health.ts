@@ -1,18 +1,19 @@
-// The loan health meter: what a credit committee looks at, scored from the
-// memo alone. Five Cs (capacity, collateral, character, capital,
+// The loan health meter (DESIGN.md Part 3): what a credit committee looks
+// at, scored from the memo alone. Lives in the engine so the batch option
+// "approve the sound ones" and the desk read the same number. Five Cs (capacity, collateral, character, capital,
 // conditions) plus concentration, each 0 to 100 with a plain note, and a
 // weighted overall. Pricing is judged separately: a safe loan can still be
 // a bad deal. Nothing here reads the hidden risk term; the CCO's grade is
 // shown beside it, not folded into it.
 
-import { TYPE, macroStressFor, PD_BY_GRADE } from '../engine/credit';
-import { bankDepositRate } from '../engine/deposits';
-import { sectorReturn12 } from '../engine/economy';
-import { tier1Capital } from '../engine/ledger';
-import { creConcentration } from '../engine/regulation';
-import type { Application } from '../engine/borrowers';
-import type { Bank, World } from '../engine/state';
-import { sectorExposure } from '../engine/underwriting';
+import { TYPE, macroStressFor, PD_BY_GRADE } from './credit';
+import { bankDepositRate } from './deposits';
+import { sectorReturn12 } from './economy';
+import { tier1Capital } from './ledger';
+import { creConcentration, lendingLimit } from './regulation';
+import type { Application } from './borrowers';
+import type { Bank, World } from './state';
+import { sectorExposure } from './underwriting';
 
 export interface Factor {
   key: string;
@@ -152,7 +153,7 @@ export function loanHealth(world: World, b: Bank, app: Application): Health {
     reading: `${(exposure * 100).toFixed(0)}% of capital to one name, ${(sectorShare * 100).toFixed(0)}% of loans in ${m.sector}`,
     score: clamp(conc),
     weight: 10,
-    note: exposure > 0.15 ? 'Over the legal lending limit of 15% of capital to one borrower.' : exposure > 0.1 ? 'A big bet on one borrower for a bank this size.' : conc < 60 ? 'Adds to a sector or real estate concentration the examiner already watches.' : 'A normal sized exposure.',
+    note: m.amount > lendingLimit(b) ? `Over the legal lending limit of 15% of capital to one borrower: the most this bank may lend one name is ${Math.round(lendingLimit(b) / 1e3).toLocaleString('en-US')}K.` : exposure > 0.1 ? 'A big bet on one borrower for a bank this size.' : conc < 60 ? 'Adds to a sector or real estate concentration the examiner already watches.' : 'A normal sized exposure.',
   });
 
   const total = factors.reduce((s, f) => s + f.weight, 0);
