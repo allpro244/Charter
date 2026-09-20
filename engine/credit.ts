@@ -574,6 +574,45 @@ function playerTilt(b: Bank): number {
   return Math.round(Math.max(0.6, Math.min(1.6, (1 - (skill - 55) / 250) * policy)) * 100) / 100;
 }
 
+// Nonperforming pooled balances (grades 7 and 8) of one type, and what a
+// bulk buyer pays for them: the recovery the type's loss given default
+// leaves, less a fifth for the buyer's return (D51).
+export function nonperformingSale(world: World, b: Bank, t: LoanType): { balance: number; price: number } {
+  let balance = 0;
+  for (const p of b.pools) if (p.type === t) balance += (p.grades[6] ?? 0) + (p.grades[7] ?? 0);
+  const price = Math.round(balance * (1 - lgdNow(world, t)) * 0.8);
+  return { balance, price };
+}
+
+export function sellNonperforming(ctx: Ctx, b: Bank, t: LoanType): number {
+  const { world } = ctx;
+  const { balance, price } = nonperformingSale(world, b, t);
+  if (balance <= 0) return 0;
+  const loss = balance - price;
+  let left = loss;
+  for (const p of b.pools) {
+    if (p.type !== t) continue;
+    const bad = (p.grades[6] ?? 0) + (p.grades[7] ?? 0);
+    if (bad <= 0) continue;
+    const share = Math.min(left, Math.round((loss * bad) / balance));
+    p.cumLoss += share;
+    left -= share;
+    p.balance -= bad;
+    p.grades[6] = 0;
+    p.grades[7] = 0;
+    p.count = p.balance > 0 ? Math.max(1, Math.round(p.balance / TYPE[p.type].avgSize)) : 0;
+  }
+  if (loss > 0) {
+    chargeOff(b, loss);
+    b.chargeOffsByType[t] += loss;
+    b.lifetimeChargeOffsByType[t] += loss;
+  }
+  post(b.acct, { cash: price, loans: -price });
+  b.pools = b.pools.filter((p) => p.balance > 0);
+  emit(ctx, 'borrower', `Sold ${money(balance)} of nonperforming ${TYPE[t].label} loans for ${money(price)}, ${money(loss)} charged off`, { severity: 'alert', bankId: b.id });
+  return price;
+}
+
 // CECL-style reserve, quarterly. The allowance target is lifetime expected
 // loss on the book under current conditions; the provision is the gap.
 export function reserveQuarterly(ctx: Ctx, b: Bank): number {

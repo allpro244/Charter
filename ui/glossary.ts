@@ -79,6 +79,8 @@ export const TERMS: Record<string, string> = {
   'margin after losses': 'The market rate less what your deposits cost less the expected loss. What is left pays the running costs and the shareholders.',
   'inverted curve': 'Short rates above long rates. Banks borrow short and lend long, so an inverted curve squeezes margins, and a recession has followed every one within two years.',
   'cost of money': 'The average rate you pay on deposits and borrowings. Every loan has to earn more than this plus its losses.',
+  'note sale': 'Selling a troubled loan to a buyer who specializes in collecting them, for less than is owed. The bank gets cash now and writes off the difference today instead of waiting through a workout.',
+  REO: 'Real estate owned: property the bank took back in a foreclosure, carried at what it should sell for. It sells over the following months, or sooner at a discount.',
   'investment policy': 'The board\'s standing order for idle cash: how much to keep as cash, what bonds to buy with the rest, how long, and whether they can be sold. The CFO executes it at each month end.',
   'loans to deposits': 'Loans as a share of deposits. A community bank runs at 70% to 90%; above 100% the loans are funded with borrowed money.',
   'follows the market': 'Your deposit rates are reset every month to the market rate plus the offset you chose, the way a real bank reprices at its ALCO meeting.',

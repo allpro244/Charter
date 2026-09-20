@@ -9,7 +9,9 @@ import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from '../engine/loanty
 import { derive, hashString, rand, randNormal } from '../engine/rng';
 import { type Bank, type Loan, type Pool, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
-import { decidedText } from '../engine/loans';
+import { decidedText, isTroubled, noteSalePrice, reoQuickPrice, sellLoan, sellReoNow } from '../engine/loans';
+import { nonperformingSale, sellNonperforming } from '../engine/credit';
+import type { Ctx } from '../engine/ctx';
 import { PRICING_MAX, PRICING_MIN, demandMultiplier, setDial, setPolicy, setPricing, setTypeAllowed } from '../engine/underwriting';
 import { baseRate } from '../engine/credit';
 import { bankDepositRate } from '../engine/deposits';
@@ -22,11 +24,12 @@ interface Props {
   bank: Bank;
   unit: Unit;
   refresh: () => void;
+  act?: (fn: (ctx: Ctx) => void, note?: string) => void;
 }
 
 type Tab = 'book' | 'sheet' | 'policy' | 'pools';
 
-export function LoansScreen({ world, bank, unit, refresh }: Props) {
+export function LoansScreen({ world, bank, unit, refresh, act }: Props) {
   const [tab, setTab] = useState<Tab>('book');
   const [openPool, setOpenPool] = useState<string | null>(null);
   const [openLoan, setOpenLoan] = useState<string | null>(null);
@@ -118,8 +121,8 @@ export function LoansScreen({ world, bank, unit, refresh }: Props) {
           </tr>
         </tbody>
       </table>
-      {tab === 'book' && <Book bank={bank} unit={unit} openLoan={openLoan} setOpenLoan={setOpenLoan} />}
-      {tab === 'pools' && <Pools world={world} bank={bank} unit={unit} openPool={openPool} setOpenPool={setOpenPool} />}
+      {tab === 'book' && <Book world={world} bank={bank} unit={unit} openLoan={openLoan} setOpenLoan={setOpenLoan} act={act} />}
+      {tab === 'pools' && <Pools world={world} bank={bank} unit={unit} openPool={openPool} setOpenPool={setOpenPool} act={act} />}
       {tab === 'sheet' && <RateSheet world={world} bank={bank} refresh={refresh} />}
       {tab === 'policy' && <Policy world={world} bank={bank} refresh={refresh} />}
     </div>
@@ -153,18 +156,27 @@ function statusLabel(l: Loan): string {
       return 'foreclosed';
     case 'paid':
       return 'paid off';
+    case 'sold':
+      return 'sold';
     case 'chargedOff':
       return 'written off';
   }
 }
 
-function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; openLoan: string | null; setOpenLoan: (id: string | null) => void }) {
+function Book({ world, bank, unit, openLoan, setOpenLoan, act }: { world: World; bank: Bank; unit: Unit; openLoan: string | null; setOpenLoan: (id: string | null) => void; act?: Props['act'] }) {
   const loans = [...bank.loans].sort((a, b) => (a.status === b.status ? b.balance - a.balance : rank(a) - rank(b)));
+  const troubled = loans.filter((l) => isTroubled(l) || l.status === 'reo');
   return (
+    <div>
+    {troubled.length > 0 && (
+      <p className="hint">
+        When a loan fails: 30, 60 and 90 days late, then <Term k="nonaccrual">nonaccrual</Term> (its interest stops counting), workout, and at nine months the bank forecloses real estate into <Term k="REO">REO</Term> or charges the rest off. You can sell a troubled loan first with a <Term k="note sale">note sale</Term>: cash now, the shortfall written off today, the workout gone. Buttons are on the rows.
+      </p>
+    )}
     <table>
       <thead>
         <tr>
-          <th>Loans you decided ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff').length})</th>
+          <th>Loans you decided ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'sold').length})</th>
           <th>type</th>
           <th className="num">balance {unitLabel(unit)}</th>
           <th className="num">rate</th>
@@ -184,7 +196,7 @@ function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; o
       </thead>
       <tbody>
         {loans.slice(0, 300).map((l) => (
-          <LoanRows key={l.id} l={l} unit={unit} open={openLoan === l.id} toggle={() => setOpenLoan(openLoan === l.id ? null : l.id)} />
+          <LoanRows key={l.id} world={world} bank={bank} l={l} unit={unit} open={openLoan === l.id} toggle={() => setOpenLoan(openLoan === l.id ? null : l.id)} act={act} />
         ))}
         {loans.length === 0 && (
           <tr>
@@ -195,15 +207,18 @@ function Book({ bank, unit, openLoan, setOpenLoan }: { bank: Bank; unit: Unit; o
         )}
       </tbody>
     </table>
+    </div>
   );
 }
 
 function rank(l: Loan): number {
-  return ['nonaccrual', 'workout', 'late90', 'late60', 'late30', 'reo', 'current', 'paid', 'chargedOff'].indexOf(l.status);
+  return ['nonaccrual', 'workout', 'late90', 'late60', 'late30', 'reo', 'current', 'paid', 'chargedOff', 'sold'].indexOf(l.status);
 }
 
-function LoanRows({ l, unit, open, toggle }: { l: Loan; unit: Unit; open: boolean; toggle: () => void }) {
-  const bad = l.status !== 'current' && l.status !== 'paid';
+function LoanRows({ world, bank, l, unit, open, toggle, act }: { world: World; bank: Bank; l: Loan; unit: Unit; open: boolean; toggle: () => void; act?: Props['act'] }) {
+  const bad = l.status !== 'current' && l.status !== 'paid' && l.status !== 'sold';
+  const notePrice = isTroubled(l) ? noteSalePrice(world, l) : 0;
+  const reoPrice = l.status === 'reo' ? reoQuickPrice(world, l) : 0;
   return (
     <>
       <tr className={'row' + (bad ? ' alert' : '')} onClick={toggle}>
@@ -215,7 +230,19 @@ function LoanRows({ l, unit, open, toggle }: { l: Loan; unit: Unit; open: boolea
         <td className="num">{dollars(l.status === 'reo' ? l.reoValue : l.balance, unit)}</td>
         <td className="num">{pct(l.rate)}</td>
         <td className="num">{l.grade}</td>
-        <td>{statusLabel(l)}</td>
+        <td>
+          {statusLabel(l)}
+          {act && isTroubled(l) && l.balance > 0 && (
+            <button className="btn small" style={{ marginLeft: 6 }} onClick={(e) => { e.stopPropagation(); act((c: Ctx) => sellLoan(c, bank, l.id)); }} title={`A buyer pays ${usd(notePrice)} of the ${usd(l.balance)} owed; ${usd(l.balance - notePrice)} is charged off today`}>
+              Sell the note for {usd(notePrice)}
+            </button>
+          )}
+          {act && l.status === 'reo' && l.reoValue > 0 && (
+            <button className="btn small" style={{ marginLeft: 6 }} onClick={(e) => { e.stopPropagation(); act((c: Ctx) => sellReoNow(c, bank, l.id)); }} title={`Carried at ${usd(l.reoValue)}; a quick sale brings ${usd(reoPrice)}. Left alone it sells in a few months near its carrying value.`}>
+              Sell now for {usd(reoPrice)}
+            </button>
+          )}
+        </td>
         <td className="num">{l.memo.dscr.toFixed(2)}x</td>
         <td className="num">{pct(l.memo.ltv, 0)}</td>
         <td>
@@ -244,10 +271,42 @@ function LoanRows({ l, unit, open, toggle }: { l: Loan; unit: Unit; open: boolea
   );
 }
 
-function Pools({ world, bank, unit, openPool, setOpenPool }: { world: World; bank: Bank; unit: Unit; openPool: string | null; setOpenPool: (k: string | null) => void }) {
+function Pools({ world, bank, unit, openPool, setOpenPool, act }: { world: World; bank: Bank; unit: Unit; openPool: string | null; setOpenPool: (k: string | null) => void; act?: Props['act'] }) {
   const pools = [...bank.pools].sort((a, b) => (a.type === b.type ? b.vintage - a.vintage : LOAN_TYPES.indexOf(a.type) - LOAN_TYPES.indexOf(b.type)));
+  const sales = LOAN_TYPES.map((t) => ({ t, ...nonperformingSale(world, bank, t) })).filter((x) => x.balance > 0);
   return (
     <div>
+      {sales.length > 0 && (
+        <table className="wrap">
+          <thead>
+            <tr>
+              <th>Nonperforming pooled loans (grades 7 and 8)</th>
+              <th className="num">balance</th>
+              <th className="num">a buyer pays</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sales.map((x) => (
+              <tr key={x.t}>
+                <td>{TYPE[x.t].label}</td>
+                <td className="num">{dollars(x.balance, unit)}</td>
+                <td className="num">{dollars(x.price, unit)}</td>
+                <td>
+                  {act && (
+                    <button className="btn small" onClick={() => act((c: Ctx) => sellNonperforming(c, bank, x.t))} title={`${usd(x.balance - x.price)} charged off today; the workouts and the drag on earnings go with the loans`}>
+                      Sell them for {usd(x.price)}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            <tr className="memo-row">
+              <td colSpan={4}>A bulk sale to a distressed debt fund: the price is what the type's loss given default leaves, less a fifth for the buyer. Selling takes the loss now instead of over the coming year, and the examiner stops counting them.</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
       <p className="hint">
         Each pool is one loan type and one year of origination. The g1 to g9 columns are the share of the balance in each <Term k="grade">grade</Term>: 1 is the safest, 6 and up are weak, 9 is a loss. Click a pool for a sample of the loans inside it.
       </p>

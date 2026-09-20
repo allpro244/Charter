@@ -78,7 +78,88 @@ export function fundLoan(ctx: Ctx, b: Bank, app: Application, terms: FundTerms, 
 }
 
 export function isActive(l: Loan): boolean {
-  return l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'reo';
+  return l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'reo' && l.status !== 'sold';
+}
+
+// Troubled enough to sell: sixty days late or worse.
+export function isTroubled(l: Loan): boolean {
+  return l.status === 'late60' || l.status === 'late90' || l.status === 'nonaccrual' || l.status === 'workout';
+}
+
+// What a default would recover today: real estate at liquidation value
+// after local home prices, everything else at the loan's own loss given
+// default scaled by the environment.
+export function expectedRecovery(world: World, l: Loan): number {
+  const realEstate = l.type === 'resi' || l.type === 'cre_oo' || l.type === 'cre_inv' || l.type === 'construction' || (l.type === 'ag' && l.memo.collateralType === 'farmland');
+  const county = world.geo.counties[l.county];
+  const localHpi = county ? county.localHpi / 100 : 1;
+  let recovery: number;
+  if (realEstate) recovery = Math.round(l.memo.collateralValue * localHpi * 0.82 * (1 - 0.3 * Math.max(0, l.trueLgd - 0.2)));
+  else recovery = Math.round(l.balance * (1 - Math.min(0.95, (l.trueLgd * lgdNow(world, l.type)) / TYPE[l.type].lgd)));
+  return Math.max(0, Math.min(l.balance, recovery));
+}
+
+// A note sale (D51): a distressed debt buyer pays the expected recovery
+// less a discount for the wait and the work, deeper the further gone.
+export function noteSalePrice(world: World, l: Loan): number {
+  if (!isTroubled(l)) return 0;
+  const discount = l.status === 'late60' ? 0.1 : l.status === 'late90' ? 0.15 : 0.2;
+  return Math.round(expectedRecovery(world, l) * (1 - discount));
+}
+
+// Sells a troubled loan. Cash comes in, the shortfall is charged off
+// against the allowance, unpaid interest is reversed, and the loan leaves
+// the book as sold. Returns the proceeds, 0 when nothing was sold.
+export function sellLoan(ctx: Ctx, b: Bank, loanId: string): number {
+  const { world } = ctx;
+  const l = b.loans.find((x) => x.id === loanId);
+  if (!l || !isTroubled(l) || l.balance <= 0) return 0;
+  const a = b.acct;
+  const price = noteSalePrice(world, l);
+  if (l.accrued > 0) {
+    post(a, { interestReceivable: -l.accrued, retainedEarnings: -l.accrued });
+    b.is.month.interestLoans -= l.accrued;
+    b.interestByType[l.type] -= l.accrued;
+    l.accrued = 0;
+  }
+  const loss = l.balance - price;
+  if (loss > 0) {
+    chargeOff(b, loss);
+    b.chargeOffsByType[l.type] += loss;
+    b.lifetimeChargeOffsByType[l.type] += loss;
+    l.lossToDate += loss;
+    if (l.decision.by === 'player') (b.desk ??= emptyDesk()).lost += loss;
+    b.losses.push({ day: world.day, loanId: l.id, borrower: l.borrower, type: l.type, amount: loss, decidedBy: l.decision.by, decidedOn: l.decision.day, signal: l.attribution ?? attributionFor(l) });
+  }
+  if (price > 0) post(a, { cash: price, loans: -price });
+  l.balance = 0;
+  l.status = 'sold';
+  emit(ctx, 'borrower', `Sold the ${l.borrower} note for ${money(price)}, ${money(loss)} charged off. ${decidedText(l)}.`, { severity: loss > 0 ? 'alert' : 'info', bankId: b.id, ref: { kind: 'loan', id: l.id } });
+  return price;
+}
+
+// Sells a foreclosed property now rather than waiting for a buyer: ninety
+// percent of its carrying value, moved with local prices since foreclosure.
+export function reoQuickPrice(world: World, l: Loan): number {
+  const county = world.geo.counties[l.county];
+  const drift = county ? county.localHpi / 100 : 1;
+  return Math.round(l.reoValue * 0.9 * Math.pow(drift, 0.3));
+}
+
+export function sellReoNow(ctx: Ctx, b: Bank, loanId: string): number {
+  const { world } = ctx;
+  const l = b.loans.find((x) => x.id === loanId);
+  if (!l || l.status !== 'reo' || l.reoValue <= 0) return 0;
+  const a = b.acct;
+  const price = reoQuickPrice(world, l);
+  const gain = price - l.reoValue;
+  post(a, { cash: price, reo: -l.reoValue, retainedEarnings: gain });
+  if (gain >= 0) b.is.month.feeIncome += gain;
+  else b.is.month.otherExpense += -gain;
+  l.reoValue = 0;
+  l.status = 'chargedOff';
+  emit(ctx, 'borrower', `Sold the ${l.memo.collateralType} from ${l.borrower} for ${money(price)} (${gain >= 0 ? 'gain' : 'loss'} ${money(Math.abs(gain))})`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
+  return price;
 }
 
 export function isAccruing(l: Loan): boolean {
@@ -296,15 +377,7 @@ function resolveDefault(ctx: Ctx, b: Bank, l: Loan, losses: LossRecord[]): void 
   const { world } = ctx;
   const a = b.acct;
   const realEstate = l.type === 'resi' || l.type === 'cre_oo' || l.type === 'cre_inv' || l.type === 'construction' || (l.type === 'ag' && l.memo.collateralType === 'farmland');
-  const county = world.geo.counties[l.county];
-  const localHpi = county ? county.localHpi / 100 : 1;
-  let recovery: number;
-  if (realEstate) {
-    recovery = Math.round(l.memo.collateralValue * localHpi * 0.82 * (1 - 0.3 * Math.max(0, l.trueLgd - 0.2)));
-  } else {
-    recovery = Math.round(l.balance * (1 - Math.min(0.95, l.trueLgd * lgdNow(world, l.type) / TYPE[l.type].lgd)));
-  }
-  recovery = Math.max(0, Math.min(l.balance, recovery));
+  const recovery = expectedRecovery(world, l);
   const loss = l.balance - recovery;
   if (loss > 0) {
     chargeOff(b, loss);

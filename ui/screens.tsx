@@ -26,6 +26,8 @@ import { ladder } from '../engine/ladder';
 // two minutes. Speed 5 is for skipping ahead.
 export const SPEEDS = [0, 0.5, 1, 2, 3, 6];
 const SPEED_LABELS = ['', 'Slow', 'Normal', 'Fast', 'Faster', 'Max'];
+// Three buttons; keys 1 to 5 still reach every speed.
+const SPEED_BUTTONS = [2, 3, 5];
 
 export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp, alerts = 0, onAlerts }: { world: World; speed: number; onSpeed: (n: number) => void; onToggle: () => void; onSave: () => void; saved: boolean; onHelp: () => void; alerts?: number; onAlerts?: () => void }) {
   const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
@@ -47,8 +49,8 @@ export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp,
           {speed === 0 ? 'Play' : 'Pause'}
         </button>
         <div className="seg" role="group" aria-label="Speed">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} className={speed === n ? 'on' : ''} title={`${SPEEDS[n]} days per second (key ${n})`} onClick={() => onSpeed(n)}>
+          {SPEED_BUTTONS.map((n) => (
+            <button key={n} className={speed === n || (speed > 0 && !SPEED_BUTTONS.includes(speed) && n === SPEED_BUTTONS.find((x) => x >= speed)) ? 'on' : ''} title={`${SPEEDS[n]} days per second (key ${n})`} onClick={() => onSpeed(n)}>
               {SPEED_LABELS[n]}
             </button>
           ))}
@@ -148,19 +150,46 @@ export function FeedList({ items, speed, onPlay }: { items: FeedItem[]; speed: n
   );
 }
 
-function DecisionBody({ world, p, onDecide }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void }) {
+function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void; onFewer?: () => void }) {
   const preview = previewFor(world, p);
   const bank = playerBank(world);
   const app = p.kind === 'loan_application' ? (p.data.app as Application | undefined) : undefined;
   const apps = p.kind === 'loan_batch' ? ((p.data.apps as Application[] | undefined) ?? []) : [];
+  const [showRead, setShowRead] = useState(false);
+  const h = app && bank ? loanHealth(world, bank, app) : null;
   return (
     <>
       <div className="when">{formatDate(p.day)}</div>
       <h2>{p.title}</h2>
-      {app && bank ? <HealthMeter world={world} bank={bank} app={app} /> : null}
+      {app && bank && h ? (
+        <div className="verdict">
+          <div className="verdict-line">
+            <span className={'health-score ' + healthTone(h.score)}>{h.score}</span>
+            <span className={'pill ' + healthTone(h.score)}>{h.label}</span>
+            <span className="verdict-text">
+              {app.memo.purpose.charAt(0).toUpperCase() + app.memo.purpose.slice(1)}, {app.memo.termMonths} months at {pct(app.memo.rate)}.{' '}
+              {h.concerns.length > 0 ? `Weak on ${h.concerns.join(', ')}.` : 'No weak spot on the memo.'}{' '}
+              {h.strengths.length > 0 ? `Strong on ${h.strengths.slice(0, 3).join(', ')}.` : ''}
+            </span>
+          </div>
+          <div className="verdict-line dim">
+            <span className={h.pricing.tone === 'bad' ? 'bad' : h.pricing.tone === 'warn' ? 'warn' : 'positive'}>{h.pricing.margin >= 0 ? 'The rate pays' : 'The rate does not pay'}: {(h.pricing.margin * 100).toFixed(2)}% a year after losses and costs.</span>{' '}
+            <span>CCO grade {app.memo.suggestedGrade}.</span>{' '}
+            <button className="btn small" onClick={() => setShowRead((v) => !v)}>
+              {showRead ? 'Hide the banker\'s read' : 'Show the banker\'s read'}
+            </button>
+            {onFewer && (
+              <button className="btn small" onClick={onFewer} title="Doubles the size line: smaller loans are decided under your written policy">
+                Fewer loans on my desk
+              </button>
+            )}
+          </div>
+          {showRead && <HealthMeter world={world} bank={bank} app={app} />}
+        </div>
+      ) : null}
       {apps.length > 0 && bank ? (
         <BatchHealth world={world} bank={bank} apps={apps} />
-      ) : (
+      ) : app ? null : (
         <div className="lines">
           {p.lines.map((l, i) => (
             <p key={i}>{l}</p>
@@ -318,7 +347,7 @@ export function DecisionCard({ world, p, onDecide }: { world: World; p: Pending;
 
 // A decision that stops the clock docks under the tabs on every screen, so
 // the player can look at the book or the balance sheet before answering.
-export function DecisionDock({ world, p, more, onDecide }: { world: World; p: Pending; more: number; onDecide: (p: Pending, key: string) => void }) {
+export function DecisionDock({ world, p, more, onDecide, onFewer }: { world: World; p: Pending; more: number; onDecide: (p: Pending, key: string) => void; onFewer?: () => void }) {
   return (
     <div className="dock" role="dialog" aria-label={p.title}>
       <div className="dock-inner">
@@ -326,7 +355,7 @@ export function DecisionDock({ world, p, more, onDecide }: { world: World; p: Pe
           Decision{more > 0 ? ` (${more} more waiting)` : ''}
           <span className="dim"> The clock is stopped until you answer. The other tabs still work.</span>
         </div>
-        <DecisionBody world={world} p={p} onDecide={onDecide} />
+        <DecisionBody world={world} p={p} onDecide={onDecide} onFewer={onFewer} />
       </div>
     </div>
   );

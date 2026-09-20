@@ -173,10 +173,16 @@ button {
 }
 
 .tab .k {
+  display: none;
   color: var(--faint);
   font-weight: 400;
   font-size: 11px;
   font-family: var(--mono);
+}
+
+/* Key hints show while Help is open. */
+.tabs.keys .tab .k {
+  display: inline;
 }
 
 .badge {
@@ -647,8 +653,9 @@ table.feed td.when {
 }
 
 .option {
-  padding: 9px 14px;
-  font-size: 14px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -1214,4 +1221,27 @@ th.subhead {
   color: var(--bad);
   border-color: rgba(242, 103, 77, 0.4);
   align-self: center;
+}
+
+/* The compact decision card: verdict first, the banker's read on request. */
+.verdict {
+  margin: 6px 0 8px;
+}
+
+.verdict-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.verdict-line .health-score {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.verdict-text {
+  flex: 1 1 320px;
 }

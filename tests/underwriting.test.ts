@@ -58,7 +58,10 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
     }
     expect(bank.applications.received).toBeGreaterThan(0);
     expect(bank.applications.autoApproved + bank.applications.autoDeclined).toBe(0);
-    expect(bank.applications.toDesk).toBe(bank.applications.received);
+    // Every application the bank could make reached the desk; the ones over
+    // the legal limit or beyond today's funding were turned away at the door (D51).
+    expect(bank.applications.toDesk + (bank.applications.turnedAway ?? 0)).toBe(bank.applications.received);
+    expect(bank.applications.toDesk).toBeGreaterThan(0);
   });
 
   it('no loan is both current and charged off, and pools plus the book equal the loans account', () => {

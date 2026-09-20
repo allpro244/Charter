@@ -28,7 +28,7 @@ Borrower and memo (D32, D43): type drawn from the county's real industry mix, in
 Loan types: C&I, CRE (owner occupied and investor), construction, 1-4 family, consumer/auto, ag, oil and gas reserve-based.
 Decision path: above the dial, pause with the memo: approve / counter (rate, LTV, term, guarantee) / decline. Below the dial, auto-decide under written policy with error driven by CCO skill.
 Losses: PD moves with regional and national indices and sector. LGD moves with collateral values. Concentration multiplies correlation inside a sector. Reserve: CECL-style, quarterly. Every default emits an attribution event naming the predictive signal and the originating decision (D34).
-Invariants: cumulative net charge-offs over 20 year runs in FDIC bands per type. Scripted Permian bust pushes energy losses to a plausible peak. No loan both current and charged off. Dial at zero routes 100% of applications. A player who approves only loans with DSCR > 1.5 and LTV < 65% has measurably lower losses than one who approves everything, across seeds.
+Invariants: cumulative net charge-offs over 20 year runs in FDIC bands per type. Scripted Permian bust pushes energy losses to a plausible peak. No loan both current and charged off. Dial at zero routes 100% of the applications the bank can make; the rest (over the legal limit, beyond today's funding) are turned away at the door and counted (D51). A player who approves only loans with DSCR > 1.5 and LTV < 65% has measurably lower losses than one who approves everything, across seeds.
 
 ## 4. Deposits and funding
 Cadence: daily flows; monthly rate resets and beta updates.

@@ -188,6 +188,10 @@ export function applicationsDaily(ctx: Ctx): void {
   if (n === 0) return;
   const skill = ccoSkill(b);
   const forPlayer: Application[] = [];
+  let turnedAway = 0;
+  let turnedAwayAmount = 0;
+  const limit = lendingLimit(b);
+  const room = fundable(b);
   for (let i = 0; i < n; i++) {
     const branch = b.branches.length > 0 ? pick(world.rng, b.branches) : null;
     const county = world.geo.counties[branch ? branch.county : b.homeCounty];
@@ -201,8 +205,19 @@ export function applicationsDaily(ctx: Ctx): void {
     b.applications.received += 1;
     if (!b.applicationsByType) b.applicationsByType = emptyByType(0);
     b.applicationsByType[app.type] += 1;
-    if (aboveDial(b, app)) forPlayer.push(app);
-    else autoDecide(ctx, b, app, skill);
+    if (aboveDial(b, app)) {
+      // A loan the bank cannot make, over the legal limit or beyond what it
+      // can fund today, is turned away at the door, not brought to the desk.
+      if (app.memo.amount > limit || app.memo.amount > room) {
+        turnedAway += 1;
+        turnedAwayAmount += app.memo.amount;
+        b.applications.turnedAway = (b.applications.turnedAway ?? 0) + 1;
+        b.applications.turnedAwayAmount = (b.applications.turnedAwayAmount ?? 0) + app.memo.amount;
+      } else forPlayer.push(app);
+    } else autoDecide(ctx, b, app, skill);
+  }
+  if (turnedAway > 0) {
+    emit(ctx, 'borrower', `Turned away ${turnedAway} borrower${turnedAway === 1 ? '' : 's'} asking ${money(turnedAwayAmount)}: ${turnedAwayAmount > limit * turnedAway ? `over the legal lending limit of ${money(limit)} to one name` : `beyond the ${money(room)} the bank can lend today`}. Capital raises the limit; deposits raise the room.`, { bankId: b.id });
   }
   if (forPlayer.length === 0) return;
   if (forPlayer.length > 5) {

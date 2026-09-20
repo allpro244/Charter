@@ -19,25 +19,35 @@ import { StartPanel } from './start';
 import { LoansScreen } from './loans';
 import { FundScreen } from './fund';
 import { OfficersScreen } from './off';
-import { OverviewScreen } from './overview';
+import { EconomyPanel, OverviewScreen } from './overview';
 import { EarningsScreen } from './earnings';
 import { EconomyScreen } from './economy';
 import { MarketScreen } from './market';
 import { openBranch } from '../engine/deposits';
+import { setDial } from '../engine/underwriting';
 
-type Screen = 'OVERVIEW' | 'LENDING' | 'ECONOMY' | 'MONEY' | 'EARNINGS' | 'PEOPLE' | 'MARKET' | 'MAP' | 'YOU' | 'DEBUG';
+// Six tabs, grouped by the question a player is asking (DESIGN.md Part 3).
+type Screen = 'HOME' | 'LENDING' | 'MONEY' | 'WORLD' | 'MAP' | 'YOU' | 'DEBUG';
+type HomeTab = 'today' | 'results';
+type WorldTab = 'economy' | 'rivals';
+type YouTab = 'you' | 'team';
 const SCREENS: { id: Screen; label: string; key: string }[] = [
-  { id: 'OVERVIEW', label: 'Overview', key: 'o' },
-  { id: 'LENDING', label: 'Lending', key: 'l' },
-  { id: 'ECONOMY', label: 'Economy', key: 'c' },
+  { id: 'HOME', label: 'Home', key: 'h' },
+  { id: 'LENDING', label: 'Loans', key: 'l' },
   { id: 'MONEY', label: 'Money', key: 'f' },
-  { id: 'EARNINGS', label: 'Earnings', key: 'e' },
-  { id: 'PEOPLE', label: 'People', key: 'p' },
-  { id: 'MARKET', label: 'Market', key: 'r' },
+  { id: 'WORLD', label: 'World', key: 'w' },
   { id: 'MAP', label: 'Map', key: 'm' },
-  { id: 'YOU', label: 'You', key: 'w' },
+  { id: 'YOU', label: 'You', key: 'y' },
 ];
 const SCREEN_KEYS: Record<string, Screen> = { ...Object.fromEntries(SCREENS.map((s) => [s.key, s.id])), d: 'DEBUG' };
+// The old screen names still work as links from the gauges and the advisor.
+const OLD_SCREENS: Record<string, { screen: Screen; home?: HomeTab; world?: WorldTab; you?: YouTab }> = {
+  OVERVIEW: { screen: 'HOME', home: 'today' },
+  EARNINGS: { screen: 'HOME', home: 'results' },
+  ECONOMY: { screen: 'WORLD', world: 'economy' },
+  MARKET: { screen: 'WORLD', world: 'rivals' },
+  PEOPLE: { screen: 'YOU', you: 'team' },
+};
 const SAVE_KEY = 'charter.save';
 
 type Phase = 'loading' | 'nodata' | 'start' | 'play';
@@ -66,7 +76,20 @@ export function App() {
   const loadedRef = useRef<Loaded | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
   const [missing, setMissing] = useState<string[]>([]);
-  const [screen, setScreen] = useState<Screen>('OVERVIEW');
+  const [screen, setScreen] = useState<Screen>('HOME');
+  const [homeTab, setHomeTab] = useState<HomeTab>('today');
+  const [worldTab, setWorldTab] = useState<WorldTab>('economy');
+  const [youTab, setYouTab] = useState<YouTab>('you');
+  // Goes to a tab by its new or old name; old names carry a sub-tab.
+  const goTo = useCallback((id: string) => {
+    const old = OLD_SCREENS[id];
+    if (old) {
+      setScreen(old.screen);
+      if (old.home) setHomeTab(old.home);
+      if (old.world) setWorldTab(old.world);
+      if (old.you) setYouTab(old.you);
+    } else setScreen(id as Screen);
+  }, []);
   const [speed, setSpeedState] = useState(0);
   const speedRef = useRef(0);
   const resumeRef = useRef(2);
@@ -88,8 +111,8 @@ export function App() {
   // A short confirmation after every action, bottom right, gone in a moment.
   const toast = useCallback((text: string) => {
     const id = ++toastId.current;
-    setToasts((t) => [...t.slice(-3), { id, text }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+    setToasts((t) => [...t.slice(-1), { id, text }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2500);
   }, []);
 
   const exportSave = useCallback(() => {
@@ -241,7 +264,8 @@ export function App() {
       fn(ctx);
       world.feed.push(...ctx.events);
       setPhase('play');
-      setScreen('OVERVIEW');
+      setScreen('HOME');
+      setHomeTab('today');
       setSpeed(1);
       writeSave(world);
       refresh();
@@ -327,6 +351,10 @@ export function App() {
         }
         if (SCREEN_KEYS[k]) {
           setScreen(SCREEN_KEYS[k] as Screen);
+          return;
+        }
+        if (k === 'e' || k === 'c' || k === 'r' || k === 'p' || k === 'o') {
+          goTo({ e: 'EARNINGS', c: 'ECONOMY', r: 'MARKET', p: 'PEOPLE', o: 'OVERVIEW' }[k] as string);
           return;
         }
         if (k === 's') {
@@ -448,40 +476,76 @@ export function App() {
   return (
     <div className="desk">
       <div className="chrome">
-        <TopBar world={world} speed={speed} onSpeed={setSpeed} onToggle={togglePlay} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} alerts={cards.length} onAlerts={() => setScreen('OVERVIEW')} />
-        <nav className="tabs" aria-label="Screens">
+        <TopBar world={world} speed={speed} onSpeed={setSpeed} onToggle={togglePlay} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} alerts={cards.length} onAlerts={() => goTo('OVERVIEW')} />
+        <nav className={'tabs' + (showKeys ? ' keys' : '')} aria-label="Screens">
           {SCREENS.map((s) => (
             <button key={s.id} className={'tab' + (screen === s.id ? ' on' : '')} onClick={() => setScreen(s.id)}>
               {s.label}
-              {s.id === 'OVERVIEW' && waiting > 0 && <span className="badge">{waiting}</span>}
+              {s.id === 'HOME' && waiting > 0 && <span className="badge">{waiting}</span>}
               <span className="k">{s.key}</span>
             </button>
           ))}
           {screen === 'DEBUG' && <button className="tab on">Debug</button>}
         </nav>
-        {blocking && <DecisionDock world={world} p={blocking} more={world.pending.filter((x) => x.blocking).length - 1} onDecide={decide} />}
-      </div>
-      <main className="content">
-        {screen === 'OVERVIEW' && bank && (
-          <OverviewScreen
+        {blocking && (
+          <DecisionDock
             world={world}
-            bank={bank}
-            cards={cards}
-            advisorOn={advisorOn}
-            onToggleAdvisor={() => setAdvisorOn((v) => !v)}
-            onDismiss={(key) => setDismissed((d) => ({ ...d, [key]: world.day }))}
-            onGo={(tab) => setScreen(tab as Screen)}
+            p={blocking}
+            more={world.pending.filter((x) => x.blocking).length - 1}
             onDecide={decide}
-            speed={speed}
-            onPlay={togglePlay}
+            onFewer={bank ? () => act(({ world: w }) => setDial(w, Math.max(250_000, Math.round((bank.dial.maxAuto || 250_000) * 2 / 50_000) * 50_000), bank.dial.minGrade), `Loans under ${short(Math.max(250_000, Math.round((bank.dial.maxAuto || 250_000) * 2 / 50_000) * 50_000))} are now decided under your policy`) : undefined}
           />
         )}
-        {screen === 'LENDING' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} />}
-        {screen === 'ECONOMY' && bank && <EconomyScreen world={world} bank={bank} onGo={(tab) => setScreen(tab as Screen)} />}
+      </div>
+      <main className="content">
+        {screen === 'HOME' && bank && (
+          <div>
+            <div className="toolbar">
+              <div className="seg">
+                <button className={homeTab === 'today' ? 'on' : ''} onClick={() => setHomeTab('today')}>
+                  Today
+                </button>
+                <button className={homeTab === 'results' ? 'on' : ''} onClick={() => setHomeTab('results')}>
+                  Results
+                </button>
+              </div>
+            </div>
+            {homeTab === 'today' && (
+              <OverviewScreen
+                world={world}
+                bank={bank}
+                cards={cards}
+                advisorOn={advisorOn}
+                onToggleAdvisor={() => setAdvisorOn((v) => !v)}
+                onDismiss={(key) => setDismissed((d) => ({ ...d, [key]: world.day }))}
+                onGo={goTo}
+                onDecide={decide}
+                speed={speed}
+                onPlay={togglePlay}
+              />
+            )}
+            {homeTab === 'results' && <EarningsScreen bank={bank} unit={unit} />}
+          </div>
+        )}
+        {screen === 'LENDING' && bank && <LoansScreen world={world} bank={bank} unit={unit} refresh={refresh} act={act} />}
         {screen === 'MONEY' && bank && <FundScreen world={world} bank={bank} unit={unit} act={act} />}
-        {screen === 'EARNINGS' && bank && <EarningsScreen bank={bank} unit={unit} />}
-        {screen === 'PEOPLE' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
-        {screen === 'MARKET' && bank && <MarketScreen world={world} bank={bank} unit={unit} act={act} />}
+        {screen === 'WORLD' && bank && (
+          <div>
+            <div className="toolbar">
+              <div className="seg">
+                <button className={worldTab === 'economy' ? 'on' : ''} onClick={() => setWorldTab('economy')}>
+                  The economy
+                </button>
+                <button className={worldTab === 'rivals' ? 'on' : ''} onClick={() => setWorldTab('rivals')}>
+                  The other banks
+                </button>
+              </div>
+            </div>
+            <EconomyPanel world={world} />
+            {worldTab === 'economy' && <EconomyScreen world={world} bank={bank} onGo={goTo} />}
+            {worldTab === 'rivals' && <MarketScreen world={world} bank={bank} unit={unit} act={act} />}
+          </div>
+        )}
         {screen === 'MAP' && (
           <MapView
             world={world}
@@ -498,17 +562,32 @@ export function App() {
           />
         )}
         {screen === 'YOU' && (
-          <MeScreen
-            world={world}
-            onSalary={(v) => {
-              setSalary(world, v);
-              refresh();
-            }}
-            onPayout={(v) => {
-              setDividendPayout(world, Math.round(v * 100) / 100);
-              refresh();
-            }}
-          />
+          <div>
+            <div className="toolbar">
+              <div className="seg">
+                <button className={youTab === 'you' ? 'on' : ''} onClick={() => setYouTab('you')}>
+                  Your money and the ladder
+                </button>
+                <button className={youTab === 'team' ? 'on' : ''} onClick={() => setYouTab('team')}>
+                  Your team
+                </button>
+              </div>
+            </div>
+            {youTab === 'you' && (
+              <MeScreen
+                world={world}
+                onSalary={(v) => {
+                  setSalary(world, v);
+                  refresh();
+                }}
+                onPayout={(v) => {
+                  setDividendPayout(world, Math.round(v * 100) / 100);
+                  refresh();
+                }}
+              />
+            )}
+            {youTab === 'team' && bank && <OfficersScreen world={world} bank={bank} act={act} />}
+          </div>
         )}
         {screen === 'DEBUG' && <DebugScreen world={world} tickMs={tickMs} manifest={loaded.manifest} dataOk={loadedRef.current !== null} onExport={exportSave} onImport={importSave} onNewWorld={newWorld} />}
       </main>

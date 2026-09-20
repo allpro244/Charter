@@ -148,7 +148,7 @@ export interface Bank {
   investPolicy: InvestPolicy | null; // the CFO's standing order for cash above the target (D50)
   lendersBooked: number; // pooled loans the lenders booked last month under the written policy (D50)
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
-  applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
+  applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
   lifetimeChargeOffsByType: Record<LoanType, number>;
   ai: AiPolicy | null; // rivals only
@@ -308,7 +308,7 @@ export interface Pool {
   ageMonths: number;
 }
 
-export type LoanStatus = 'current' | 'late30' | 'late60' | 'late90' | 'nonaccrual' | 'workout' | 'reo' | 'paid' | 'chargedOff';
+export type LoanStatus = 'current' | 'late30' | 'late60' | 'late90' | 'nonaccrual' | 'workout' | 'reo' | 'paid' | 'chargedOff' | 'sold';
 
 export interface Memo {
   purpose: string;
@@ -1004,7 +1004,7 @@ export function createBank(world: World, spec: BankSpec): Bank {
     desk: emptyDesk(),
     pricing: emptyByType(0),
     originationAppetite: 1,
-    applications: { received: 0, toDesk: 0, toDeskYtd: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
+    applications: { received: 0, toDesk: 0, toDeskYtd: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0, turnedAway: 0, turnedAwayAmount: 0 },
     ratePeg: emptyPeg(),
     investPolicy: { cashTarget: 0.08, product: 'agency', duration: 3, kind: 'afs' },
     lendersBooked: 0,

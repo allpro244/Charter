@@ -65,6 +65,7 @@ export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; a
   const [open, setOpen] = useState<string | null>(null);
   const [showAggregates, setShowAggregates] = useState(false);
   const [filter, setFilter] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const rows = world.bankOrder
     .map((id) => world.banks[id]!)
     .filter((b) => b.kind !== 'player' && b.status !== 'acquired')
@@ -76,14 +77,31 @@ export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; a
     .filter((r) => !q || r.name.toLowerCase().includes(q) || r.state.toLowerCase() === q || (r.county ?? '').toLowerCase().includes(q))
     .slice(0, 400);
   const failed = rows.filter((r) => r.status === 'failed').length;
+  // The short list: the banks in your county and metro, the ones for sale
+  // nearby, and the largest in your state. Everything else on request.
+  const me = world.playerBankId ? world.banks[world.playerBankId] : undefined;
+  const myCounties = new Set(me ? me.branches.map((br) => br.county) : []);
+  const myMetro = me?.homeMetro ?? null;
+  const myState = me?.state ?? '';
+  const neighbors = new Set([myState, ...(world.geo.states[myState]?.neighbors ?? [])]);
+  const live = rows.filter((r) => r.kind === 'rival' && r.status === 'open');
+  const bankOf = (r: (typeof rows)[number]) => world.banks[r.id]!;
+  const near = live.filter((r) => { const b = bankOf(r); return b.branches.some((br) => myCounties.has(br.county)) || (myMetro !== null && b.homeMetro === myMetro); }).slice(0, 8);
+  const forSale = live.filter((r) => r.forSale && neighbors.has(r.state) && !near.includes(r)).slice(0, 5);
+  const biggest = live.filter((r) => r.state === myState && !near.includes(r) && !forSale.includes(r)).slice(0, 5);
+  const short = [...near.map((r) => ({ r, why: 'in your market' })), ...forSale.map((r) => ({ r, why: 'for sale nearby' })), ...biggest.map((r) => ({ r, why: `largest in ${myState}` }))];
+  const useShort = !showAll && !q;
   return (
     <div>
-      <p className="hint">Every other bank in the world, largest first. Click a bank for its call reports and its book, and to make an offer for it.</p>
+      <p className="hint">{useShort ? 'The banks that matter to you: the ones in your market, the ones for sale nearby, and the largest in your state. Click a bank for its call reports and its book, and to make an offer for it.' : 'Every other bank in the world, largest first. Click a bank for its call reports and its book, and to make an offer for it.'}</p>
       <div className="toolbar">
         <input className="filter" style={{ maxWidth: 260 }} placeholder="Find a bank, state or town" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <button className={'btn' + (showAggregates ? ' on' : '')} onClick={() => setShowAggregates((x) => !x)}>
-          {showAggregates ? 'Hide' : 'Show'} state aggregates
+        <button className={'btn' + (showAll ? ' on' : '')} onClick={() => setShowAll((x) => !x)}>
+          {showAll ? 'Show the ones that matter' : `Show every bank (${live.length})`}
         </button>
+        {showAll && <button className={'btn' + (showAggregates ? ' on' : '')} onClick={() => setShowAggregates((x) => !x)}>
+          {showAggregates ? 'Hide' : 'Show'} state aggregates
+        </button>}
         <span className="dim">
           {rows.filter((r) => r.kind === 'rival' && r.status === 'open').length} individual banks, {rows.filter((r) => r.kind === 'aggregate').length} aggregates, {failed} failed, {world.failures.length} failures recorded in the world
         </span>
@@ -106,19 +124,25 @@ export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; a
           </tr>
         </thead>
         <tbody>
-          {shown.map((r) => {
+          {(useShort ? short.map((x) => x.r) : shown).map((r) => {
             const bank = world.banks[r.id]!;
+            const why = useShort ? short.find((x) => x.r === r)?.why : undefined;
             return (
-              <RivalRows key={r.id} r={r} bank={bank} world={world} unit={unit} open={open === r.id} toggle={() => setOpen(open === r.id ? null : r.id)} act={act} />
+              <RivalRows key={r.id} r={r} bank={bank} world={world} unit={unit} open={open === r.id} toggle={() => setOpen(open === r.id ? null : r.id)} act={act} why={why} />
             );
           })}
+          {useShort && short.length === 0 && (
+            <tr>
+              <td colSpan={12} className="empty">No other bank shares your market yet. Show every bank for the full list.</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
   );
 }
 
-function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<typeof rivalReport>; bank: World['banks'][string]; world: World; unit: Unit; open: boolean; toggle: () => void; act?: (fn: (ctx: Ctx) => void) => void }) {
+function RivalRows({ r, bank, world, unit, open, toggle, act, why }: { r: ReturnType<typeof rivalReport>; bank: World['banks'][string]; world: World; unit: Unit; open: boolean; toggle: () => void; act?: (fn: (ctx: Ctx) => void) => void; why?: string }) {
   const cls = r.status === 'failed' ? 'row alert' : r.status === 'closing' ? 'row alert' : 'row';
   const player = world.playerBankId ? world.banks[world.playerBankId] : undefined;
   return (
@@ -130,6 +154,7 @@ function RivalRows({ r, bank, world, unit, open, toggle, act }: { r: ReturnType<
           {r.national ? ' (national)' : ''}
           {r.kind === 'aggregate' ? ` (${num(r.represents)} banks)` : ''}
           {r.forSale && r.status === 'open' ? <span className="pill warn" style={{ marginLeft: 6 }}>for sale</span> : ''}
+          {why ? <span className="dim" style={{ marginLeft: 6 }}>{why}</span> : ''}
         </td>
         <td>{r.state}</td>
         <td>{r.county}</td>

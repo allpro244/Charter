@@ -215,6 +215,26 @@ export function OverviewScreen({
           <FeedList items={fullFeed ? world.feed.slice(-300).reverse() : recentRelevant} speed={speed} onPlay={onPlay} />
         </div>
         <aside>
+          <div className="side-title">
+            What to do next
+            <button className="btn small" onClick={onToggleAdvisor}>
+              {advisorOn ? 'hide' : 'show'}
+            </button>
+          </div>
+          {advisorOn && cards.length === 0 && <p className="hint">Nothing pressing. Let the clock run and watch the feed.</p>}
+          {advisorOn &&
+            cards.map((c) => (
+              <div key={c.key} className="advice">
+                <p>{c.text}</p>
+                <button className="btn small" onClick={() => onDismiss(c.key)} title="dismiss for 90 days">
+                  dismiss
+                </button>
+              </div>
+            ))}
+          {waiting.length > 0 && <div className="side-title">Waiting for you</div>}
+          {waiting.map((p) => (
+            <DecisionCard key={p.id} world={world} p={p} onDecide={onDecide} />
+          ))}
           <table className="wrap">
             <thead>
               <tr>
@@ -252,27 +272,6 @@ export function OverviewScreen({
               </tr>
             </tbody>
           </table>
-          {waiting.length > 0 && <div className="side-title">Waiting for you</div>}
-          {waiting.map((p) => (
-            <DecisionCard key={p.id} world={world} p={p} onDecide={onDecide} />
-          ))}
-          <div className="side-title">
-            What to do next
-            <button className="btn small" onClick={onToggleAdvisor}>
-              {advisorOn ? 'hide' : 'show'}
-            </button>
-          </div>
-          {advisorOn && cards.length === 0 && <p className="hint">Nothing pressing. Let the clock run and watch the feed.</p>}
-          {advisorOn &&
-            cards.map((c) => (
-              <div key={c.key} className="advice">
-                <p>{c.text}</p>
-                <button className="btn small" onClick={() => onDismiss(c.key)} title="dismiss for 90 days">
-                  dismiss
-                </button>
-              </div>
-            ))}
-          <EconomyPanel world={world} />
         </aside>
       </div>
     </div>
