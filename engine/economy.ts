@@ -62,7 +62,7 @@ const SECTOR: Record<Sector, SectorParams> = {
 };
 
 const OIL_MEAN = 70;
-const OIL_SIGMA_MONTHLY = 0.09;
+const OIL_SIGMA_MONTHLY = 0.07;
 const P_OIL_BUST = 1 / 84; // a large negative jump about every 7 years
 const P_OIL_SPIKE = 1 / 96;
 
@@ -174,8 +174,9 @@ function nationalStep(e: Economy, r: World['rng'], ctx: Ctx): void {
   if (e.month % 12 === 11) {
     emit(ctx, 'market', `Home prices ${e.hpiGrowth >= 0 ? 'up' : 'down'} ${pct(Math.abs(e.hpiGrowth), 1)} over the year`);
   }
-  // Oil: mean reverting in logs with jumps.
-  let oilRet = -0.02 * Math.log(e.oil / OIL_MEAN) + randNormal(r, 0, OIL_SIGMA_MONTHLY);
+  // Oil: mean reverting in logs with jumps, around a mean that rises with
+  // the price level (a real price, not a nominal one).
+  let oilRet = -0.035 * Math.log(e.oil / (OIL_MEAN * (e.nominalIndex ?? 1))) + randNormal(r, 0, OIL_SIGMA_MONTHLY);
   if (chance(r, P_OIL_BUST)) oilRet -= 0.35 + 0.2 * randNormal(r, 0, 1) ** 2 * 0.25;
   if (chance(r, P_OIL_SPIKE)) oilRet += 0.3;
   if (e.regime === 'recession') oilRet -= 0.02;
@@ -186,8 +187,12 @@ function nationalStep(e: Economy, r: World['rng'], ctx: Ctx): void {
       severity: e.oil < prevOil ? 'alert' : 'info',
     });
   }
-  // Equities follow earnings and the regime, loosely.
-  const spRet = (e.gdpGrowth - 0.005) / 12 + (e.regime === 'recession' ? -0.02 : 0.004) + randNormal(r, 0, 0.04);
+  // Equities follow nominal earnings and the regime, loosely: about seven
+  // percent a year in good times, a bear market in a recession.
+  // Equities lead: a bear market in the recession, the rebound in the
+  // recovery, and about eight percent a year the rest of the time.
+  const regimeRet = e.regime === 'recession' ? -0.025 : e.regime === 'recovery' ? 0.012 : 0.003;
+  const spRet = (e.gdpGrowth + e.inflation) / 12 + regimeRet + randNormal(r, 0, 0.04);
   e.sp500 = Math.max(100, e.sp500 * (1 + spRet));
 }
 

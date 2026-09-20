@@ -2,14 +2,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { calibration } from '../data/calibration';
-import { attractiveness, coreDeposits, splitCounty } from '../engine/deposits';
+import { attractiveness, bankDepositRate, coreDeposits, splitCounty } from '../engine/deposits';
 import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../engine/ledger';
 import { adoptPolicy, expandState, randomPolicy } from '../engine/rivals';
 import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
 import { newPlayer, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
 import { tick } from '../engine/tick';
-import { depositTargets, marketRate, setRate } from '../engine/deposits';
+import { depositTargets, marketDepositRate, marketRate, setRate } from '../engine/deposits';
 import { DEPOSIT_TYPES } from '../engine/ledger';
 import { buildBigWorld } from './helpers/bigworld';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
@@ -132,15 +132,18 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
       for (const t of DEPOSIT_TYPES) setRate(world, t, marketRate(world, t));
       const before = coreDeposits(bank);
       const targetBefore = Object.values(depositTargets(world, bank)).reduce((x, y) => x + y, 0);
+      let gap = 0;
       if (contest) {
         const rival = world.bankOrder.map((id) => world.banks[id]!).find((b) => b.kind === 'rival' && b.homeCounty === bank.homeCounty && b.status === 'open');
         expect(rival).toBeDefined();
         rival!.ai!.rateAggression = 3;
         for (const t of DEPOSIT_TYPES) setRate(world, t, Math.max(0, marketRate(world, t) - 0.01));
+        // Rates floor at zero: the gap actually opened is what the test scales by.
+        gap = marketDepositRate(world) - bankDepositRate(bank);
       }
       const targetAfter = Object.values(depositTargets(world, bank)).reduce((x, y) => x + y, 0);
       for (let d = 0; d < 365; d++) tick(world);
-      return { before, targetBefore, targetAfter, after: coreDeposits(bank) };
+      return { before, targetBefore, targetAfter, after: coreDeposits(bank), gap };
     };
     const alone = run(false);
     const contested = run(true);
@@ -148,8 +151,10 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
     // Checking pays nothing either way; the other seven tenths of the book
     // move at the elasticity, weighted by how rate-sensitive each type is.
     const elasticity = calibration.depositRateElasticity.typical / 100;
-    expect(contested.targetAfter).toBeLessThan(contested.targetBefore * (1 - 0.5 * elasticity * 0.7));
-    expect(contested.after).toBeLessThan(alone.after * 0.97);
+    expect(contested.gap).toBeGreaterThan(0.002);
+    const expectedDrop = elasticity * 0.7 * (contested.gap / 0.01);
+    expect(contested.targetAfter).toBeLessThan(contested.targetBefore * (1 - 0.5 * expectedDrop));
+    expect(contested.after).toBeLessThan(alone.after * (1 - 0.4 * expectedDrop));
   });
 
   it('an energy shock hurts a Midland bank and not a San Jose bank', () => {

@@ -42,7 +42,7 @@ const BUSINESS: Record<Sector, string[]> = {
 const MARGIN: Record<Sector, number> = { energy: 0.2, agriculture: 0.15, manufacturing: 0.12, tech: 0.18, finance: 0.25, healthcare: 0.15, government: 0.1, tourism: 0.1, construction: 0.08, logistics: 0.07, other: 0.1 };
 
 // Base log-odds of annual default for a median loan of each type.
-const BASE_Z: Record<LoanType, number> = { ci: -4.2, cre_oo: -4.6, cre_inv: -4.5, construction: -3.9, resi: -4.8, consumer: -3.5, ag: -4.6, energy: -3.7, cards: -3.2 };
+const BASE_Z: Record<LoanType, number> = { ci: -4.75, cre_oo: -5.15, cre_inv: -5.05, construction: -4.45, resi: -5.3, consumer: -3.2, ag: -5.15, energy: -3.9, cards: -3.2 };
 
 export function businessName(r: Rng, sector: Sector, county: CountyState): string {
   const town = county.name.replace(/ (County|Parish|Borough|Census Area|Municipality|city)$/i, '');
@@ -205,14 +205,20 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
     }
     case 'cre_inv': {
       collateralValue = Math.round((1_000_000 + 24_000_000 * Math.pow(rand(r), 2)) * Math.pow(priceLevel, 0.7));
-      ltv = 0.6 + 0.25 * rand(r);
-      amount = Math.round(collateralValue * ltv);
       collateralType = pick(r, ['retail center', 'office building', 'apartments', 'warehouse', 'self storage']);
       purpose = `${collateralType} acquisition`;
       termMonths = 300;
       const noi = collateralValue * (0.055 + 0.03 * rand(r));
       income = Math.round(noi);
       employees = 0;
+      // Sized to the income, as lenders size it: the loan the rents cover
+      // at about 1.3x, and never more than the value supports.
+      const askedCoverage = Math.max(0.95, randNormal(r, 1.3, 0.2));
+      const k = baseRate(world, type) + 0.002; // payment constant, near the rate plus amortization
+      const constant = k / (1 - Math.pow(1 + k / 12, -termMonths)) / 12 * 12;
+      const byIncome = noi / (askedCoverage * Math.max(0.03, constant));
+      amount = Math.round(Math.min(collateralValue * 0.85, Math.max(collateralValue * 0.4, byIncome)));
+      ltv = amount / collateralValue;
       break;
     }
     case 'construction': {
@@ -222,6 +228,9 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
       collateralType = pick(r, ['subdivision', 'apartment project', 'retail build', 'office build', 'spec homes']);
       purpose = `construction of a ${collateralType}`;
       termMonths = randInt(r, 18, 30);
+      // A project's coverage is the stabilized projection: the developer's
+      // own income is not what repays it.
+      income = Math.round(collateralValue * (0.06 + 0.03 * rand(r)));
       break;
     }
     case 'ag': {
@@ -254,10 +263,17 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
     dscr = income / Math.max(1, annualDebtService + otherDebt);
     leverage = (amount + income * 0.5) / Math.max(1, income);
   } else if (type === 'energy') {
-    dscr = Math.max(0.5, Math.pow(e.oil / 70, 1.2) * (1.0 + 1.2 * rand(r)));
+    dscr = Math.max(0.5, Math.pow(e.oil / (70 * (e.nominalIndex ?? 1)), 1.2) * (1.0 + 1.2 * rand(r)));
     leverage = amount / Math.max(1, ebitda);
+  } else if (type === 'construction') {
+    // Projected stabilized coverage; leverage is the loan against the cost.
+    dscr = Math.max(0.8, randNormal(r, 1.3, 0.22));
+    leverage = Math.round((ltv / 0.75) * 3 * 10) / 10;
+  } else if (type === 'cre_inv') {
+    dscr = income / Math.max(1, annualDebtService);
+    leverage = amount / Math.max(1, income);
   } else {
-    dscr = ebitda / Math.max(1, annualDebtService * (type === 'construction' ? 0.6 : 1));
+    dscr = ebitda / Math.max(1, annualDebtService);
     leverage = (amount + income * 0.15) / Math.max(1, ebitda);
   }
   dscr = Math.round(Math.max(0.3, Math.min(6, dscr)) * 100) / 100;
@@ -306,15 +322,24 @@ export interface SignalInput {
   sectorMove: number;
   type: LoanType;
   sizeToCapital: number;
+  household?: boolean; // a household's coverage is read as debt to income; inferred from the type when absent
 }
 
 // The visible part of the risk score, one entry per field, so every default
 // can name the signal that predicted it (D32, D34).
 export function scoreSignals(x: SignalInput): Application['signals'] {
   const out: Application['signals'] = [];
-  out.push({ field: 'dscr', contribution: 1.6 * (1.25 - Math.min(x.dscr, 3)), text: `DSCR ${x.dscr.toFixed(2)}x` });
+  // Coverage on a log scale: 1.3x is neutral for a business and every
+  // doubling is worth about one grade; a household at 2.5x (a 40% debt to
+  // income ratio) is neutral, since its whole income is on the line.
+  const household = x.household ?? (x.type === 'resi' || x.type === 'consumer' || x.type === 'cards');
+  const neutral = household ? 2.5 : 1.3;
+  const cap = household ? 5 : 3.5;
+  out.push({ field: 'dscr', contribution: -1.5 * Math.log(Math.max(0.3, Math.min(x.dscr, cap)) / neutral), text: `DSCR ${x.dscr.toFixed(2)}x` });
   out.push({ field: 'ltv', contribution: 2.2 * Math.max(0, x.ltv - 0.7) - 0.6 * Math.max(0, 0.7 - x.ltv), text: `LTV ${(x.ltv * 100).toFixed(0)}%` });
-  out.push({ field: 'leverage', contribution: 0.22 * (Math.min(x.leverage, 10) - 3), text: `leverage ${x.leverage.toFixed(1)}x` });
+  // A household carrying four times its income in mortgage debt is ordinary;
+  // a business at three times its earnings is.
+  out.push({ field: 'leverage', contribution: 0.22 * (Math.min(x.leverage, 10) - (household ? 4.5 : 3)), text: `leverage ${x.leverage.toFixed(1)}x` });
   out.push({ field: 'guarantor', contribution: x.guarantor ? -0.45 : 0.1, text: x.guarantor ? 'personal guarantee' : 'no guarantee' });
   const hist = { clean: -0.4, minor: 0.05, poor: 1.0, none: 0.4 }[x.paymentHistory];
   out.push({ field: 'history', contribution: hist, text: `${x.paymentHistory} payment history` });

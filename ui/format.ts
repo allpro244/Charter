@@ -59,5 +59,6 @@ export function change(now: number, then: number | undefined): string {
   if (then <= 0) return 'n/m';
   const r = now / then - 1;
   const s = `${(Math.abs(r) * 100).toFixed(1)}%`;
+  if (Math.abs(r) < 0.0005) return '0.0%';
   return r < 0 ? `(${s})` : `+${s}`;
 }

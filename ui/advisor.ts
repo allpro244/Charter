@@ -7,6 +7,7 @@ import { bankDepositRate, marketDepositRate } from '../engine/deposits';
 import { leverageRatio, totalAssets, totalDeposits } from '../engine/ledger';
 import { capitalStack, creConcentration } from '../engine/regulation';
 import { type World, playerBank } from '../engine/state';
+import { dateOf } from '../engine/time';
 import { pct, short } from './format';
 
 export interface Card {
@@ -39,6 +40,11 @@ export function adviceFor(world: World): Card[] {
   if (conc.construction > 1 || conc.cre > 3) out.push({ key: 'cre', text: `CRE concentration: construction ${pct(conc.construction, 0)} and investor CRE ${pct(conc.cre, 0)} of capital. Above 100% and 300% the exam finding is automatic.` });
   const vacancies = ['cco', 'cfo', 'clo'].filter((r) => !b.officers.some((o) => o.role === r));
   if (vacancies.length > 0) out.push({ key: 'off', text: `${vacancies.length} officer ${vacancies.length === 1 ? 'seat is' : 'seats are'} vacant (${vacancies.join(', ').toUpperCase()}). A vacant desk runs at a low default skill. The People tab has candidates.` });
+  const monthsThisYear = Math.max(1, dateOf(world.day).m - 1 + dateOf(world.day).d / 30);
+  const deskPerMonth = (b.applications.toDeskYtd ?? 0) / monthsThisYear;
+  if (deskPerMonth > 20 && monthsThisYear >= 2) out.push({ key: 'desk', text: `About ${Math.round(deskPerMonth)} loans a month reach your desk. Raise the size line on the Lending tab (policy and dial) so only the credits that matter at ${short(assets)} stop the clock; the rest are decided under your written policy.` });
+  const cashShare = assets > 0 ? a.cash / assets : 0;
+  if (cashShare > 0.25 && assets > 30_000_000) out.push({ key: 'idle', text: `Cash is ${pct(cashShare, 0)} of assets, earning the Fed rate and nothing more. Lend it (Lending tab, loans to deposits target) or let the CFO buy bonds with it (Money tab, investment policy).` });
   if (b.dial.maxAuto === 0 && b.applications.received > 50) out.push({ key: 'dial', text: `The dial is at zero: every loan crosses your desk. Fine at ${short(assets)}; it will not scale. Lending tab, policy and dial.` });
   if (b.enforcement !== 'none') out.push({ key: 'enf', text: `Under a ${b.enforcement === 'mou' ? 'memorandum' : b.enforcement === 'consent' ? 'consent order' : 'PCA directive'}: fix the findings on the Money tab, balance sheet and capital, before the next exam. Ignored, it escalates.` });
   if (b.forSale === false && b.reviews.length >= 4) {

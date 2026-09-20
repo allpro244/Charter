@@ -157,7 +157,11 @@ export function loanHealth(world: World, b: Bank, app: Application): Health {
   });
 
   const total = factors.reduce((s, f) => s + f.weight, 0);
-  const score = clamp(factors.reduce((s, f) => s + f.score * f.weight, 0) / total);
+  let score = clamp(factors.reduce((s, f) => s + f.score * f.weight, 0) / total);
+  // A borrower who has missed payments before is never a strong credit,
+  // whatever the numbers: the meter reads fair at best (the red flag stays).
+  const characterScore = factors.find((f) => f.key === 'character')?.score ?? 100;
+  if (characterScore < 35) score = Math.min(score, 60);
   const strengths = factors.filter((f) => f.score >= 80).map((f) => f.label.toLowerCase());
   const concerns = factors.filter((f) => f.score <= 45).map((f) => f.label.toLowerCase());
 

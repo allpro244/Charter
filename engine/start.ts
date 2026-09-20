@@ -233,6 +233,7 @@ export function startTakeover(ctx: Ctx, opts: StartTakeover): Bank {
   });
   bank.charteredDay = world.day - c.yearsOld * 365;
   bank.franchise.openedDay = bank.charteredDay;
+  for (const br of bank.branches) br.openedDay = bank.charteredDay;
   bank.takeover = { criticizedShare: c.criticizedShare, seed: c.seed };
   // Someone else's problems: an existing CCO and a book of real loans.
   const r = derive(world.seed, c.seed);

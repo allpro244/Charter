@@ -40,13 +40,13 @@ Invariants: county deposits across all banks equal the county pool. Deposit cost
 ## 5. Officers
 Cadence: monthly.
 Owns: CFO, CCO, CLO, later COO and business line heads. Skill, salary, tenure, loyalty.
-Effects: CCO sets memo summary quality, red flag detection, auto-decision error. CLO sets origination volume and pricing. CFO sets funding cost, securities execution, and report quality. Rivals poach (D35).
+Effects: CCO sets memo summary quality, red flag detection, auto-decision error. CLO sets origination volume and pricing. CFO sets funding cost, securities execution, and report quality; the CFO also runs the deposit sheet and the investment policy the CEO sets (D50). Officers ask for raises and resign when disloyal; nobody poaches them (D22).
 Invariants: 90 CCO vs 30 CCO shows measurably lower auto-decision loss across seeds.
 
 ## 6. Rivals
 Cadence: monthly.
 Owns: every non-player bank, pools only, scoped per D42: individual banks in the home state and neighbors, one aggregate per other state until entered. AI policy per bank: risk appetite, growth target, rate aggressiveness, acquisitiveness. Generated to match real FDIC counts and size distribution per state, plus a handful of national banks present in every major metro.
-Behavior (D35): price for deposits, poach officers, open branches against the player, bid on the same acquisitions, fail.
+Behavior (D35): price for deposits, open branches against the player, bid on the same acquisitions, fail.
 Invariants: failures cluster in recessions and spike in banking crises. Some small banks are always for sale. 300 individual banks plus 50 state aggregates over 40 years runs under 60 seconds. Expanding a state aggregate into individual banks conserves total assets and deposits.
 
 ## 7. Event stream (D33)

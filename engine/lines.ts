@@ -83,10 +83,14 @@ function footprintPool(world: World, b: Bank): number {
 export function feesMonthly(ctx: Ctx, b: Bank): void {
   const a = b.acct;
   const core = a.checking + a.savings + a.mmda + a.cd;
-  const service = Math.round((core * 0.002) / 12);
+  // Service charges on accounts, debit interchange on checking (halved
+  // past the Durbin line), and loan fees: what a community bank earns
+  // besides interest before it has a business line.
+  const service = Math.round((core * calibration.serviceChargeRate.typical) / 100 / 12);
   const durbin = totalAssets(a) >= DURBIN_THRESHOLD ? 0.5 : 1;
-  const debit = Math.round((a.checking * 0.004 * durbin) / 12);
-  const x = service + debit;
+  const debit = Math.round((a.checking * calibration.interchangeRate.typical * durbin) / 100 / 12);
+  const loanFees = Math.round((a.loans * calibration.loanFeeRate.typical) / 100 / 12);
+  const x = service + debit + loanFees;
   if (x > 0) {
     post(a, { cash: x, retainedEarnings: x });
     b.is.month.feeIncome += x;

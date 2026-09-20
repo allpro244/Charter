@@ -144,8 +144,11 @@ export interface Bank {
   declinedForFunding: number; // year to date: auto-declined because cash was short of the working cushion
   desk: DeskRecord; // the player's own calls, lifetime
   pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
+  ratePeg: Record<DepositType, number> | null; // the deposit sheet follows the market at these offsets; null holds the sheet by hand (D50)
+  investPolicy: InvestPolicy | null; // the CFO's standing order for cash above the target (D50)
+  lendersBooked: number; // pooled loans the lenders booked last month under the written policy (D50)
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
-  applications: { received: number; toDesk: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
+  applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
   lifetimeChargeOffsByType: Record<LoanType, number>;
   ai: AiPolicy | null; // rivals only
@@ -166,6 +169,7 @@ export interface Bank {
   camels: Camels;
   enforcement: Enforcement;
   enforcementSince: number | null;
+  enforcementAssets: number | null; // total assets when the order came: the bank may not grow past it, but may replace runoff
   stressTest: { day: number; passed: boolean; losses: number; buffer: number } | null; // last annual stress test
   swaps: Swap[];
   foreign: ForeignOp[]; // subsidiaries abroad, books in local currency (D45)
@@ -379,7 +383,21 @@ export interface LoanPolicy {
   allowed: Record<LoanType, boolean>;
   sectorCap: number; // share of loans in one sector
   maxGrade: number; // worst grade the CCO may approve alone; worse is a policy exception
+  targetLoansToDeposits: number; // the lenders fill the pooled book toward this share of deposits (D50)
   version: number;
+}
+
+// The CFO's standing order for idle cash (D50): cash above the target share
+// of assets goes into this product at this duration, held this way.
+export interface InvestPolicy {
+  cashTarget: number; // share of assets kept as cash
+  product: Product;
+  duration: number; // years
+  kind: LotKind;
+}
+
+export function emptyPeg(): Record<DepositType, number> {
+  return { checking: 0, savings: 0, mmda: 0, cd: 0 };
 }
 
 export type OfficerRole = 'cco' | 'cfo' | 'clo' | 'coo';
@@ -423,6 +441,7 @@ export function defaultPolicy(): LoanPolicy {
     allowed: { ci: true, cre_oo: true, cre_inv: true, construction: true, resi: true, consumer: true, ag: true, energy: true, cards: false },
     sectorCap: 0.35,
     maxGrade: 6,
+    targetLoansToDeposits: 0.75,
     version: 1,
   };
 }
@@ -985,7 +1004,10 @@ export function createBank(world: World, spec: BankSpec): Bank {
     desk: emptyDesk(),
     pricing: emptyByType(0),
     originationAppetite: 1,
-    applications: { received: 0, toDesk: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
+    applications: { received: 0, toDesk: 0, toDeskYtd: 0, autoApproved: 0, autoApprovedAmount: 0, autoDeclined: 0, playerApproved: 0, playerDeclined: 0 },
+    ratePeg: emptyPeg(),
+    investPolicy: { cashTarget: 0.08, product: 'agency', duration: 3, kind: 'afs' },
+    lendersBooked: 0,
     losses: [],
     quarterHistory: [],
     lifetimeChargeOffsByType: emptyByType(0),
@@ -1007,6 +1029,7 @@ export function createBank(world: World, spec: BankSpec): Bank {
     camels: emptyCamels(world.day),
     enforcement: 'none',
     enforcementSince: null,
+    enforcementAssets: null,
     stressTest: null,
     swaps: [],
     foreign: [],
@@ -1034,8 +1057,11 @@ export function createBank(world: World, spec: BankSpec): Bank {
       bank.franchise.baseShare = core / pool;
       bank.franchise.targetShare = bank.franchise.baseShare;
     }
-    // A bank created with deposits is a seasoned franchise.
-    if (core > 0) bank.franchise.openedDay = world.day - 20 * 365;
+    // A bank created with deposits is a seasoned franchise, branch included.
+    if (core > 0) {
+      bank.franchise.openedDay = world.day - 20 * 365;
+      for (const br of bank.branches) br.openedDay = bank.franchise.openedDay;
+    }
   }
   if (acct.loans > 0) seedPools(world, bank, acct.loans, derive(world.seed, hashString(`pools:${bank.id}:${bank.name}`)), spec.criticized ?? 0.05);
   else bank.loanMix = seedMix(world, bank);

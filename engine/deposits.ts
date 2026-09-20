@@ -11,7 +11,7 @@ import { borrowFhlb, fhlbCapacity, sellSecurities, unrealizedToCapital } from '.
 import { DEPOSIT_TYPES, type DepositType, leverageRatio, post, totalAssets } from './ledger';
 import { nextFriday } from './regulation';
 import { chance, randNormal } from './rng';
-import { type Bank, type Branch, type CountyState, type Decision, type Pending, type World, branchFixedCost, nextId, playerBank } from './state';
+import { type Bank, emptyPeg, type Branch, type CountyState, type Decision, type Pending, type World, branchFixedCost, nextId, playerBank } from './state';
 import { money, pct } from './format';
 
 const DEFAULT_MIX: Record<DepositType, number> = { checking: 0.3, savings: 0.25, mmda: 0.25, cd: 0.2 };
@@ -84,8 +84,11 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   // county still starts small.
   const seasoning = Math.min(1, 0.05 + years / 4);
   const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1) * seasoning;
-  // Capacity caps growth; it never pushes out what a branch already holds.
-  return Math.round(Math.min(fromShare, Math.max(perBranch, br.deposits)));
+  // Capacity caps growth; it never pushes out what a branch already holds,
+  // it grows with nominal income like every other dollar figure, and a
+  // full branch can still add a few percent a month toward its share.
+  const index = world.economy.nominalIndex ?? 1;
+  return Math.round(Math.min(fromShare, Math.max(perBranch * index, br.deposits * 1.04)));
 }
 
 // Attractiveness of a branch to depositors in its county: the rate sheet
@@ -157,7 +160,10 @@ export function depositTargets(world: World, b: Bank): Record<DepositType, numbe
   // Without geography the bank's addressable pool stands in for its home
   // county (tests); the franchise is treated as the home branch.
   if (b.branches.length === 0) base = b.franchise.pool > 0 ? branchTarget(world, b, { id: '', county: b.homeCounty ?? '', openedDay: b.franchise.openedDay, deposits: coreDeposits(b), fixedCost: 0, distanceKm: 0, competitiveTarget: null }, true) : coreDeposits(b);
-  const conf = Math.pow(Math.max(0, Math.min(1, b.confidence)), 3);
+  // Confidence moves the uninsured money; insured deposits sit through a
+  // scare (2023: the banks that ran were the ones with 90% uninsured).
+  const c = Math.max(0, Math.min(1, b.confidence));
+  const conf = 1 - Math.max(0.05, Math.min(0.95, b.uninsuredShare)) * (1 - c * c);
   const out = {} as Record<DepositType, number>;
   const elasticity = calibration.depositRateElasticity.typical / 100;
   for (const t of DEPOSIT_TYPES) {
@@ -254,16 +260,21 @@ export function coverCash(ctx: Ctx, b: Bank): void {
     const drawn = borrowFhlb(ctx, b, Math.min(need, fhlbCapacity(b)), true);
     need -= drawn;
   }
+  let sold = false;
   if (need > 0) {
     for (const lot of [...b.lots]) {
       if (need <= 0) break;
       if (lot.kind !== 'afs') continue;
       const proceeds = sellSecurities(ctx, b, lot.id, Math.min(lot.cost, Math.round(need * 1.05)), true);
+      if (proceeds > 0) sold = true;
       need -= proceeds;
     }
   }
+  // Borrowing overnight or from the Home Loan Bank to cover a day's
+  // withdrawals is routine and nobody outside sees it; selling bonds to
+  // raise cash is the visible strain.
   const wasCalm = b.liquidityStress < 0.3;
-  b.liquidityStress = Math.min(1, b.liquidityStress + 0.25);
+  b.liquidityStress = Math.min(1, b.liquidityStress + (sold ? 0.2 : 0.03));
   if (a.cash < 0) {
     // Still short: the bank cannot meet withdrawals.
     const shortfall = -a.cash;
@@ -290,9 +301,13 @@ export function confidenceTarget(world: World, b: Bank): number {
   let nonaccrual = 0;
   for (const p of b.pools) nonaccrual += (p.grades[6] ?? 0) + (p.grades[7] ?? 0) + (p.grades[8] ?? 0);
   const na = b.acct.loans > 0 ? nonaccrual / b.acct.loans : 0;
-  if (na > 0.04) c -= (na - 0.04) * 4;
-  c -= 0.08 * recentFailures(world, b.state, 6);
-  c -= 0.3 * b.liquidityStress;
+  // Depositors do not read call reports: only visible distress moves them,
+  // a book with more than six percent on nonaccrual, and gently.
+  if (na > 0.06) c -= (na - 0.06) * 2;
+  // A failure nearby unsettles depositors; a wave of them more, but no
+  // statewide panic from the news alone (2023 ran at a handful of banks).
+  c -= 0.03 * Math.min(3, recentFailures(world, b.state, 6));
+  c -= 0.15 * b.liquidityStress;
   return Math.max(0.05, Math.min(1, c));
 }
 
@@ -316,6 +331,9 @@ export function depositsMonthly(ctx: Ctx): void {
     // in rivalsMonthly; the player sets the sheet by hand.
     if (b.id !== world.playerBankId && !b.ai) {
       for (const t of DEPOSIT_TYPES) b.rates[t] = Math.max(0, Math.round(ff * calibration.depositBeta[t].typical * 10_000) / 10_000);
+    } else if (b.id === world.playerBankId && b.ratePeg) {
+      // The CFO resets the sheet to the market at the offsets the CEO set (D50).
+      for (const t of DEPOSIT_TYPES) b.rates[t] = Math.max(0, Math.round((marketRate(world, t) + (b.ratePeg[t] ?? 0)) * 10_000) / 10_000);
     }
     b.fhlbRate = ff + 0.003;
     b.fedFundsRate = ff + 0.001;
@@ -340,17 +358,17 @@ export function depositsMonthly(ctx: Ctx): void {
 function ratePrompt(ctx: Ctx): void {
   const { world } = ctx;
   const b = playerBank(world);
-  if (!b || b.status !== 'open') return;
+  if (!b || b.status !== 'open' || b.ratePeg) return;
   if (world.pending.some((p) => p.kind === 'rate_prompt')) return;
   const gap = marketDepositRate(world) - bankDepositRate(b);
-  if (gap > 0.0075 && chance(world.rng, 0.2)) {
+  if (Math.abs(gap) > 0.0075 && chance(world.rng, 0.2)) {
     addPending(ctx, {
       kind: 'rate_prompt',
       bankId: b.id,
-      title: 'Depositors are asking about your rates',
+      title: gap > 0 ? 'Depositors are asking about your rates' : 'Your CFO says the sheet is above the market',
       lines: [
         `The market pays ${pct(marketDepositRate(world))} on an average dollar of deposits. You pay ${pct(bankDepositRate(b))}.`,
-        `Money market and CD customers move first. Match the market, or hold and keep the margin.`,
+        gap > 0 ? `Money market and CD customers move first. Match the market, or hold and keep the margin.` : `Every basis point over the market is margin given away. Match the market, or hold and keep gathering.`,
       ],
       options: [
         { key: 'm', label: 'Match the market on every type' },
@@ -371,10 +389,31 @@ export function decideRatePrompt(ctx: Ctx, pending: Pending, d: Decision): void 
   }
 }
 
-// Player controls.
+// Player controls. With the sheet pegged to the market, setting a rate by
+// hand sets the offset that produces it, so the sheet keeps following.
 export function setRate(world: World, t: DepositType, rate: number): void {
   const b = playerBank(world);
-  if (b) b.rates[t] = Math.max(0, Math.round(rate * 10_000) / 10_000);
+  if (!b) return;
+  b.rates[t] = Math.max(0, Math.round(rate * 10_000) / 10_000);
+  if (b.ratePeg) b.ratePeg[t] = Math.round((b.rates[t] - marketRate(world, t)) * 10_000) / 10_000;
+}
+
+export function setRatePeg(world: World, t: DepositType, offset: number): void {
+  const b = playerBank(world);
+  if (!b || !b.ratePeg) return;
+  b.ratePeg[t] = Math.max(-0.05, Math.min(0.05, Math.round(offset * 10_000) / 10_000));
+  b.rates[t] = Math.max(0, Math.round((marketRate(world, t) + b.ratePeg[t]) * 10_000) / 10_000);
+}
+
+// On: the sheet follows the market at the offsets it sits at today. Off:
+// the rates stay where they are until the CEO moves them.
+export function setPegMode(world: World, on: boolean): void {
+  const b = playerBank(world);
+  if (!b) return;
+  if (on) {
+    b.ratePeg = emptyPeg();
+    for (const t of DEPOSIT_TYPES) b.ratePeg[t] = Math.max(-0.05, Math.min(0.05, Math.round((b.rates[t] - marketRate(world, t)) * 10_000) / 10_000));
+  } else b.ratePeg = null;
 }
 
 export function openBranch(ctx: Ctx, county: CountyState): Branch | null {

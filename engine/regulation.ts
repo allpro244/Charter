@@ -144,8 +144,12 @@ export function lendingLimit(b: Bank): number {
   return Math.round(0.15 * Math.max(0, tier1Capital(b.acct) + b.acct.allowance));
 }
 
+// An order forbids growth, not lending: the bank may replace runoff up to
+// the size it had when the order came, and no more.
 export function growthRestricted(b: Bank): boolean {
-  return b.enforcement === 'consent' || b.enforcement === 'pca';
+  if (b.enforcement !== 'consent' && b.enforcement !== 'pca') return false;
+  const frozen = b.enforcementAssets ?? 0;
+  return frozen <= 0 || totalAssets(b.acct) >= frozen;
 }
 
 // CRE concentration against the interagency guidance: construction over
@@ -268,6 +272,7 @@ function escalate(ctx: Ctx, b: Bank, stack: CapitalStack): void {
   if (LADDER[target] > LADDER[b.enforcement]) {
     b.enforcement = target;
     b.enforcementSince = world.day;
+    b.enforcementAssets = totalAssets(b.acct);
     if (b.kind === 'player') {
       const lines = target === 'mou'
         ? ['Informal action. Fix the findings before the next exam or it becomes an order.']
@@ -288,6 +293,7 @@ function escalate(ctx: Ctx, b: Bank, stack: CapitalStack): void {
     emit(ctx, 'regulator', `${b.name}: the ${LADDER_LABEL[b.enforcement]} is lifted after a clean exam`, { severity: 'good', bankId: b.id });
     b.enforcement = 'none';
     b.enforcementSince = null;
+    b.enforcementAssets = null;
   }
 }
 
@@ -365,6 +371,7 @@ export function regulationMonthly(ctx: Ctx): void {
     } else if (b.status === 'open' && b.kind !== 'aggregate' && (stack.category === 'under' || stack.category === 'significant') && b.enforcement !== 'pca' && stack.category === 'significant') {
       b.enforcement = 'pca';
       b.enforcementSince = world.day;
+      b.enforcementAssets = totalAssets(b.acct);
       if (b.kind === 'player') {
         addPending(ctx, {
           kind: 'enforcement',

@@ -43,6 +43,9 @@ function playerBankWorld(seed: number, opts: { capital: number; deposits: number
   world.player.bankId = bank.id;
   world.player.shares = 300_000;
   world.player.cash = 1_000_000;
+  // These tests set the sheet and buy the bonds by hand: no standing policies.
+  bank.ratePeg = null;
+  bank.investPolicy = null;
   return { world, bank };
 }
 
@@ -105,7 +108,7 @@ describe('deposits and funding', () => {
     const fall = (depositsStart - totalDeposits(bank.acct)) / depositsStart;
     expect(minConfidence).toBeLessThan(0.8);
     expect(bank.status === 'failed' || bank.status === 'closing' || fall > 0.3).toBe(true);
-    const runEvents = world.feed.filter((f) => /uninsured depositors leave|could not meet/.test(f.text));
+    const runEvents = world.feed.filter((f) => /uninsured depositors leave|could not meet|confidence is slipping/.test(f.text));
     expect(runEvents.length).toBeGreaterThan(0);
   });
 

@@ -7,11 +7,10 @@
 // for sale, and fail.
 
 import type { BankSeed } from '../data/types';
-import { type Ctx, addPending, emit } from './ctx';
+import { type Ctx, emit } from './ctx';
 import { coreDeposits, marketRate } from './deposits';
 import { DEPOSIT_TYPES, leverageRatio, netIncome, post, totalAssets, totalDeposits } from './ledger';
 import { generateBankName } from './names';
-import { ROLE_LABEL, officerSalary } from './officers';
 import { type Rng, chance, derive, hashString, rand, randNormal } from './rng';
 import { type AiPolicy, type Bank, type CountyState, type LotKind, type Product, type World, createBank, nextId, playerBank } from './state';
 import { buySecurities } from './funding';
@@ -74,6 +73,7 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
   bank.dividendPayout = calibration.rivalDividendPayout.typical / 100;
   bank.charteredDay = world.day - Math.round((20 + 80 * rand(r)) * 365);
   bank.franchise.openedDay = bank.charteredDay;
+  for (const br of bank.branches) br.openedDay = bank.charteredDay;
   // Wholesale funding: the gap between assets and deposits plus capital.
   const gap = assets - capital - deposits - bank.acct.cash;
   if (gap > 0 && gap < assets * 0.3) {
@@ -90,7 +90,7 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
 // CRE, where the money is made in expansions and lost in busts.
 export function adoptPolicy(bank: Bank, ai: AiPolicy, r: Rng): void {
   bank.ai = ai;
-  bank.riskTilt = Math.round((0.5 + 1.3 * ai.riskAppetite) * Math.exp(randNormal(r, 0, 0.35)) * 100) / 100;
+  bank.riskTilt = Math.round((0.5 + 1.3 * ai.riskAppetite) * Math.exp(randNormal(r, 0, 0.5)) * 100) / 100;
   tiltMix(bank, ai.riskAppetite);
   bank.loansToDeposits = 0.65 + 0.3 * ai.riskAppetite;
 }
@@ -266,24 +266,6 @@ export function rivalsMonthly(ctx: Ctx): void {
         const home = b.homeCounty ? world.geo.counties[b.homeCounty] : undefined;
         b.branches.push({ id: nextId(world, 'br'), county: county.fips, openedDay: world.day, deposits: 0, fixedCost: Math.round(county.wage * 52 * 6 * 1.35), distanceKm: home ? Math.round(distanceKm(home, county)) : 0, competitiveTarget: null });
         emit(ctx, 'rival', `${b.name} opened a branch in ${county.name}, across the street from yours`, { severity: 'alert', bankId: b.id });
-      }
-    }
-    // Poaching: a bigger, better-run rival makes your officer an offer.
-    if (player && b.kind === 'rival' && b.state === player.state && player.officers.length > 0 && !world.pending.some((p) => p.kind === 'officer_event') && chance(r, 0.003 * (0.5 + ai.riskAppetite)) && totalAssets(b.acct) > totalAssets(player.acct)) {
-      const o = player.officers[Math.floor(rand(r) * player.officers.length)];
-      if (o) {
-        const offer = Math.round((officerSalary(o.skill, totalAssets(b.acct)) * 1.25) / 1000) * 1000;
-        addPending(ctx, {
-          kind: 'officer_event',
-          bankId: player.id,
-          title: `${b.name} is trying to hire ${o.name}, your ${ROLE_LABEL[o.role]}`,
-          lines: [`${b.name} (${money(totalAssets(b.acct))} of assets) offered ${money(offer)}. ${o.name} is paid ${money(o.salary)}.`, `Match it or lose a ${ROLE_LABEL[o.role]} with skill ${o.skill}.`],
-          options: [
-            { key: 'm', label: 'Match the offer' },
-            { key: 'l', label: 'Let them go' },
-          ],
-          data: { officerId: o.id, kind: 'offer', offer, rivalId: b.id },
-        });
       }
     }
   }

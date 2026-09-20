@@ -11,6 +11,7 @@ import { type Ctx, emit } from './ctx';
 import { hpiReturn12, sectorReturn12 } from './economy';
 import { post } from './ledger';
 import { type Rng, randNormal } from './rng';
+import { ccoSkill } from './officers';
 import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from './loantypes';
 import type { Bank, CountyState, Pool, World } from './state';
 import { dateOf } from './time';
@@ -499,30 +500,39 @@ export function chargeOff(b: Bank, amount: number): void {
 export function originateToTarget(ctx: Ctx, b: Bank): void {
   const { world } = ctx;
   const a = b.acct;
+  const isPlayer = b.id === world.playerBankId;
+  if (isPlayer) b.lendersBooked = 0;
   const deposits = a.checking + a.savings + a.mmda + a.cd + a.brokered;
-  const target = Math.round(deposits * b.loansToDeposits);
+  const ratio = isPlayer ? (b.policy.targetLoansToDeposits ?? 0.75) : b.loansToDeposits;
+  const target = Math.round(deposits * ratio);
   const gap = target - a.loans;
   if (gap <= 0) return;
   // Lend a third of the gap each month, limited by cash on hand above a
   // liquidity cushion: fast enough to replace the runoff of a book with
-  // short construction and consumer loans in it.
+  // short construction and consumer loans in it. The player's lenders
+  // book at most four percent of deposits a month: a branch network's
+  // pace, not a wire.
   const cushion = Math.round(0.06 * (a.cash + a.loans + a.securitiesAFS + a.securitiesHTM));
   const room = Math.max(0, a.cash - cushion);
-  const amount = Math.min(room, Math.round(gap / 3));
+  let amount = Math.min(room, Math.round(gap / 3));
+  if (isPlayer) amount = Math.min(amount, Math.round(0.04 * deposits));
   if (amount < 10_000) return;
   let assigned = 0;
-  const types = LOAN_TYPES.filter((t) => b.loanMix[t] > 0);
+  const mix = isPlayer ? playerMix(world, b) : b.loanMix;
+  const types = LOAN_TYPES.filter((t) => mix[t] > 0);
+  if (types.length === 0) return;
+  if (isPlayer) b.riskTilt = playerTilt(b);
   // The mix describes the book, not the month's originations: short
   // types like construction run off faster than mortgages, so each type
   // gets the month's lending in proportion to its shortfall against its
   // share of the target book.
   const held = emptyByType(0);
   for (const p of b.pools) held[p.type] += p.balance;
-  const short = types.map((t) => Math.max(0, target * b.loanMix[t] - held[t]));
+  const short = types.map((t) => Math.max(0, target * mix[t] - held[t]));
   const shortSum = short.reduce((s, x) => s + x, 0);
   for (let i = 0; i < types.length; i++) {
     const t = types[i] as LoanType;
-    const weight = shortSum > 0 ? (short[i] as number) / shortSum : b.loanMix[t];
+    const weight = shortSum > 0 ? (short[i] as number) / shortSum : mix[t];
     const x = i === types.length - 1 ? amount - assigned : Math.round(amount * weight);
     if (x <= 0) continue;
     const rate = baseRate(world, t) + randNormal(world.rng, 0, 0.003);
@@ -531,6 +541,37 @@ export function originateToTarget(ctx: Ctx, b: Bank): void {
     assigned += x;
   }
   post(a, { loans: amount, cash: -amount });
+  if (isPlayer) {
+    b.lendersBooked = amount;
+    if (amount >= 0.01 * Math.max(1, a.loans)) emit(ctx, 'borrower', `Your lenders booked ${money(amount)} of loans under the written policy this month, toward ${Math.round(ratio * 100)}% of deposits`, { bankId: b.id });
+  }
+}
+
+// The player's pooled lending follows the home county's mix, within the
+// types the written policy allows.
+function playerMix(world: World, b: Bank): Record<LoanType, number> {
+  const county = b.homeCounty ? world.geo.counties[b.homeCounty] : undefined;
+  // A mix set on the bank (a test's, or an inherited book's) stands; otherwise the county's.
+  const own = LOAN_TYPES.reduce((s, t) => s + (b.loanMix[t] ?? 0), 0);
+  const base = own > 0 ? b.loanMix : mixFor(county);
+  const out = emptyByType(0);
+  let sum = 0;
+  for (const t of LOAN_TYPES) {
+    if (!b.policy.allowed[t]) continue;
+    out[t] = base[t];
+    sum += base[t];
+  }
+  if (sum > 0) for (const t of LOAN_TYPES) out[t] /= sum;
+  return out;
+}
+
+// How the pooled book underwrites: a skilled credit officer and a tight
+// policy keep the migration below the industry's, a loose policy above.
+function playerTilt(b: Bank): number {
+  const skill = ccoSkill(b);
+  const grade = b.policy.maxGrade ?? 6;
+  const policy = grade >= 7 ? 1.15 : grade <= 4 ? 0.9 : 1;
+  return Math.round(Math.max(0.6, Math.min(1.6, (1 - (skill - 55) / 250) * policy)) * 100) / 100;
 }
 
 // CECL-style reserve, quarterly. The allowance target is lifetime expected
@@ -554,7 +595,11 @@ export function reserveQuarterly(ctx: Ctx, b: Bank): number {
     if (l.status === 'paid' || l.status === 'chargedOff' || l.status === 'reo') continue;
     const life = Math.min(4, Math.max(0.5, (l.termMonths - monthsSince(world, l.originated)) / 24));
     const pd = Math.min(1, (PD_BY_GRADE[Math.max(0, l.grade - 1)] ?? 1) * life * (l.status === 'current' ? 1 : 2));
-    target += l.balance * pd * Math.max(l.trueLgd * 0.6, lgdNow(world, l.type));
+    // Loss given default is the loan's own (its collateral cushion is on the
+    // memo), scaled by today's environment against a normal one: a 60% LTV
+    // mortgage reserves next to nothing, a 95% one reserves like the type.
+    const lgd = Math.max(0.03, Math.min(0.95, (l.trueLgd * lgdNow(world, l.type)) / TYPE[l.type].lgd));
+    target += l.balance * pd * lgd;
   }
   target = Math.round(target);
   const a = b.acct;

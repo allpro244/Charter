@@ -181,6 +181,35 @@ export function sellSecurities(ctx: Ctx, b: Bank, lotId: string, amount: number,
   return proceeds;
 }
 
+// The CFO's standing order (D50): cash above the target share of assets,
+// with a point of slack, goes into the policy's product and duration in
+// lots of at least one percent of assets. Sales are never automatic.
+export function investPolicyMonthly(ctx: Ctx, b: Bank): void {
+  const p = b.investPolicy;
+  if (!p || b.status !== 'open') return;
+  const a = b.acct;
+  const assets = totalAssets(a);
+  if (assets <= 0) return;
+  const room = a.cash - Math.round(assets * (p.cashTarget + 0.01));
+  if (room < Math.max(10_000, Math.round(assets * 0.01))) return;
+  const lot = buySecurities(ctx, b, p.kind, p.product, room, p.duration, true);
+  if (lot) emit(ctx, 'system', `CFO bought ${money(room)} of ${p.duration} year ${PRODUCT_LABEL[p.product]} at ${pct(lot.coupon)} under the investment policy`, { bankId: b.id });
+}
+
+export function setInvestPolicy(world: World, patch: Partial<Bank['investPolicy'] & object> | null): void {
+  const b = world.playerBankId ? world.banks[world.playerBankId] : undefined;
+  if (!b) return;
+  if (patch === null) {
+    b.investPolicy = null;
+    return;
+  }
+  const base = b.investPolicy ?? { cashTarget: 0.08, product: 'agency' as Product, duration: 3, kind: 'afs' as LotKind };
+  const next = { ...base, ...patch };
+  next.cashTarget = Math.max(0.03, Math.min(0.5, Math.round(next.cashTarget * 1000) / 1000));
+  next.duration = Math.max(0.25, Math.min(10, next.duration));
+  b.investPolicy = next;
+}
+
 // FHLB lends against mortgages, CRE, and agencies. Capacity is what those
 // support less advances outstanding.
 export function fhlbCapacity(b: Bank): number {

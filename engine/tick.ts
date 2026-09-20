@@ -9,7 +9,7 @@ import { calibration } from '../data/calibration';
 import { originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
 import { type Ctx } from './ctx';
 import { decideRatePrompt, depositsDaily, depositsMonthly } from './deposits';
-import { markSecurities, securitiesRunoff } from './funding';
+import { markSecurities, securitiesRunoff, investPolicyMonthly } from './funding';
 import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
 import { loansDaily, loansMonthly } from './loans';
@@ -199,11 +199,11 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
     m.interestBorrowings += borrowings;
   }
 
-  // Overhead on the average earning assets (loans and bonds need lenders,
-  // servicers and analysts; cash at the Fed needs nobody), split by the
-  // calibration shares, plus the fixed cost of every branch from real
-  // local wages and the officers' pay.
-  const avgEarning = (adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
+  // Overhead on average assets, the ratio the call report keeps (FDIC
+  // noninterest expense to assets), split by the calibration shares, plus
+  // the fixed cost of every branch from real local wages and the officers'
+  // pay.
+  const avgEarning = (adb.cash + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
   let branchCost = 0;
   for (const br of b.branches) branchCost += br.fixedCost;
   const overhead = accrue(avgEarning, b.overheadRate, days) + accrue(branchCost + officerPayroll(b), 1, days);
@@ -244,9 +244,11 @@ function monthlyClose(ctx: Ctx): void {
     poolsMonthly(ctx, b, days);
     linesMonthly(ctx, b);
     if (b.foreign.length > 0) foreignMonthly(ctx, b, days);
-    // Rivals lend through pools. So does a player bank with no home county
-    // (no applications can reach it), which only happens in tests.
-    if ((b.id !== world.playerBankId || !b.homeCounty) && !growthRestricted(b)) originateToTarget(ctx, b);
+    // Rivals lend through pools. So do the player's lenders, under the
+    // written policy, toward the loans to deposits target (D50); the desk
+    // sees the large credits on top of that.
+    if (!growthRestricted(b)) originateToTarget(ctx, b);
+    if (b.id === world.playerBankId) investPolicyMonthly(ctx, b);
     refreshLoanYield(b);
   }
   economyMonthly(ctx);
@@ -305,6 +307,7 @@ function quarterlyClose(ctx: Ctx): void {
       b.originationsByType = emptyByType(0);
       b.applicationsByType = emptyByType(0);
       b.declinedForFunding = 0;
+      b.applications.toDeskYtd = 0;
       linesYearEnd(b);
     }
   }

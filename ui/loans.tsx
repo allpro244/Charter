@@ -444,6 +444,19 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
               </td>
             </tr>
             <tr>
+              <td>
+                Lenders fill the book to <Term k="loans to deposits">loans to deposits</Term> of
+              </td>
+              <td>
+                <Stepper value={p.targetLoansToDeposits ?? 0.75} steps={[{ d: 0.01, label: '1%' }, { d: 0.05, label: '5%' }]} fmt={(v) => pct(v, 0)} onChange={(v) => set({ targetLoansToDeposits: round2(v) })} min={0} max={1.1} />
+              </td>
+            </tr>
+            <tr className="memo-row">
+              <td colSpan={2}>
+                Your loan officers book loans under this policy every month toward that target, in the home county's mix, without crossing your desk: the branch network's lending. Last month they booked {usd(bank.lendersBooked ?? 0)}. The credits above the size line still come to you on top. A community bank runs at 70% to 90%; above 100% the funding comes from the Home Loan Bank.
+              </td>
+            </tr>
+            <tr>
               <td>Guarantee required on business loans</td>
               <td>
                 <button className={'btn small' + (p.requireGuarantor ? ' on' : '')} onClick={() => set({ requireGuarantor: !p.requireGuarantor })}>

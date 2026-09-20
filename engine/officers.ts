@@ -143,21 +143,6 @@ export function officersMonthly(ctx: Ctx): void {
       });
       return;
     }
-    if (chance(r, 0.012 * (1.2 - o.loyalty) * (o.skill / 60))) {
-      const offer = Math.round((marketSalary * 1.3) / 1000) * 1000;
-      addPending(ctx, {
-        kind: 'officer_event',
-        bankId: b.id,
-        title: `${o.name}, ${ROLE_LABEL[o.role]}, has an outside offer`,
-        lines: [`A competitor offered ${money(offer)}. ${o.name} is paid ${money(o.salary)}.`, `Match it or say goodbye. A ${ROLE_LABEL[o.role]} with skill ${o.skill} is not easy to replace.`],
-        options: [
-          { key: 'm', label: 'Match the offer' },
-          { key: 'l', label: 'Let them go' },
-        ],
-        data: { officerId: o.id, kind: 'offer', offer },
-      });
-      return;
-    }
     if (o.loyalty < 0.3 && chance(r, 0.05)) {
       emit(ctx, 'officer', `${o.name} resigned as ${ROLE_LABEL[o.role]}`, { severity: 'alert', bankId: b.id });
       b.officers = b.officers.filter((x) => x.id !== o.id);

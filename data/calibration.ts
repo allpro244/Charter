@@ -77,10 +77,10 @@ export const calibration = {
   // Deposit beta: change in cost of interest-bearing deposits per change in
   // Fed funds over a hiking cycle.
   depositBeta: {
-    checking: hand(0.0, 0.1, 0.02, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS'),
-    savings: hand(0.1, 0.4, 0.2, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS'),
-    mmda: hand(0.3, 0.7, 0.45, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS'),
-    cd: hand(0.5, 0.9, 0.7, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS'),
+    checking: hand(0.0, 0.1, 0.05, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS; 2022 to 2024 cycle betas at community banks'),
+    savings: hand(0.1, 0.4, 0.25, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS; 2022 to 2024 cycle betas at community banks'),
+    mmda: hand(0.3, 0.7, 0.55, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS; 2022 to 2024 cycle betas at community banks'),
+    cd: hand(0.5, 0.9, 0.8, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS; 2022 to 2024 cycle betas at community banks'),
     brokered: hand(0.85, 1.05, 0.95, 'ratio', 'FDIC QBP cost of funds vs FEDFUNDS'),
   },
   // Noninterest expense to average assets, percent per year.
@@ -102,9 +102,12 @@ export const calibration = {
   salariesShareOfNie: hand(45, 62, 55, 'percent of noninterest expense', 'FDIC QBP, salaries and benefits vs total NIE'),
   occupancyShareOfNie: hand(8, 16, 12, 'percent of noninterest expense', 'FDIC QBP, premises expense vs total NIE'),
   cashYieldVsFedFunds: hand(-15, 15, 7, 'basis points', 'Fed IORB minus effective fed funds, 2022 onward'),
+  serviceChargeRate: hand(0.15, 0.5, 0.3, 'percent of core deposits per year', 'FDIC QBP service charges on deposit accounts vs domestic deposits, community banks'),
+  interchangeRate: hand(0.3, 1.0, 0.6, 'percent of checking balances per year', 'Fed debit card interchange revenue vs transaction account balances'),
+  loanFeeRate: hand(0.05, 0.3, 0.15, 'percent of loans per year', 'FDIC QBP other noninterest income (loan and servicing fees) vs loans, community banks'),
   loanSpreadOverFedFunds: hand(150, 350, 250, 'basis points', 'FDIC QBP loan yield vs FEDFUNDS, community banks'),
   rivalDividendPayout: hand(20, 50, 35, 'percent of quarterly earnings', 'FDIC QBP dividends vs net income'),
-  rivalLeverageTarget: hand(7.5, 11, 9, 'percent of assets before a 1.5 point buffer, thinner with risk appetite', 'FDIC QBP community bank leverage ratios: median near 10.5, tenth percentile near 8.5'),
+  rivalLeverageTarget: hand(6.5, 11, 9, 'percent of assets before a 1.5 point buffer, thinner with risk appetite', 'FDIC QBP community bank leverage ratios: median near 10.5, tenth percentile near 8.5; the banks that failed in 2008 to 2010 ran 6 to 8 before their losses'),
   rivalSecuritiesShare: hand(12, 28, 20, 'percent of assets, lower with risk appetite', 'FDIC QBP securities to assets at community banks'),
   ceoSalaryPerBillionAssets: hand(150, 400, 250, 'thousands of dollars per year at $1B assets, log scaled', 'Bank CEO pay surveys, community banks'),
   founderCash: hand(2, 10, 5, 'millions of dollars', 'Design choice, no public source: what a de novo organizer group member typically commits'),

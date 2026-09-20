@@ -207,6 +207,7 @@ export function applicationsDaily(ctx: Ctx): void {
   if (forPlayer.length === 0) return;
   if (forPlayer.length > 5) {
     b.applications.toDesk += forPlayer.length;
+    b.applications.toDeskYtd = (b.applications.toDeskYtd ?? 0) + forPlayer.length;
     addPending(ctx, {
       kind: 'loan_batch',
       bankId: b.id,
@@ -227,6 +228,7 @@ export function applicationsDaily(ctx: Ctx): void {
 
 export function queueApplication(ctx: Ctx, b: Bank, app: Application): void {
   b.applications.toDesk += 1;
+  b.applications.toDeskYtd = (b.applications.toDeskYtd ?? 0) + 1;
   addPending(ctx, {
     kind: 'loan_application',
     bankId: b.id,
@@ -256,7 +258,9 @@ export function autoDecide(ctx: Ctx, b: Bank, app: Application, skill: number): 
   let approve = check.pass && !growthRestricted(b);
   if (approve) {
     if (chance(world.rng, errorRate)) approve = false;
-  } else if (app.memo.suggestedGrade <= 6 && app.memo.dscr >= 1 && chance(world.rng, errorRate / 4)) {
+  } else if (app.memo.suggestedGrade <= 6 && app.memo.dscr >= 1 && terms.amount <= lendingLimit(b) && terms.amount <= b.policy.maxSize && b.policy.allowed[app.type] && chance(world.rng, errorRate / 4)) {
+    // A missed exception is a marginal loan waved through, never one over
+    // the legal limit, the policy's size cap, or in a type the policy bars.
     approve = !growthRestricted(b);
   }
   // A loan is funded from cash the bank has: below a working cushion the

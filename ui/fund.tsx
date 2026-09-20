@@ -5,8 +5,8 @@
 import { useState } from 'react';
 import { calibration } from '../data/calibration';
 import type { Ctx } from '../engine/ctx';
-import { DEFAULT_MIX, UNINSURED, bankDepositRate, closeBranch, coreDeposits, marketDepositRate, marketRate, setRate } from '../engine/deposits';
-import { PRODUCT_LABEL, PRODUCT_SPREAD, buySecurities, canRaiseBrokered, executionCost, fhlbCapacity, borrowFhlb, marketYield, raiseBrokered, repayBrokered, repayFhlb, sellSecurities, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
+import { DEFAULT_MIX, UNINSURED, bankDepositRate, closeBranch, coreDeposits, marketDepositRate, marketRate, setPegMode, setRate, setRatePeg } from '../engine/deposits';
+import { PRODUCT_LABEL, PRODUCT_SPREAD, buySecurities, canRaiseBrokered, executionCost, fhlbCapacity, borrowFhlb, marketYield, raiseBrokered, repayBrokered, repayFhlb, sellSecurities, setInvestPolicy, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
 import { DEPOSIT_TYPES, type DepositType, totalAssets, totalDeposits } from '../engine/ledger';
 import { type Bank, type LotKind, type Product, type World } from '../engine/state';
 import { SWAP_FLOOR, enterSwap, terminateSwap } from '../engine/regulation';
@@ -47,7 +47,12 @@ export function FundScreen({ world, bank, unit, act }: Props) {
         </div>
       </div>
       {tab === 'deposits' && <Deposits world={world} bank={bank} unit={unit} act={act} />}
-      {tab === 'bonds' && <Bonds world={world} bank={bank} unit={unit} act={act} />}
+      {tab === 'bonds' && (
+        <div>
+          <InvestPolicyPanel world={world} bank={bank} act={act} />
+          <Bonds world={world} bank={bank} unit={unit} act={act} />
+        </div>
+      )}
       {tab === 'capital' && (
         <div>
           <BalanceSheetScreen bank={bank} unit={unit} />
@@ -70,6 +75,21 @@ function Deposits({ world, bank, unit, act }: Props) {
       <p className="hint">
         What depositors keep with you and what you pay them. A rate below the market slowly loses <Term k="Money market">money market</Term> and <Term k="Certificates">certificate</Term> balances; checking and savings barely move. Steps are one basis point or twenty five.
       </p>
+      <div className="toolbar">
+        <div className="seg">
+          <button className={bank.ratePeg ? 'on' : ''} onClick={() => act(({ world: w }) => setPegMode(w, true), 'The sheet now follows the market at your offsets')}>
+            Follow the market at my offsets
+          </button>
+          <button className={bank.ratePeg ? '' : 'on'} onClick={() => act(({ world: w }) => setPegMode(w, false), 'The sheet is set by hand until you move it')}>
+            Set each rate by hand
+          </button>
+        </div>
+        <span className="dim">
+          {bank.ratePeg
+            ? 'Your CFO resets every rate to the market plus your offset at each month end (real banks reprice monthly). Move a rate and the offset moves with it.'
+            : 'The rates stay where you put them while the market moves: margin when rates fall, runoff when they rise.'}
+        </span>
+      </div>
       <table className="wrap">
         <thead>
           <tr>
@@ -95,8 +115,12 @@ function Deposits({ world, bank, unit, act }: Props) {
                 <td className="num">{pct(core > 0 ? a[t] / core : DEFAULT_MIX[t], 1)}</td>
                 <td className="num">{pct(marketRate(world, t))}</td>
                 <td className={gap > 0.005 ? 'alert' : ''}>
-                  <Stepper value={bank.rates[t]} steps={BP} fmt={(v) => pct(v)} onChange={(v) => act(({ world: w }) => setRate(w, t, v), `${TYPE_LABEL[t]} now pays ${pct(v)}`)} min={0} max={0.2} />
-                  <button className="btn small" onClick={() => act(({ world: w }) => setRate(w, t, marketRate(w, t)), `${TYPE_LABEL[t]} matched to the market`)}>
+                  {bank.ratePeg ? (
+                    <Stepper value={bank.ratePeg[t]} steps={BP} fmt={(v) => `${pct(Math.max(0, marketRate(world, t) + v))} (market ${v > 0 ? '+' : v < 0 ? '-' : ''}${Math.round(Math.abs(v) * 10_000)}bp)`} onChange={(v) => act(({ world: w }) => setRatePeg(w, t, v), `${TYPE_LABEL[t]} now pays the market ${v >= 0 ? 'plus' : 'less'} ${Math.round(Math.abs(v) * 10_000)}bp`)} min={-0.05} max={0.05} />
+                  ) : (
+                    <Stepper value={bank.rates[t]} steps={BP} fmt={(v) => pct(v)} onChange={(v) => act(({ world: w }) => setRate(w, t, v), `${TYPE_LABEL[t]} now pays ${pct(v)}`)} min={0} max={0.2} />
+                  )}
+                  <button className="btn small" onClick={() => act(({ world: w }) => (bank.ratePeg ? setRatePeg(w, t, 0) : setRate(w, t, marketRate(w, t))), `${TYPE_LABEL[t]} matched to the market`)}>
                     Match market
                   </button>
                 </td>
@@ -255,6 +279,93 @@ function Deposits({ world, bank, unit, act }: Props) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// The CFO's standing order for idle cash (D50). Real banks run an
+// investment policy the board sets; the CEO sets it here.
+function InvestPolicyPanel({ world, bank, act }: { world: World; bank: Bank; act: Props['act'] }) {
+  const p = bank.investPolicy;
+  const assets = totalAssets(bank.acct);
+  const cashShare = assets > 0 ? bank.acct.cash / assets : 0;
+  const y = p ? marketYield(world, p.duration) + PRODUCT_SPREAD[p.product] : 0;
+  return (
+    <table className="wrap">
+      <thead>
+        <tr>
+          <th>
+            <Term k="investment policy">Investment policy</Term>
+          </th>
+          <th>setting</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Standing order</td>
+          <td>
+            <div className="seg">
+              <button className={p ? 'on' : ''} onClick={() => act(({ world: w }) => setInvestPolicy(w, {}), 'The CFO invests idle cash under the policy')}>
+                On
+              </button>
+              <button className={p ? '' : 'on'} onClick={() => act(({ world: w }) => setInvestPolicy(w, null), 'Idle cash stays as cash until you buy bonds yourself')}>
+                Off
+              </button>
+            </div>
+          </td>
+          <td className="dim">
+            {p
+              ? `At each month end the CFO buys ${p.duration} year ${PRODUCT_LABEL[p.product]} (about ${pct(y)} today) with cash above ${pct(p.cashTarget, 0)} of assets. Cash is ${pct(cashShare, 1)} now. Sales are never automatic.`
+              : `Cash is ${pct(cashShare, 1)} of assets and earns the Fed rate. A bank lends it or buys bonds with it.`}
+          </td>
+        </tr>
+        {p && (
+          <>
+            <tr>
+              <td>Cash to keep</td>
+              <td>
+                <Stepper value={p.cashTarget} steps={[{ d: 0.01, label: '1%' }, { d: 0.05, label: '5%' }]} fmt={(v) => `${pct(v, 0)} of assets`} onChange={(v) => act(({ world: w }) => setInvestPolicy(w, { cashTarget: v }), `Cash target ${pct(v, 0)}`)} min={0.03} max={0.5} />
+              </td>
+              <td className="dim">Examiners like 8% or more at a small bank. Below 4% a bad week means borrowing.</td>
+            </tr>
+            <tr>
+              <td>What to buy</td>
+              <td>
+                <div className="seg">
+                  {(['treasury', 'agency', 'mbs'] as const).map((k) => (
+                    <button key={k} className={p.product === k ? 'on' : ''} onClick={() => act(({ world: w }) => setInvestPolicy(w, { product: k }), `The CFO buys ${PRODUCT_LABEL[k]}`)}>
+                      {PRODUCT_LABEL[k]}
+                    </button>
+                  ))}
+                </div>
+              </td>
+              <td className="dim">Treasuries pay the least and never default; agencies add {Math.round(PRODUCT_SPREAD.agency * 10_000)}bp; mortgage bonds add {Math.round(PRODUCT_SPREAD.mbs * 10_000)}bp and pay down early when rates fall.</td>
+            </tr>
+            <tr>
+              <td>How long</td>
+              <td>
+                <Stepper value={p.duration} steps={[{ d: 1, label: '1y' }, { d: 3, label: '3y' }]} fmt={(v) => `${v} year${v === 1 ? '' : 's'}`} onChange={(v) => act(({ world: w }) => setInvestPolicy(w, { duration: Math.round(v) }), `${Math.round(v)} year bonds`)} min={1} max={10} />
+              </td>
+              <td className="dim">Longer pays more when the curve slopes up and loses more when rates rise.</td>
+            </tr>
+            <tr>
+              <td>Held as</td>
+              <td>
+                <div className="seg">
+                  <button className={p.kind === 'afs' ? 'on' : ''} onClick={() => act(({ world: w }) => setInvestPolicy(w, { kind: 'afs' }), 'Bought as available for sale')}>
+                    Available for sale
+                  </button>
+                  <button className={p.kind === 'htm' ? 'on' : ''} onClick={() => act(({ world: w }) => setInvestPolicy(w, { kind: 'htm' }), 'Bought as held to maturity')}>
+                    Held to maturity
+                  </button>
+                </div>
+              </td>
+              <td className="dim">Available for sale can be sold and its losses show in capital; held to maturity hides the mark and cannot be sold.</td>
+            </tr>
+          </>
+        )}
+      </tbody>
+    </table>
   );
 }
 
