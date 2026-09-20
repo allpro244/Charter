@@ -6,9 +6,9 @@ import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../en
 import { adoptPolicy, expandState, randomPolicy } from '../engine/rivals';
 import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
-import { newPlayer, startCharter, startableMetros } from '../engine/start';
+import { newPlayer, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
 import { tick } from '../engine/tick';
-import { marketRate, setRate } from '../engine/deposits';
+import { depositTargets, marketRate, setRate } from '../engine/deposits';
 import { DEPOSIT_TYPES } from '../engine/ledger';
 import { buildBigWorld } from './helpers/bigworld';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
@@ -114,29 +114,35 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
   });
 
   it('the player loses deposits to a rival that prices higher in the same county', () => {
-    // The same three year old bank twice: once pricing 50bp under the
-    // market while a home county rival pushes 150bp over, once left alone.
-    // A young bank still grows either way; it grows less when underpriced.
+    // A seasoned bank (a takeover, not a ramping charter) prices 100bp
+    // under the market while a home county rival pushes 150bp over. Its
+    // deposit target falls at once, and a year on it holds less than the
+    // same bank left alone.
     const run = (contest: boolean) => {
       const data = loadFixtures();
       const world = createWorld(3, data);
       newPlayer(world);
       const metro = startableMetros(world)[0]!;
-      const bank = startCharter({ world, events: [] }, { mode: 'charter', cbsa: metro.cbsa, name: 'H', invest: 2_000_000 });
-      for (let d = 0; d < 3 * 365; d++) tick(world);
+      const candidates = takeoverCandidates(world, metro, seedsForMetro(world, metro));
+      const c = candidates.find((x) => x.price <= world.player.cash) ?? candidates[0]!;
+      const bank = startTakeover({ world, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate: c });
+      for (let d = 0; d < 365; d++) tick(world);
       const before = coreDeposits(bank);
+      const targetBefore = Object.values(depositTargets(world, bank)).reduce((x, y) => x + y, 0);
       if (contest) {
         const rival = world.bankOrder.map((id) => world.banks[id]!).find((b) => b.kind === 'rival' && b.homeCounty === bank.homeCounty && b.status === 'open');
         expect(rival).toBeDefined();
         rival!.ai!.rateAggression = 3;
-        for (const t of DEPOSIT_TYPES) setRate(world, t, Math.max(0, marketRate(world, t) - 0.005));
+        for (const t of DEPOSIT_TYPES) setRate(world, t, Math.max(0, marketRate(world, t) - 0.01));
       }
+      const targetAfter = Object.values(depositTargets(world, bank)).reduce((x, y) => x + y, 0);
       for (let d = 0; d < 365; d++) tick(world);
-      return { before, after: coreDeposits(bank) };
+      return { before, targetBefore, targetAfter, after: coreDeposits(bank) };
     };
     const alone = run(false);
     const contested = run(true);
     expect(contested.before).toBe(alone.before);
+    expect(contested.targetAfter).toBeLessThan(contested.targetBefore * 0.9);
     expect(contested.after).toBeLessThan(alone.after * 0.97);
   });
 

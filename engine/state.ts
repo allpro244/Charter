@@ -362,6 +362,7 @@ export interface LoanPolicy {
   maxSize: number; // dollars, single loan
   allowed: Record<LoanType, boolean>;
   sectorCap: number; // share of loans in one sector
+  maxGrade: number; // worst grade the CCO may approve alone; worse is a policy exception
   version: number;
 }
 
@@ -405,6 +406,7 @@ export function defaultPolicy(): LoanPolicy {
     maxSize: 5_000_000,
     allowed: { ci: true, cre_oo: true, cre_inv: true, construction: true, resi: true, consumer: true, ag: true, energy: true, cards: false },
     sectorCap: 0.35,
+    maxGrade: 6,
     version: 1,
   };
 }
@@ -951,7 +953,7 @@ export function createBank(world: World, spec: BankSpec): Bank {
     loanMix: emptyByType(0),
     loansToDeposits: 0.8,
     policy: defaultPolicy(),
-    dial: { maxAuto: 250_000, minGrade: 5 },
+    dial: { maxAuto: 250_000, minGrade: 8 }, // grade 8 means never: size alone decides what reaches the desk
     officers: [],
     reviews: [],
     interestByType: emptyByType(0),

@@ -9,12 +9,16 @@ import type React from 'react';
 import { calibration, unverifiedBands, type Band } from '../data/calibration';
 import { type IncomeStatement, interestExpense, interestIncome, netIncome, netInterestIncome, noninterestExpense, pretaxIncome, totalAssets, totalDeposits, totalEquity, totalLiabilities, leverageRatio, tier1Capital } from '../engine/ledger';
 import { LADDER_LABEL, PCA_LABEL, capitalStack, creConcentration, liquidityCoverage, pcaCategory, THRESHOLD_SIFI, THRESHOLD_STRESS } from '../engine/regulation';
-import { type Bank, type FeedItem, type Pending, type World, bookValuePerShare, playerNetWorth } from '../engine/state';
+import { type Bank, type FeedItem, type Pending, type World, bookValuePerShare, playerBank, playerNetWorth } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { playerStake } from '../engine/wealth';
 import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
 import { Pill, Stepper, Term } from './parts';
 import { previewFor } from './preview';
+import { healthTone, loanHealth } from './health';
+import type { Application } from '../engine/borrowers';
+import { TYPE } from '../engine/credit';
+import { policyCheck, termsFrom } from '../engine/underwriting';
 
 // Days per real second by speed. Speed 4 is D3's top speed: a year in
 // two minutes. Speed 5 is for skipping ahead.
@@ -134,15 +138,23 @@ export function FeedList({ items, speed, onPlay }: { items: FeedItem[]; speed: n
 
 function DecisionBody({ world, p, onDecide }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void }) {
   const preview = previewFor(world, p);
+  const bank = playerBank(world);
+  const app = p.kind === 'loan_application' ? (p.data.app as Application | undefined) : undefined;
+  const apps = p.kind === 'loan_batch' ? ((p.data.apps as Application[] | undefined) ?? []) : [];
   return (
     <>
       <div className="when">{formatDate(p.day)}</div>
       <h2>{p.title}</h2>
-      <div className="lines">
-        {p.lines.map((l, i) => (
-          <p key={i}>{l}</p>
-        ))}
-      </div>
+      {app && bank ? <HealthMeter world={world} bank={bank} app={app} /> : null}
+      {apps.length > 0 && bank ? (
+        <BatchHealth world={world} bank={bank} apps={apps} />
+      ) : (
+        <div className="lines">
+          {p.lines.map((l, i) => (
+            <p key={i}>{l}</p>
+          ))}
+        </div>
+      )}
       {preview.length > 0 && (
         <div className="preview">
           <div className="preview-title">What this means</div>
@@ -160,6 +172,116 @@ function DecisionBody({ world, p, onDecide }: { world: World; p: Pending; onDeci
         ))}
       </div>
     </>
+  );
+}
+
+// The loan health meter: the five Cs and concentration from the memo,
+// an overall word, the CCO's grade beside it, and whether the rate pays.
+function HealthMeter({ world, bank, app }: { world: World; bank: Bank; app: Application }) {
+  const h = loanHealth(world, bank, app);
+  const m = app.memo;
+  return (
+    <div className="health">
+      <div className="health-head">
+        <span className="gauge-label">
+          <Term k="loan health">Loan health</Term>
+        </span>
+        <span className={'health-score ' + h.tone}>
+          {h.score} <span className="health-word">{h.label}</span>
+        </span>
+        <span className="bar health-bar">
+          <span className={'fill ' + h.tone} style={{ width: `${h.score}%` }} />
+        </span>
+        <span className="dim">
+          CCO grade {h.ccoGrade}. {h.strengths.length ? `Strong on ${h.strengths.join(', ')}.` : ''} {h.concerns.length ? `Weak on ${h.concerns.join(', ')}.` : ''}
+        </span>
+      </div>
+      <table className="wrap health-table">
+        <thead>
+          <tr>
+            <th>
+              What a banker looks at (<Term k="five Cs">the five Cs</Term>)
+            </th>
+            <th>reading</th>
+            <th className="num">score</th>
+            <th>what it means</th>
+          </tr>
+        </thead>
+        <tbody>
+          {h.factors.map((f) => (
+            <tr key={f.key}>
+              <td>{f.label}</td>
+              <td className="nowrap">{f.reading}</td>
+              <td className="num">
+                <span className="bar">
+                  <span className={'fill ' + healthTone(f.score)} style={{ width: `${f.score}%` }} />
+                </span>{' '}
+                {f.score}
+              </td>
+              <td>{f.note}</td>
+            </tr>
+          ))}
+          <tr className="total">
+            <td>Does the rate pay for it</td>
+            <td className="nowrap">{pct(m.rate)} asked</td>
+            <td className={'num ' + (h.pricing.tone === 'good' ? 'positive' : h.pricing.tone === 'bad' ? 'alert' : '')}>{h.pricing.margin >= 0 ? '+' : ''}{(h.pricing.margin * 100).toFixed(2)}%</td>
+            <td>{h.pricing.note}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="lines">
+        <p>{m.summary}</p>
+        {m.redFlags.map((f, i) => (
+          <p key={i} className="alert">
+            Flag: {f}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BatchHealth({ world, bank, apps }: { world: World; bank: Bank; apps: Application[] }) {
+  return (
+    <table className="wrap">
+      <thead>
+        <tr>
+          <th>Applications above the dial</th>
+          <th>type</th>
+          <th className="num">amount</th>
+          <th className="num">rate</th>
+          <th className="num">grade</th>
+          <th className="num">
+            <Term k="loan health">health</Term>
+          </th>
+          <th>policy</th>
+          <th>weak on</th>
+        </tr>
+      </thead>
+      <tbody>
+        {apps.map((a, i) => {
+          const h = loanHealth(world, bank, a);
+          const check = policyCheck(bank, a, termsFrom(a));
+          return (
+            <tr key={i}>
+              <td>{a.borrower}</td>
+              <td>{TYPE[a.type].label}</td>
+              <td className="num">{usd(a.memo.amount)}</td>
+              <td className="num">{pct(a.memo.rate)}</td>
+              <td className="num">{a.memo.suggestedGrade}</td>
+              <td className="num">
+                <span className="bar">
+                  <span className={'fill ' + h.tone} style={{ width: `${h.score}%` }} />
+                </span>{' '}
+                {h.score} {h.label}
+              </td>
+              <td className={check.pass ? 'positive' : 'alert'}>{check.pass ? 'within' : 'exception'}</td>
+              <td className="dim">{h.concerns.join(', ') || 'nothing'}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 

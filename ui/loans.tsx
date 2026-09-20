@@ -388,11 +388,14 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
               </td>
             </tr>
             <tr>
-              <td>Loans graded worse than this come to you</td>
-              <td className="num">grade {bank.dial.minGrade}</td>
+              <td>Weak loans also come to you, whatever the size, when graded worse than</td>
+              <td className="num">{bank.dial.minGrade >= 8 ? 'never' : `grade ${bank.dial.minGrade}`}</td>
               <td>
-                <Stepper value={bank.dial.minGrade} steps={[{ d: 1, label: '1' }, { d: 2, label: '2' }]} fmt={(v) => `grade ${v}`} onChange={(v) => dial(bank.dial.maxAuto, v)} min={0} max={7} />
+                <Stepper value={bank.dial.minGrade} steps={[{ d: 1, label: '1' }, { d: 2, label: '2' }]} fmt={(v) => (v >= 8 ? 'never' : `grade ${v}`)} onChange={(v) => dial(bank.dial.maxAuto, v)} min={0} max={8} />
               </td>
+            </tr>
+            <tr className="memo-row">
+              <td colSpan={3}>Everything below the size line is decided by the loan officer under your written policy: within policy is approved, outside it is declined. Set the grade line to never and only size decides what you see.</td>
             </tr>
           </tbody>
         </table>
@@ -430,6 +433,14 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
               </td>
               <td>
                 <Stepper value={p.sectorCap} steps={[{ d: 0.01, label: '1%' }, { d: 0.05, label: '5%' }]} fmt={(v) => pct(v, 0)} onChange={(v) => set({ sectorCap: round2(v) })} min={0.05} max={1} />
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Worst <Term k="grade">grade</Term> the loan officer may approve alone
+              </td>
+              <td>
+                <Stepper value={p.maxGrade ?? 6} steps={[{ d: 1, label: '1' }, { d: 2, label: '2' }]} fmt={(v) => `grade ${v}`} onChange={(v) => set({ maxGrade: Math.round(v) })} min={1} max={8} />
               </td>
             </tr>
             <tr>

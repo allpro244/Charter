@@ -366,6 +366,7 @@ export function ccoReview(app: Application, b: Bank, skill: number, r: Rng): voi
   consider(m.dscr < b.policy.minDscr, `coverage ${m.dscr.toFixed(2)}x is below policy ${b.policy.minDscr.toFixed(2)}x`);
   consider(m.ltv > b.policy.maxLtv[app.type], `LTV ${(m.ltv * 100).toFixed(0)}% is above policy ${(b.policy.maxLtv[app.type] * 100).toFixed(0)}%`);
   consider(m.leverage > b.policy.maxLeverage, `leverage ${m.leverage.toFixed(1)}x is above policy ${b.policy.maxLeverage.toFixed(1)}x`);
+  consider(m.suggestedGrade > (b.policy.maxGrade ?? 6), `grade ${m.suggestedGrade} is worse than policy grade ${b.policy.maxGrade ?? 6}`);
   consider(m.paymentHistory === 'poor', 'poor payment history');
   consider(m.paymentHistory === 'none', 'no payment history on file');
   consider(m.tenureYears < 2, `only ${m.tenureYears.toFixed(1)} years in place`);

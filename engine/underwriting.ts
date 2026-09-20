@@ -75,6 +75,8 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
   if (m.leverage > p.maxLeverage) reasons.push(`leverage ${m.leverage.toFixed(1)}x over ${p.maxLeverage.toFixed(1)}x`);
   if (p.requireGuarantor && !terms.guarantor && m.employees > 0) reasons.push('no guarantor');
   if (terms.amount > p.maxSize) reasons.push(`size ${money(terms.amount)} over ${money(p.maxSize)}`);
+  const maxGrade = p.maxGrade ?? 6;
+  if (m.suggestedGrade > maxGrade) reasons.push(`grade ${m.suggestedGrade} is worse than policy grade ${maxGrade}`);
   const sectorShare = sectorExposure(b, m.sector) ;
   if (sectorShare > p.sectorCap && b.acct.loans > 0) reasons.push(`${m.sector} concentration ${(sectorShare * 100).toFixed(0)}% over ${(p.sectorCap * 100).toFixed(0)}%`);
   // The interagency commercial real estate guidance is part of every
@@ -314,7 +316,8 @@ export function setDial(world: World, maxAuto: number, minGrade: number): void {
   const b = playerBank(world);
   if (!b) return;
   b.dial.maxAuto = Math.max(0, Math.round(maxAuto));
-  b.dial.minGrade = Math.max(0, Math.min(7, Math.round(minGrade)));
+  // Grade 8 means never: no suggested grade is worse than 8.
+  b.dial.minGrade = Math.max(0, Math.min(8, Math.round(minGrade)));
 }
 
 export function setPolicy(world: World, patch: Partial<Bank['policy']>): void {

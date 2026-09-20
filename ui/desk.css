@@ -660,7 +660,7 @@ table.feed td.when {
   border-top: 1px solid var(--accent-line);
   border-bottom: 1px solid var(--accent-line);
   box-shadow: inset 4px 0 0 var(--accent);
-  max-height: 46vh;
+  max-height: 72vh;
   overflow: auto;
 }
 
@@ -1150,4 +1150,57 @@ th.subhead {
   padding: 8px 12px;
   font-size: 13px;
   box-shadow: var(--shadow);
+}
+
+/* The loan health meter on a decision. */
+.health {
+  margin: 6px 0 10px;
+}
+
+.health-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.health-score {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.health-score.good {
+  color: var(--good);
+}
+
+.health-score.warn {
+  color: var(--accent);
+}
+
+.health-score.bad {
+  color: var(--bad);
+}
+
+.health-word {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.bar.health-bar {
+  width: 220px;
+  height: 10px;
+}
+
+.health-table {
+  margin-bottom: 8px;
+}
+
+.health-table td.nowrap {
+  white-space: nowrap;
 }

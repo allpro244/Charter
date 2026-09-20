@@ -60,7 +60,7 @@ export const TERMS: Record<string, string> = {
   'book value': 'Equity divided by shares: what each share is worth on paper.',
   'price to book': 'What a buyer pays relative to book value. Banks change hands near 1.5x in good times and below 1x in bad ones.',
   goodwill: 'The premium paid over book value in an acquisition. It sits on the balance sheet but counts for nothing as capital.',
-  'delegation dial': 'Which loans reach your desk. Loans above the size, or worse than the grade, come to you; the rest are decided under your written policy.',
+  'delegation dial': 'Which loans reach your desk. Loans above the size line come to you; so do loans worse than the grade line if you set one. The rest are decided by the loan officer under your written policy.',
   'loan policy': 'Your written rules: minimum coverage, maximum leverage, maximum loan size, maximum loan to value by type, and which types you make at all.',
   'sector concentration': 'How much of the book sits in one industry. Concentrated books move together in a bust.',
   'CRE concentration': 'Construction above 100% of capital, or investor real estate above 300%, draws an automatic examiner finding.',
@@ -79,4 +79,7 @@ export const TERMS: Record<string, string> = {
   'margin after losses': 'The market rate less what your deposits cost less the expected loss. What is left pays the running costs and the shareholders.',
   'inverted curve': 'Short rates above long rates. Banks borrow short and lend long, so an inverted curve squeezes margins, and a recession has followed every one within two years.',
   'cost of money': 'The average rate you pay on deposits and borrowings. Every loan has to earn more than this plus its losses.',
+  'loan health': 'A credit committee\'s read of the memo, 0 to 100: capacity to pay, collateral cushion, character, the borrower\'s own capital, conditions in the type and sector, and concentration. Computed only from what is on the memo.',
+  'lending limit': 'The legal limit on loans to one borrower: 15% of capital for a national bank. Above it the loan is not allowed at all; near it one bad name can take a year of earnings.',
+  'five Cs': 'What every lender has looked at since there were lenders: capacity, capital, collateral, character and conditions.',
 };
