@@ -7,7 +7,7 @@
 
 import { calibration } from '../data/calibration';
 import { originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
-import { type Ctx } from './ctx';
+import { type Ctx, emit, milestone } from './ctx';
 import { decideRatePrompt, depositsDaily, depositsMonthly } from './deposits';
 import { markSecurities, securitiesRunoff, investPolicyMonthly } from './funding';
 import { economyMonthly } from './economy';
@@ -21,8 +21,9 @@ import { dealsMonthly, decideAuction, decideCompetingBid, decideOffer, expireDea
 import { feesMonthly, linesMonthly, linesYearEnd } from './lines';
 import { emptyByType } from './loantypes';
 import { closeForeign, countriesMonthly, foreignMonthly, globalQuarterly } from './global';
-import { applicationsDaily, decideApplication, decideBatch } from './underwriting';
+import { applicationsDaily, decideApplication, decideBatch, dialMonthly } from './underwriting';
 import { ladderMonthly } from './ladder';
+import { money } from './format';
 import {
   type Accounts,
   type DepositType,
@@ -250,6 +251,7 @@ function monthlyClose(ctx: Ctx): void {
     if (!growthRestricted(b)) originateToTarget(ctx, b);
     if (b.id === world.playerBankId) investPolicyMonthly(ctx, b);
     refreshLoanYield(b);
+    if (b.id === world.playerBankId) dialMonthly(ctx, b);
   }
   economyMonthly(ctx);
   ladderMonthly(ctx);
@@ -311,7 +313,30 @@ function quarterlyClose(ctx: Ctx): void {
       linesYearEnd(b);
     }
   }
-  if (isYearEnd(world.day)) stressTestAnnual(ctx);
+  if (isYearEnd(world.day)) {
+    stressTestAnnual(ctx);
+    yearInReview(ctx);
+  }
+}
+
+// The year in review for the player's bank: one line a casual player can
+// read as a scorecard, and a milestone.
+function yearInReview(ctx: Ctx): void {
+  const { world } = ctx;
+  const b = world.playerBankId ? world.banks[world.playerBankId] : undefined;
+  if (!b || b.status !== 'open' || !b.is.lastYear) return;
+  const { y } = dateOf(world.day);
+  const ni = netIncome(b.is.lastYear);
+  const assets = totalAssets(b.acct);
+  const ago = b.reports.length >= 5 ? b.reports[b.reports.length - 5] : undefined;
+  const growth = ago && ago.assets > 0 ? assets / ago.assets - 1 : null;
+  const rank = world.ladder.rank;
+  const rankAgo = world.ladder.rankYearAgo ?? null;
+  const desk = b.desk;
+  const text = `${y} in review: ${ni >= 0 ? 'profit' : 'loss'} ${money(Math.abs(ni))} (${(100 * ni / Math.max(1, assets)).toFixed(2)}% on assets), assets ${money(assets)}${growth !== null ? `, ${growth >= 0 ? 'up' : 'down'} ${(100 * Math.abs(growth)).toFixed(1)}%` : ''}${rank > 0 ? `, rank #${rank.toLocaleString('en-US')}${rankAgo !== null && rankAgo > 0 ? ` (from #${rankAgo.toLocaleString('en-US')})` : ''}` : ''}${desk ? `, ${desk.approved} loans approved at your desk, ${desk.wentBad} went bad` : ''}`;
+  emit(ctx, 'system', text, { severity: ni >= 0 ? 'good' : 'alert', bankId: b.id });
+  milestone(ctx, text);
+  world.ladder.rankYearAgo = rank;
 }
 
 // FDIC insurance assessment, quarterly, on assets less tangible equity,

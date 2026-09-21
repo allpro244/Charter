@@ -6,6 +6,9 @@ import { fhlbCapacity, unrealizedToCapital } from '../engine/funding';
 import { bankDepositRate, marketDepositRate } from '../engine/deposits';
 import { leverageRatio, totalAssets, totalDeposits } from '../engine/ledger';
 import { capitalStack, creConcentration } from '../engine/regulation';
+import { dealCapacity, reservationPriceToBook } from '../engine/deals';
+import { tangibleEquity } from '../engine/capital';
+import { defaultSalary } from '../engine/wealth';
 import { type World, playerBank } from '../engine/state';
 import { dateOf } from '../engine/time';
 import { pct, short } from './format';
@@ -46,11 +49,29 @@ export function adviceFor(world: World): Card[] {
   const cashShare = assets > 0 ? a.cash / assets : 0;
   if (cashShare > 0.25 && assets > 30_000_000) out.push({ key: 'idle', text: `Cash is ${pct(cashShare, 0)} of assets, earning the Fed rate and nothing more. Lend it (Lending tab, loans to deposits target) or let the CFO buy bonds with it (Money tab, investment policy).` });
   if (b.dial.maxAuto === 0 && b.applications.received > 50) out.push({ key: 'dial', text: `The dial is at zero: every loan crosses your desk. Fine at ${short(assets)}; it will not scale. Lending tab, policy and dial.` });
-  if (b.enforcement !== 'none') out.push({ key: 'enf', text: `Under a ${b.enforcement === 'mou' ? 'memorandum' : b.enforcement === 'consent' ? 'consent order' : 'PCA directive'}: fix the findings on the Money tab, balance sheet and capital, before the next exam. Ignored, it escalates.` });
+  if (b.enforcement !== 'none') {
+    const open = b.camels.findings.filter((f) => !f.resolved);
+    const where = open.map((f) => (f.component === 'A' ? 'the troubled loans (Loans tab: sell the notes or wait out the workouts, and tighten the policy)' : f.component === 'M' ? (/exception/.test(f.text) ? 'policy exceptions (approve inside the written policy, or change the policy)' : 'the empty officer seats (You tab, your team)') : f.component === 'C' ? 'capital (Money tab, balance sheet and capital: raise it, or shrink)' : f.component === 'E' ? 'earnings (Home, results: the margin and the costs)' : f.component === 'L' ? 'cash (Money tab: hold more, borrow less)' : 'the bond book (Money tab, bonds: shorter)'));
+    out.push({ key: 'enf', text: `Under ${b.enforcement === 'mou' ? 'an informal agreement' : b.enforcement === 'consent' ? 'a consent order' : 'a directive'}: ${where.length > 0 ? `fix ${[...new Set(where)].join('; ')}` : 'fix the findings'} before the next exam. Ignored, it escalates.` });
+  }
+  // Growing: the moves a strong bank can make, named while it can make them.
+  const strong = lev >= 0.09 && b.enforcement === 'none' && b.status === 'open';
+  const ageYears = (world.day - b.charteredDay) / 365;
+  if (strong && ageYears >= 2 && b.branches.length < 3 && cashShare >= 0.06 && totalDeposits(a) > 50_000_000) out.push({ key: 'grow', text: `Capital is strong (${pct(lev, 1)}). A second branch in a nearby county gathers new deposits to lend: open the Map, click a county, read what a branch there would gather and cost.` });
+  const cap = dealCapacity(b);
+  const nearby = new Set([b.state, ...(world.geo.states[b.state]?.neighbors ?? [])]);
+  const target = world.bankOrder.map((id) => world.banks[id]!).filter((t) => t.kind === 'rival' && t.status === 'open' && t.forSale && nearby.has(t.state) && totalAssets(t.acct) < 0.6 * assets).sort((x, y) => totalAssets(y.acct) - totalAssets(x.acct))[0];
+  if (strong && target) {
+    const price = reservationPriceToBook(world, target) * tangibleEquity(target);
+    if (price <= cap.cash) out.push({ key: 'buy', text: `${target.name} (${short(totalAssets(target.acct))} of assets) is for sale nearby for about ${short(price)}, and you can pay it. Buying a bank is the fastest way up the ladder: World tab, the other banks, open it and make an offer.` });
+  }
+  if (ageYears >= 3 && strong && b.dividendPayout === 0 && b.reports.slice(-4).every((r) => r.netIncome > 0) && b.reports.length >= 4) out.push({ key: 'div', text: `Three years in, profitable and well capitalized: the bank can start paying a dividend. You own ${pct(world.player.shares / Math.max(1, b.shares), 0)} of it, so a payout is your money too. You tab, dividend payout.` });
+  const boardPay = defaultSalary(assets);
+  if (world.player.salary < boardPay * 0.5 && assets > 50_000_000 && strong) out.push({ key: 'pay', text: `A CEO of a ${short(assets)} bank is usually paid about ${short(boardPay)}; you take ${short(world.player.salary)}. The You tab sets your salary. Too much and the board notices; the advisor says so at 1% of assets.` });
   if (b.forSale === false && b.reviews.length >= 4) {
     const last = b.reviews[b.reviews.length - 1];
     if (last && last.netIncome < 0) out.push({ key: 'loss', text: `Last quarter lost ${short(-last.netIncome)}. The Earnings tab, where it came from, attributes every dollar; the losses table names the calls that made them.` });
   }
-  if (world.player.salary > 0 && assets > 0 && world.player.salary > 0.01 * assets) out.push({ key: 'pay', text: `Your salary is ${pct(world.player.salary / assets, 2)} of assets. Every dollar you pay yourself is capital the bank does not have when the cycle turns.` });
+  if (world.player.salary > 0 && assets > 0 && world.player.salary > 0.01 * assets) out.push({ key: 'paytoo', text: `Your salary is ${pct(world.player.salary / assets, 2)} of assets. Every dollar you pay yourself is capital the bank does not have when the cycle turns.` });
   return out;
 }

@@ -282,8 +282,8 @@ function escalate(ctx: Ctx, b: Bank, stack: CapitalStack): void {
       addPending(ctx, {
         kind: 'enforcement',
         bankId: b.id,
-        title: `Enforcement: ${LADDER_LABEL[target]} (CAMELS ${c.composite})`,
-        lines: [...c.findings.filter((f) => !f.resolved).map((f) => `${f.component}: ${f.text}`), ...lines],
+        title: `Enforcement: ${LADDER_LABEL[target]} (rated ${c.composite} of 5)`,
+        lines: [`The regulators have put the bank under ${target === 'mou' ? 'an informal agreement' : target === 'consent' ? 'a formal order' : 'a directive with a clock'} until these are fixed:`, ...c.findings.filter((f) => !f.resolved).map((f) => `${f.component}: ${f.text}`), ...lines],
         options: [{ key: 'k', label: 'Acknowledge' }],
         data: { level: target },
       });
@@ -311,8 +311,9 @@ export function examsMonthly(ctx: Ctx): void {
       addPending(ctx, {
         kind: 'exam_result',
         bankId: b.id,
-        title: `Exam closed: CAMELS ${result.composite} (C${result.capital} A${result.assets} M${result.management} E${result.earnings} L${result.liquidity} S${result.sensitivity})`,
+        title: `Exam closed: rated ${result.composite} of 5, ${result.composite <= 2 ? 'a sound bank' : result.composite === 3 ? 'a bank with problems to fix' : 'a bank in trouble'} (1 is best)`,
         lines: [
+          `${open.length === 0 ? 'The examiners found nothing to fix.' : `The examiners want ${open.length} thing${open.length === 1 ? '' : 's'} fixed before they return; ignored, a finding becomes an order.`} Component ratings: capital ${result.capital}, assets ${result.assets}, management ${result.management}, earnings ${result.earnings}, liquidity ${result.liquidity}, sensitivity ${result.sensitivity}.`,
           `Capital: CET1 ${pct(stack.cet1Ratio, 1)}, tier 1 ${pct(stack.tier1Ratio, 1)}, total ${pct(stack.totalRatio, 1)}, leverage ${pct(stack.leverage, 1)}${stack.cblr ? ' (community bank leverage ratio)' : ''}: ${PCA_LABEL[stack.category]}.`,
           ...(open.length === 0 ? ['No findings.'] : open.map((f) => `${f.component}: ${f.text}`)),
           `Next exam about ${formatDate(result.nextExam)}. Insurance assessment ${assessmentRate(b)} basis points.`,

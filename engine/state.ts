@@ -133,7 +133,8 @@ export interface Bank {
   loanMix: Record<LoanType, number>; // origination mix for pooled lending
   loansToDeposits: number; // target for pooled origination
   policy: LoanPolicy;
-  dial: { maxAuto: number; minGrade: number }; // above maxAuto dollars or worse than minGrade comes to the player (D20)
+  dial: { maxAuto: number; minGrade: number; autoSize?: boolean; committee?: boolean }; // above maxAuto dollars or worse than minGrade comes to the player (D20); autoSize keeps the line at 5% of capital; committee decides up to three times the line (D52)
+  committeeMonth?: { approved: number; amount: number; declined: number }; // the loan committee's month to date (D52)
   officers: Officer[];
   reviews: QuarterReview[]; // earnings reviews, player's bank only (D34)
   interestByType: Record<LoanType, number>; // quarter to date
@@ -660,7 +661,7 @@ export interface World {
   deals: DealRecord[]; // closed deals, for the record
   countries: Record<string, Country>; // the global stage (D45)
   largestNational: number; // assets of the largest bank in America at the start, the bar to pass
-  ladder: { rank: number; total: number; crossed: number[] }; // the player's place among America's banks by assets (D49)
+  ladder: { rank: number; total: number; crossed: number[]; rankYearAgo?: number }; // the player's place among America's banks by assets (D49)
 }
 
 export interface DealRecord {
@@ -992,7 +993,8 @@ export function createBank(world: World, spec: BankSpec): Bank {
     loanMix: emptyByType(0),
     loansToDeposits: 0.8,
     policy: defaultPolicy(),
-    dial: { maxAuto: 250_000, minGrade: 8 }, // grade 8 means never: size alone decides what reaches the desk
+    dial: { maxAuto: 250_000, minGrade: 8, autoSize: true, committee: false }, // grade 8 means never: size alone decides what reaches the desk; the line follows capital until set by hand
+    committeeMonth: { approved: 0, amount: 0, declined: 0 },
     officers: [],
     reviews: [],
     interestByType: emptyByType(0),

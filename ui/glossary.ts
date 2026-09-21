@@ -79,6 +79,7 @@ export const TERMS: Record<string, string> = {
   'margin after losses': 'The market rate less what your deposits cost less the expected loss. What is left pays the running costs and the shareholders.',
   'inverted curve': 'Short rates above long rates. Banks borrow short and lend long, so an inverted curve squeezes margins, and a recession has followed every one within two years.',
   'cost of money': 'The average rate you pay on deposits and borrowings. Every loan has to earn more than this plus its losses.',
+  'loan committee': 'The officers who decide the larger credits together under the written policy. With the committee deciding, the sound loans (health 65 and up, within policy) are made without you and the rest declined; you see only the biggest.',
   'note sale': 'Selling a troubled loan to a buyer who specializes in collecting them, for less than is owed. The bank gets cash now and writes off the difference today instead of waiting through a workout.',
   REO: 'Real estate owned: property the bank took back in a foreclosure, carried at what it should sell for. It sells over the following months, or sooner at a discount.',
   'investment policy': 'The board\'s standing order for idle cash: how much to keep as cash, what bonds to buy with the rest, how long, and whether they can be sold. The CFO executes it at each month end.',

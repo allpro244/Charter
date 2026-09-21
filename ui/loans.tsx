@@ -12,7 +12,7 @@ import { formatDate } from '../engine/time';
 import { decidedText, isTroubled, noteSalePrice, reoQuickPrice, sellLoan, sellReoNow } from '../engine/loans';
 import { nonperformingSale, sellNonperforming } from '../engine/credit';
 import type { Ctx } from '../engine/ctx';
-import { PRICING_MAX, PRICING_MIN, demandMultiplier, setDial, setPolicy, setPricing, setTypeAllowed } from '../engine/underwriting';
+import { PRICING_MAX, PRICING_MIN, autoSizeLine, committeeLine, demandMultiplier, setDial, setDialMode, setPolicy, setPricing, setTypeAllowed } from '../engine/underwriting';
 import { baseRate } from '../engine/credit';
 import { bankDepositRate } from '../engine/deposits';
 import { calibration } from '../data/calibration';
@@ -440,10 +440,30 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
           </thead>
           <tbody>
             <tr>
-              <td>Loans above this size come to you</td>
+              <td>Loans that reach your desk</td>
+              <td className="num">{bank.dial.committee ? 'only the biggest' : bank.dial.maxAuto === 0 ? 'every loan' : 'above the line'}</td>
+              <td>
+                <div className="seg">
+                  <button className={bank.dial.committee ? 'on' : ''} onClick={() => { setDialMode(world, { committee: true }); refresh(); }} title={`The loan committee decides credits up to ${usd(committeeLine(bank))}; you see the ones above that and get one line a month`}>
+                    Only the biggest
+                  </button>
+                  <button className={!bank.dial.committee && bank.dial.maxAuto > 0 ? 'on' : ''} onClick={() => { setDialMode(world, { committee: false }); if (bank.dial.maxAuto === 0) setDialMode(world, { autoSize: true }); refresh(); }} title="Loans above the size line come to you; the loan officer decides the rest under your policy">
+                    Above the size line
+                  </button>
+                  <button className={!bank.dial.committee && bank.dial.maxAuto === 0 ? 'on' : ''} onClick={() => { setDialMode(world, { committee: false }); setDial(world, 0, bank.dial.minGrade); refresh(); }} title="Every application stops the clock">
+                    Every loan
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>The size line{bank.dial.committee ? ' (the committee decides up to three times it)' : ''}</td>
               <td className="num">{bank.dial.maxAuto === 0 ? 'every loan' : usd(bank.dial.maxAuto)}</td>
               <td>
-                <AmountField value={bank.dial.maxAuto} onChange={(v) => dial(v, bank.dial.minGrade)} presets={[0, 100_000, 250_000, 1_000_000, 5_000_000]} label="Size" />
+                <button className={'btn small' + (bank.dial.autoSize ? ' on' : '')} onClick={() => { setDialMode(world, { autoSize: !bank.dial.autoSize }); refresh(); }} title={`Five percent of tier 1 capital, ${usd(autoSizeLine(bank))} today, reset each month as the bank grows`}>
+                  {bank.dial.autoSize ? 'Follows capital (5%)' : 'Set by hand'}
+                </button>
+                <AmountField value={bank.dial.maxAuto} onChange={(v) => dial(v, bank.dial.minGrade)} presets={[100_000, 250_000, 1_000_000, 5_000_000]} label="Size" />
               </td>
             </tr>
             <tr>
@@ -454,7 +474,7 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
               </td>
             </tr>
             <tr className="memo-row">
-              <td colSpan={3}>Everything below the size line is decided by the loan officer under your written policy: within policy is approved, outside it is declined. Set the grade line to never and only size decides what you see.</td>
+              <td colSpan={3}>Everything below the size line is decided by the loan officer under your written policy: within policy is approved, outside it is declined. With the committee deciding, credits up to three times the line are approved when sound (health 65 and up, within policy) and declined otherwise, and only the biggest reach you. A real CEO sets the authority and sits on committee for the large credits; five percent of capital is a common line.</td>
             </tr>
           </tbody>
         </table>

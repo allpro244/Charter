@@ -8,7 +8,7 @@ import { totalAssets } from '../engine/ledger';
 import { type Decision, type Pending, type World, createWorld } from '../engine/state';
 import { newPlayer, startCharter, startTakeover, type TakeoverCandidate } from '../engine/start';
 import { applyDecisions, tick } from '../engine/tick';
-import { isYearEnd } from '../engine/time';
+import { isQuarterEnd } from '../engine/time';
 import { setDividendPayout, setSalary } from '../engine/wealth';
 import { type Loaded, loadData } from './data';
 import { type Unit, short, unitFor } from './format';
@@ -223,7 +223,7 @@ export function App() {
       let paused = false;
       while (n-- > 0) {
         const r = tick(world);
-        if (isYearEnd(world.day)) writeSave(world);
+        if (isQuarterEnd(world.day)) writeSave(world);
         if (r.pending.some((p) => p.blocking) || world.playerBankId === null) {
           paused = true;
           break;
@@ -266,7 +266,7 @@ export function App() {
       setPhase('play');
       setScreen('HOME');
       setHomeTab('today');
-      setSpeed(1);
+      setSpeed(2);
       writeSave(world);
       refresh();
     },

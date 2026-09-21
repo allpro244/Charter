@@ -218,7 +218,7 @@ function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pendin
           return (
             <button key={o.key} className="btn option" disabled={blocked} title={blocked ? 'Over the legal limit or beyond what the bank can fund today' : undefined} onClick={() => onDecide(p, o.key)}>
               <kbd>{o.key}</kbd>
-              {o.label}
+              {o.key === 'a' && app && bank && !policyCheck(bank, app, termsFrom(app)).pass ? 'Approve as a policy exception (the examiner counts these)' : o.label}
             </button>
           );
         })}

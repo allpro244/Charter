@@ -62,6 +62,45 @@ export function aboveDial(b: Bank, app: Application): boolean {
   return app.memo.amount > b.dial.maxAuto || app.memo.suggestedGrade > b.dial.minGrade;
 }
 
+// The size line a bank of this capital delegates (D52): five percent of
+// tier 1, in fifty thousand dollar steps, never under a quarter million.
+export function autoSizeLine(b: Bank): number {
+  return Math.max(250_000, Math.round((0.05 * Math.max(0, tier1Capital(b.acct))) / 50_000) * 50_000);
+}
+
+// With the committee deciding, the desk sees only credits above three
+// times the size line.
+export function committeeLine(b: Bank): number {
+  return b.dial.maxAuto * 3;
+}
+
+// The loan committee's call on a credit above the size line: the sound
+// ones within policy (health 65 and up) are made, the rest declined.
+function committeeDecide(ctx: Ctx, b: Bank, app: Application): void {
+  const { world } = ctx;
+  const terms = termsFrom(app);
+  const cm = (b.committeeMonth ??= { approved: 0, amount: 0, declined: 0 });
+  const ok = policyCheck(b, app, terms).pass && loanHealth(world, b, app).score >= 65 && !growthRestricted(b);
+  if (ok && fundFromDesk(ctx, b, app, terms, 'loan committee', false, 'auto')) {
+    cm.approved += 1;
+    cm.amount += terms.amount;
+  } else {
+    cm.declined += 1;
+    b.applications.autoDeclined += 1;
+  }
+}
+
+// Monthly: the size line follows capital when it is not set by hand, and
+// the committee reports its month in one line.
+export function dialMonthly(ctx: Ctx, b: Bank): void {
+  if (b.dial.autoSize) b.dial.maxAuto = autoSizeLine(b);
+  const cm = b.committeeMonth;
+  if (b.dial.committee && cm && cm.approved + cm.declined > 0) {
+    emit(ctx, 'borrower', `Loan committee this month: approved ${cm.approved} for ${money(cm.amount)}, declined ${cm.declined}`, { bankId: b.id });
+  }
+  b.committeeMonth = { approved: 0, amount: 0, declined: 0 };
+}
+
 export interface PolicyCheck {
   pass: boolean;
   reasons: string[];
@@ -114,18 +153,21 @@ export function deskLine(b: Bank): number {
 
 // Funds a desk approval, drawing the Home Loan Bank line for any part the
 // cash cushion cannot cover. False when the loan cannot be made at all.
-function fundFromDesk(ctx: Ctx, b: Bank, app: Application, terms: FundTerms, note: string, countered: boolean): boolean {
+function fundFromDesk(ctx: Ctx, b: Bank, app: Application, terms: FundTerms, note: string, countered: boolean, by: 'player' | 'auto' = 'player'): boolean {
   const limit = lendingLimit(b);
+  const mine = by === 'player';
   if (terms.amount > limit) {
-    (b.desk ??= emptyDesk()).declined += 1;
-    b.applications.playerDeclined += 1;
+    if (mine) (b.desk ??= emptyDesk()).declined += 1;
+    if (mine) b.applications.playerDeclined += 1;
+    else b.applications.autoDeclined += 1;
     emit(ctx, 'regulator', `${app.borrower} not made: ${money(terms.amount)} is over the legal lending limit of ${money(limit)} to one borrower`, { severity: 'alert', bankId: b.id });
     return false;
   }
   const room = fundable(b);
   if (terms.amount > room) {
-    (b.desk ??= emptyDesk()).declined += 1;
-    b.applications.playerDeclined += 1;
+    if (mine) (b.desk ??= emptyDesk()).declined += 1;
+    if (mine) b.applications.playerDeclined += 1;
+    else b.applications.autoDeclined += 1;
     b.declinedForFunding = (b.declinedForFunding ?? 0) + 1;
     emit(ctx, 'borrower', `${app.borrower} not funded: the loan needs ${money(terms.amount)} and the bank can lend ${money(room)} today from cash above the cushion and half the Home Loan Bank line`, { severity: 'alert', bankId: b.id });
     return false;
@@ -133,12 +175,17 @@ function fundFromDesk(ctx: Ctx, b: Bank, app: Application, terms: FundTerms, not
   const assets = b.acct.cash + b.acct.loans + b.acct.securitiesAFS + b.acct.securitiesHTM;
   const short = terms.amount - Math.max(0, b.acct.cash - Math.round(0.03 * assets));
   if (short > 0) borrowFhlb(ctx, b, short, true);
-  fundLoan(ctx, b, app, terms, 'player', note, countered);
-  const desk = (b.desk ??= emptyDesk());
-  desk.approved += 1;
-  desk.approvedAmount += terms.amount;
-  if (countered) desk.countered += 1;
-  b.applications.playerApproved += 1;
+  fundLoan(ctx, b, app, terms, by, note, countered);
+  if (mine) {
+    const desk = (b.desk ??= emptyDesk());
+    desk.approved += 1;
+    desk.approvedAmount += terms.amount;
+    if (countered) desk.countered += 1;
+    b.applications.playerApproved += 1;
+  } else {
+    b.applications.autoApproved += 1;
+    b.applications.autoApprovedAmount += terms.amount;
+  }
   return true;
 }
 
@@ -213,7 +260,8 @@ export function applicationsDaily(ctx: Ctx): void {
         turnedAwayAmount += app.memo.amount;
         b.applications.turnedAway = (b.applications.turnedAway ?? 0) + 1;
         b.applications.turnedAwayAmount = (b.applications.turnedAwayAmount ?? 0) + app.memo.amount;
-      } else forPlayer.push(app);
+      } else if (b.dial.committee && app.memo.amount <= committeeLine(b)) committeeDecide(ctx, b, app);
+      else forPlayer.push(app);
     } else autoDecide(ctx, b, app, skill);
   }
   if (turnedAway > 0) {
@@ -251,7 +299,7 @@ export function queueApplication(ctx: Ctx, b: Bank, app: Application): void {
     lines: memoLines(app, b),
     options: [
       { key: 'a', label: 'Approve as requested' },
-      { key: 'c', label: 'Counter (rate up 100bp, LTV down 10 points, guarantee required)' },
+      { key: 'c', label: 'Counter: one point more in rate, a smaller loan, a personal guarantee' },
       { key: 'd', label: 'Decline' },
     ],
     data: { app },
@@ -393,9 +441,23 @@ export function decideBatch(ctx: Ctx, pending: Pending, d: Decision): void {
 export function setDial(world: World, maxAuto: number, minGrade: number): void {
   const b = playerBank(world);
   if (!b) return;
+  // A line set by hand stays where it is put.
+  if (Math.round(maxAuto) !== b.dial.maxAuto) b.dial.autoSize = false;
   b.dial.maxAuto = Math.max(0, Math.round(maxAuto));
   // Grade 8 means never: no suggested grade is worse than 8.
   b.dial.minGrade = Math.max(0, Math.min(8, Math.round(minGrade)));
+}
+
+// The delegation ladder (D52): the line follows capital or not; the
+// committee decides above the line or the desk does.
+export function setDialMode(world: World, patch: { autoSize?: boolean; committee?: boolean }): void {
+  const b = playerBank(world);
+  if (!b) return;
+  if (patch.autoSize !== undefined) {
+    b.dial.autoSize = patch.autoSize;
+    if (patch.autoSize) b.dial.maxAuto = autoSizeLine(b);
+  }
+  if (patch.committee !== undefined) b.dial.committee = patch.committee;
 }
 
 export function setPolicy(world: World, patch: Partial<Bank['policy']>): void {
