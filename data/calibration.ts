@@ -132,6 +132,7 @@ export const calibration = {
   loanRateElasticity: hand(4, 15, 8, 'percent more applications per 25bp under market', 'No public series. Set on the scale of the deposit band; a hand band until a source exists'),
   depositsPerBranch: hand(40, 400, 120, 'millions of dollars per branch', 'FDIC Summary of Deposits, deposits divided by offices'),
   deNovoShareCeiling: hand(1, 5, 2.5, 'percent of home county deposits after ramp', 'FDIC de novo studies, share after 5 years'),
+  branchReachKm: hand(150, 800, 400, 'km from home at which a branch of a $100M bank gathers a third of what it would at home; reach grows with the fourth root of assets', 'no public study found; community bank branch networks are regional, national banks reach everywhere'),
   takeoverPremium: hand(100, 160, 125, 'percent of book value for a control stake', 'S&P bank M&A price to tangible book, small deals'),
   // Global stage (D45). Start values for the countries the game opens
   // with. Sources are FRED and BIS series; hand-entered until a script

@@ -33,7 +33,7 @@ Invariants: cumulative net charge-offs over 20 year runs in FDIC bands per type.
 ## 4. Deposits and funding
 Cadence: daily flows; monthly rate resets and beta updates.
 Owns: deposits by type per branch, rate sheet, betas, stickiness, runs, brokered, FHLB capacity, fed funds, later swaps.
-Branches on real counties and metros. Fixed cost scales with local wages and rents from the data. County deposit pools are derived from real population, income, and FDIC deposit totals. Share capture vs rivals based on rate, branch count, years in market, reputation. Distance penalty for far-from-home branches.
+Branches on real counties and metros. Fixed cost scales with local wages and rents from the data. The case for a branch (what it could gather after one and three years and when mature, its break even at the bank's margin) comes from the same target formula the branch runs on, and the ten best counties by a mature year's earnings are ranked for the player (D55). County deposit pools are derived from real population, income, and FDIC deposit totals. Share capture vs rivals based on rate, branch count, years in market, reputation. Distance penalty for far-from-home branches: the reach scale grows with the fourth root of assets (`branchReachKm`).
 Run trigger: capital ratio, unrealized loss vs equity, and rival failure news combine into confidence. Uninsured runs first.
 Invariants: county deposits across all banks equal the county pool. Deposit cost tracks Fed funds with plausible beta by type. Fed +400bp shock produces outflow and unrealized loss in plausible bands.
 

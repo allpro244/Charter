@@ -9,7 +9,7 @@ import { calibration } from '../data/calibration';
 import { type Ctx, addPending, emit, milestone } from './ctx';
 import { borrowFhlb, fhlbCapacity, sellSecurities, unrealizedToCapital } from './funding';
 import { DEPOSIT_TYPES, type DepositType, leverageRatio, post, totalAssets } from './ledger';
-import { nextFriday } from './regulation';
+import { growthRestricted, nextFriday } from './regulation';
 import { chance, randNormal } from './rng';
 import { type Bank, emptyPeg, type Branch, type CountyState, type Decision, type Pending, type World, branchFixedCost, nextId, playerBank } from './state';
 import { money, pct } from './format';
@@ -72,7 +72,11 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   const base = isHome ? b.franchise.baseShare : 0;
   const target = isHome ? Math.max(b.franchise.targetShare, base) : ceiling;
   const share = Math.min(1, base + (target - base) * ramp);
-  const distance = Math.exp(-br.distanceKm / 1500);
+  // A branch far from home gathers less: nobody knows the name and nobody
+  // from head office is there. The reach grows with the bank's size, a
+  // regional name at $100M, the whole country at a trillion.
+  const reach = calibration.branchReachKm.typical * Math.pow(Math.max(totalAssets(b.acct), 1e7) / 1e8, 0.25);
+  const distance = Math.exp(-br.distanceKm / reach);
   const fromShare = br.competitiveTarget ?? pool * share * distance;
   // Branch capacity applies to real branches on real counties. Without
   // geography the franchise pool is the whole addressable market.
@@ -416,22 +420,152 @@ export function setPegMode(world: World, on: boolean): void {
   } else b.ratePeg = null;
 }
 
+// The case for a branch in a county (D55), from the same formula the
+// branch will run on: what it could gather after one and three years and
+// when mature (six years, uncontested, in today's dollars), what it costs
+// to open and to run, and the deposits at which it pays for itself at the
+// bank's own margin.
+export interface BranchCase {
+  fips: string;
+  name: string;
+  state: string;
+  pool: number;
+  distanceKm: number;
+  premises: number; // paid up front
+  fixedCost: number; // a year
+  year1: number;
+  year3: number;
+  mature: number;
+  rivalBranches: number; // other banks' branches in the county
+  contested: number; // mature, against the branches already there (the county contest's own split)
+  margin: number; // the bank's net interest margin, or the band's typical
+  breakEven: number; // deposits that cover the fixed cost at the margin
+  paybackYear: number | null; // first year the target covers the fixed cost
+  profit: number; // a mature year: margin on deposits less the fixed cost
+  existing: number; // own branches there
+}
+
+export function branchMargin(b: Bank): number {
+  const last = b.reports[b.reports.length - 1];
+  return last && last.nim > 0.005 ? last.nim : calibration.nim.under1b.typical / 100;
+}
+
+// Other banks' branches by county, one pass over the world.
+export type BranchesByCounty = Record<string, { bank: Bank; br: Branch }[]>;
+export function rivalBranches(world: World): BranchesByCounty {
+  const out: BranchesByCounty = {};
+  for (const id of world.bankOrder) {
+    if (id === world.playerBankId) continue;
+    const b = world.banks[id] as Bank;
+    if (b.status !== 'open' && b.status !== 'closing') continue;
+    for (const br of b.branches) (out[br.county] ??= []).push({ bank: b, br });
+  }
+  return out;
+}
+
+export function branchCase(world: World, b: Bank, county: CountyState, rivals: BranchesByCounty = rivalBranches(world)): BranchCase {
+  const home = b.homeCounty ? world.geo.counties[b.homeCounty] : undefined;
+  const distanceKm = home ? Math.round(km(home.centroid, county.centroid)) : 0;
+  const fixedCost = branchFixedCost(county);
+  const at = (years: number) => branchTarget(world, b, { id: '', county: county.fips, openedDay: world.day - Math.round(years * 365), deposits: 0, fixedCost, distanceKm, competitiveTarget: null }, false);
+  const margin = branchMargin(b);
+  const mature = at(6);
+  // Against the branches already there: the county contest's own split
+  // (competeCounties) with this branch in it at six years, never more
+  // than it could gather alone.
+  const there = rivals[county.fips] ?? [];
+  let contested = mature;
+  if (there.length > 0 && mature > 0) {
+    let held = 0;
+    let natural = 0;
+    const attract: { attract: number }[] = [];
+    for (const { bank, br } of there) {
+      held += br.deposits;
+      natural += branchTarget(world, bank, br);
+      attract.push({ attract: attractiveness(bankDepositRate(bank) - marketDepositRate(world), (world.day - br.openedDay) / 365, totalAssets(bank.acct), bank.confidence) });
+    }
+    attract.push({ attract: attractiveness(bankDepositRate(b) - marketDepositRate(world), 6, totalAssets(b.acct), b.confidence) });
+    const pot = Math.min(county.depositPool, Math.max(held, natural + mature));
+    const split = splitCounty(pot, 1, attract);
+    contested = Math.min(mature, split[split.length - 1] ?? 0);
+  }
+  const ratio = mature > 0 ? contested / mature : 1;
+  let paybackYear: number | null = null;
+  for (let y = 1; y <= 10; y++) {
+    if (at(y) * ratio * margin >= fixedCost) {
+      paybackYear = y;
+      break;
+    }
+  }
+  return {
+    fips: county.fips,
+    name: county.name,
+    state: county.state,
+    pool: county.depositPool,
+    distanceKm,
+    premises: fixedCost,
+    fixedCost,
+    year1: at(1),
+    year3: at(3),
+    mature,
+    rivalBranches: there.length,
+    contested,
+    margin,
+    breakEven: Math.round(fixedCost / margin),
+    paybackYear,
+    profit: Math.round(contested * margin - fixedCost),
+    existing: b.branches.filter((br) => br.county === county.fips).length,
+  };
+}
+
+// The counties where a branch would earn the most in a mature year, the
+// ones with a branch already left out.
+export function branchCandidates(world: World, b: Bank, n = 10): BranchCase[] {
+  const rivals = rivalBranches(world);
+  const out: BranchCase[] = [];
+  for (const c of Object.values(world.geo.counties)) {
+    if (c.depositPool <= 0) continue;
+    if (b.branches.some((br) => br.county === c.fips)) continue;
+    out.push(branchCase(world, b, c, rivals));
+  }
+  // Earnings within fifty thousand a year are noise in a forecast; among
+  // those, the nearer county is the better opening.
+  const step = (k: BranchCase) => Math.floor(k.profit / 50_000);
+  out.sort((x, y) => step(y) - step(x) || x.distanceKm - y.distanceKm);
+  return out.slice(0, n);
+}
+
+// Whether the player can open a branch here today, and if not, why.
+export function branchOpenCheck(world: World, county: CountyState): { ok: boolean; reason: string | null; premises: number } {
+  const premises = branchFixedCost(county);
+  const b = playerBank(world);
+  if (!b || b.status !== 'open') return { ok: false, reason: 'the bank is not open', premises };
+  if (b.branches.some((br) => br.county === county.fips)) return { ok: false, reason: `you already have a branch in ${county.name}`, premises };
+  if (county.depositPool <= 0) return { ok: false, reason: `no deposit data for ${county.name}`, premises };
+  if (growthRestricted(b)) return { ok: false, reason: 'the enforcement order freezes the bank at its size; no new branches until it is lifted', premises };
+  if (b.acct.cash < premises) return { ok: false, reason: `premises cost ${money(premises)} and the bank has ${money(b.acct.cash)} of cash`, premises };
+  return { ok: true, reason: null, premises };
+}
+
 export function openBranch(ctx: Ctx, county: CountyState): Branch | null {
   const { world } = ctx;
   const b = playerBank(world);
-  if (!b || b.status !== 'open') return null;
-  if (b.branches.some((br) => br.county === county.fips)) return null;
+  const check = branchOpenCheck(world, county);
+  if (!b || !check.ok) {
+    if (b) emit(ctx, 'system', `No branch in ${county.name}: ${check.reason}.`, { severity: 'alert', bankId: b.id });
+    return null;
+  }
   const home = b.homeCounty ? world.geo.counties[b.homeCounty] : undefined;
   const distanceKm = home ? km(home.centroid, county.centroid) : 0;
   // Opening costs a year of the branch's fixed cost up front as premises.
   const fixedCost = branchFixedCost(county);
-  const premises = Math.round(fixedCost * 1.0);
-  if (b.acct.cash < premises) return null;
+  const premises = check.premises;
   post(b.acct, { cash: -premises, premises });
   const br: Branch = { id: nextId(world, 'br'), county: county.fips, openedDay: world.day, deposits: 0, fixedCost, distanceKm: Math.round(distanceKm), competitiveTarget: null };
   b.branches.push(br);
+  const c = branchCase(world, b, county);
   milestone(ctx, `Opened a branch in ${county.name}, ${county.state}${b.branches.length === 2 ? ', the first beyond home' : ''}`);
-  emit(ctx, 'system', `Opened a branch in ${county.name}, ${county.state}: ${money(premises)} of premises, ${money(fixedCost)} a year to run, ${Math.round(distanceKm)} km from home`, { severity: 'good', bankId: b.id });
+  emit(ctx, 'system', `Opened a branch in ${county.name}, ${county.state}: ${money(premises)} of premises, ${money(fixedCost)} a year to run, ${Math.round(distanceKm)} km from home. It could gather up to ${money(c.year3)} of deposits in three years.`, { severity: 'good', bankId: b.id });
   return br;
 }
 

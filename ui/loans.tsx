@@ -1,12 +1,11 @@
-// Lending: the book by type with a health bar, then the relationship
-// book, the written policy and the dial, and the pools for the player
-// who wants the grade buckets. Every pool drills to a sample of
-// representative loans generated on demand (D29), never stored.
+// Lending: the book by type with a health bar, then one book at two
+// levels of detail (D54): every loan that came through the application
+// desk as its own file, and the officers' lending under policy by type
+// and year (the pools, D29). Then the rate sheet, the policy and the dial.
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { TYPE, bookByType } from '../engine/credit';
 import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from '../engine/loantypes';
-import { derive, hashString, rand, randNormal } from '../engine/rng';
 import { type Bank, type Loan, type Pool, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { decidedText, isTroubled, noteSalePrice, reoQuickPrice, sellLoan, sellReoNow } from '../engine/loans';
@@ -27,17 +26,16 @@ interface Props {
   act?: (fn: (ctx: Ctx) => void, note?: string) => void;
 }
 
-type Tab = 'book' | 'sheet' | 'policy' | 'pools';
+type Tab = 'book' | 'sheet' | 'policy';
 
 export function LoansScreen({ world, bank, unit, refresh, act }: Props) {
   const [tab, setTab] = useState<Tab>('book');
-  const [openPool, setOpenPool] = useState<string | null>(null);
   const [openLoan, setOpenLoan] = useState<string | null>(null);
   const rows = bookByType(bank);
   const total = rows.reduce((s, r) => s + r.balance, 0);
   return (
     <div>
-      <p className="hint">The loans on your books by type, with a health bar showing the share graded weak. Below: the loans you decide one by one, the written policy and dial that decide the rest, and the pools for the detail.</p>
+      <p className="hint">The loans on your books by type, with a health bar showing the share graded weak. Below: the whole book, then the rate sheet, then the written policy and dial that decide what reaches your desk.</p>
       <div className="toolbar">
         <div className="seg">
           <button className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
@@ -48,9 +46,6 @@ export function LoansScreen({ world, bank, unit, refresh, act }: Props) {
           </button>
           <button className={tab === 'policy' ? 'on' : ''} onClick={() => setTab('policy')}>
             Policy and dial
-          </button>
-          <button className={tab === 'pools' ? 'on' : ''} onClick={() => setTab('pools')}>
-            Pools (details)
           </button>
         </div>
       </div>
@@ -122,7 +117,6 @@ export function LoansScreen({ world, bank, unit, refresh, act }: Props) {
         </tbody>
       </table>
       {tab === 'book' && <Book world={world} bank={bank} unit={unit} openLoan={openLoan} setOpenLoan={setOpenLoan} act={act} />}
-      {tab === 'pools' && <Pools world={world} bank={bank} unit={unit} openPool={openPool} setOpenPool={setOpenPool} act={act} />}
       {tab === 'sheet' && <RateSheet world={world} bank={bank} refresh={refresh} />}
       {tab === 'policy' && <Policy world={world} bank={bank} refresh={refresh} />}
     </div>
@@ -166,6 +160,7 @@ function statusLabel(l: Loan): string {
 function Book({ world, bank, unit, openLoan, setOpenLoan, act }: { world: World; bank: Bank; unit: Unit; openLoan: string | null; setOpenLoan: (id: string | null) => void; act?: Props['act'] }) {
   const loans = [...bank.loans].sort((a, b) => (a.status === b.status ? b.balance - a.balance : rank(a) - rank(b)));
   const troubled = loans.filter((l) => isTroubled(l) || l.status === 'reo');
+  const onFile = loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'sold').length;
   return (
     <div>
     {troubled.length > 0 && (
@@ -176,7 +171,7 @@ function Book({ world, bank, unit, openLoan, setOpenLoan, act }: { world: World;
     <table>
       <thead>
         <tr>
-          <th>Loans you decided ({loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'sold').length})</th>
+          <th>Loans on your desk ({num(onFile)})</th>
           <th>type</th>
           <th className="num">balance {unitLabel(unit)}</th>
           <th className="num">rate</th>
@@ -201,12 +196,17 @@ function Book({ world, bank, unit, openLoan, setOpenLoan, act }: { world: World;
         {loans.length === 0 && (
           <tr>
             <td colSpan={10} className="empty">
-              {bank.homeCounty ? 'No relationship loans yet. Applications arrive daily; the dial decides which reach you.' : 'No relationship loans in this build: without a home county, no applications arrive. The pools hold the book.'}
+              {bank.homeCounty ? 'No loans on the desk yet. Applications arrive daily; the dial decides which reach you and which the loan officer decides under your policy.' : 'No home county in this build, so no applications arrive. The rest of the book below holds the loans.'}
             </td>
           </tr>
         )}
       </tbody>
     </table>
+    <p className="hint">
+      Every loan that came through the application desk is a file above: the ones you decided, the ones the loan officer decided under your policy, and any that came with the bank. The lending your officers do to fill the book is below, by type and year, the way a CEO reads the rest of a book. The two together are the balance at the top.
+      {onFile > 400 ? ' Past 500 files, the smallest and oldest move below.' : ''}
+    </p>
+    <RestOfBook world={world} bank={bank} unit={unit} act={act} />
     </div>
   );
 }
@@ -271,145 +271,170 @@ function LoanRows({ world, bank, l, unit, open, toggle, act }: { world: World; b
   );
 }
 
-function Pools({ world, bank, unit, openPool, setOpenPool, act }: { world: World; bank: Bank; unit: Unit; openPool: string | null; setOpenPool: (k: string | null) => void; act?: Props['act'] }) {
-  const pools = [...bank.pools].sort((a, b) => (a.type === b.type ? b.vintage - a.vintage : LOAN_TYPES.indexOf(a.type) - LOAN_TYPES.indexOf(b.type)));
-  const sales = LOAN_TYPES.map((t) => ({ t, ...nonperformingSale(world, bank, t) })).filter((x) => x.balance > 0);
+interface TypeRow {
+  t: LoanType;
+  pools: Pool[];
+  balance: number;
+  count: number;
+  rate: number;
+  weak: number;
+  nonaccrual: number;
+  lost: number;
+  orig: number;
+  sale: { balance: number; price: number };
+}
+
+// The pooled book (D29) read by type, each type opening to its years.
+function RestOfBook({ world, bank, unit, act }: { world: World; bank: Bank; unit: Unit; act?: Props['act'] }) {
+  const [openType, setOpenType] = useState<LoanType | null>(null);
+  const rows: TypeRow[] = [];
+  for (const t of LOAN_TYPES) {
+    const pools = bank.pools.filter((p) => p.type === t && (p.balance > 0 || p.count > 0)).sort((a, b) => b.vintage - a.vintage);
+    if (pools.length === 0) continue;
+    let balance = 0;
+    let count = 0;
+    let ysum = 0;
+    let weak = 0;
+    let nonaccrual = 0;
+    let lost = 0;
+    let orig = 0;
+    for (const p of pools) {
+      balance += p.balance;
+      count += p.count;
+      ysum += p.balance * p.rate;
+      for (let g = 5; g < GRADES; g++) weak += p.grades[g] ?? 0;
+      for (let g = 6; g < GRADES; g++) nonaccrual += p.grades[g] ?? 0;
+      lost += p.cumLoss;
+      orig += p.origBalance;
+    }
+    rows.push({ t, pools, balance, count, rate: balance > 0 ? ysum / balance : 0, weak, nonaccrual, lost, orig, sale: nonperformingSale(world, bank, t) });
+  }
+  const total = rows.reduce((a, r) => a + r.balance, 0);
+  const count = rows.reduce((a, r) => a + r.count, 0);
+  const weak = rows.reduce((a, r) => a + r.weak, 0);
+  const nonaccrual = rows.reduce((a, r) => a + r.nonaccrual, 0);
+  const lost = rows.reduce((a, r) => a + r.lost, 0);
   return (
-    <div>
-      {sales.length > 0 && (
-        <table className="wrap">
-          <thead>
-            <tr>
-              <th>Nonperforming pooled loans (grades 7 and 8)</th>
-              <th className="num">balance</th>
-              <th className="num">a buyer pays</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sales.map((x) => (
-              <tr key={x.t}>
-                <td>{TYPE[x.t].label}</td>
-                <td className="num">{dollars(x.balance, unit)}</td>
-                <td className="num">{dollars(x.price, unit)}</td>
-                <td>
-                  {act && (
-                    <button className="btn small" onClick={() => act((c: Ctx) => sellNonperforming(c, bank, x.t))} title={`${usd(x.balance - x.price)} charged off today; the workouts and the drag on earnings go with the loans`}>
-                      Sell them for {usd(x.price)}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            <tr className="memo-row">
-              <td colSpan={4}>A bulk sale to a distressed debt fund: the price is what the type's loss given default leaves, less a fifth for the buyer. Selling takes the loss now instead of over the coming year, and the examiner stops counting them.</td>
-            </tr>
-          </tbody>
-        </table>
-      )}
-      <p className="hint">
-        Each pool is one loan type and one year of origination. The g1 to g9 columns are the share of the balance in each <Term k="grade">grade</Term>: 1 is the safest, 6 and up are weak, 9 is a loss. Click a pool for a sample of the loans inside it.
-      </p>
-      <table>
-        <thead>
+    <table>
+      <thead>
+        <tr>
+          <th>The rest of the book: made by your officers under policy ({num(count)} loans)</th>
+          <th className="num">loans</th>
+          <th className="num">balance {unitLabel(unit)}</th>
+          <th className="num">rate</th>
+          <th className="num">weak</th>
+          <th className="num">
+            <Term k="nonaccrual">not paying</Term>
+          </th>
+          <th className="num">
+            <Term k="charge-off">lost to date</Term>
+          </th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <TypeRows key={r.t} r={r} bank={bank} unit={unit} open={openType === r.t} toggle={() => setOpenType(openType === r.t ? null : r.t)} act={act} />
+        ))}
+        {rows.length === 0 && (
           <tr>
-            <th>Pools {unitLabel(unit)}</th>
-            <th className="num">year</th>
-            <th className="num">loans</th>
-            <th className="num">balance</th>
-            <th className="num">rate</th>
-            <th className="num">age (mo)</th>
-            {Array.from({ length: GRADES }, (_, g) => (
-              <th key={g} className="num">
-                g{g + 1}
-              </th>
-            ))}
-            <th className="num">lost</th>
-            <th className="num">of original</th>
+            <td colSpan={8} className="empty">
+              Nothing yet. Your officers book loans every month toward the loans to deposits target in the written policy; that lending shows here.
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {pools.map((p) => {
-            const key = `${p.type}:${p.vintage}`;
-            return <PoolRows key={key} world={world} bank={bank} p={p} unit={unit} open={openPool === key} toggle={() => setOpenPool(openPool === key ? null : key)} />;
-          })}
-        </tbody>
-      </table>
-    </div>
+        )}
+        {rows.length > 0 && (
+          <tr className="total">
+            <td>All of it</td>
+            <td className="num">{num(count)}</td>
+            <td className="num">{dollars(total, unit)}</td>
+            <td className="num">{pct(total > 0 ? rows.reduce((a, r) => a + r.balance * r.rate, 0) / total : 0)}</td>
+            <td className={'num' + (total > 0 && weak / total > 0.08 ? ' alert' : '')}>{pct(total > 0 ? weak / total : 0, 1)}</td>
+            <td className="num">{pct(total > 0 ? nonaccrual / total : 0, 1)}</td>
+            <td className="num">{dollars(lost, unit)}</td>
+            <td></td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   );
 }
 
-function PoolRows({ world, bank, p, unit, open, toggle }: { world: World; bank: Bank; p: Pool; unit: Unit; open: boolean; toggle: () => void }) {
-  const sample = useMemo(() => (open ? samplePool(world, bank, p) : []), [open, world, bank, p]);
+function TypeRows({ r, bank, unit, open, toggle, act }: { r: TypeRow; bank: Bank; unit: Unit; open: boolean; toggle: () => void; act?: Props['act'] }) {
+  const weakShare = r.balance > 0 ? r.weak / r.balance : 0;
   return (
     <>
-      <tr className="row" onClick={toggle}>
+      <tr className={'row' + (r.sale.balance >= 100_000 ? ' alert' : '')} onClick={toggle}>
         <td>
-          <span className="chev">{open ? '▾' : '▸'}</span>
-          {TYPE[p.type].label}
+          <span className="chev">{open ? '\u25be' : '\u25b8'}</span>
+          <Term k={TYPE[r.t].label}>{TYPE[r.t].label}</Term>
         </td>
-        <td className="num">{p.vintage}</td>
-        <td className="num">{num(p.count)}</td>
-        <td className="num">{dollars(p.balance, unit)}</td>
-        <td className="num">{pct(p.rate)}</td>
-        <td className="num">{p.ageMonths}</td>
-        {p.grades.map((g, i) => (
-          <td key={i} className={'num' + (i >= 6 && g > 0 ? ' alert' : '')}>
-            {pct(p.balance > 0 ? g / p.balance : 0, 0)}
-          </td>
-        ))}
-        <td className="num">{dollars(p.cumLoss, unit)}</td>
-        <td className="num">{pct(p.origBalance > 0 ? p.cumLoss / p.origBalance : 0)}</td>
+        <td className="num">{num(r.count)}</td>
+        <td className="num">{dollars(r.balance, unit)}</td>
+        <td className="num">{pct(r.rate)}</td>
+        <td className={'num' + (weakShare > 0.08 ? ' alert' : '')}>{pct(weakShare, 1)}</td>
+        <td className="num">{pct(r.balance > 0 ? r.nonaccrual / r.balance : 0, 1)}</td>
+        <td className="num">{dollars(r.lost, unit)}</td>
+        <td>
+          {act && r.sale.balance >= 100_000 && (
+            <button
+              className="btn small"
+              onClick={(e) => {
+                e.stopPropagation();
+                act((c: Ctx) => sellNonperforming(c, bank, r.t));
+              }}
+              title={`A bulk sale of the ${usd(r.sale.balance)} not paying to a distressed debt fund: ${usd(r.sale.balance - r.sale.price)} charged off today instead of over the coming year, the workouts gone, and the examiner stops counting them.`}
+            >
+              Sell the not paying ones for {usd(r.sale.price)}
+            </button>
+          )}
+        </td>
       </tr>
       {open && (
         <tr>
-          <td colSpan={17}>
+          <td colSpan={8}>
             <table className="inner stats">
               <thead>
                 <tr>
-                  <th>Representative loans (generated from the pool, not stored)</th>
+                  <th>By year made</th>
+                  <th className="num">loans</th>
                   <th className="num">balance {unitLabel(unit)}</th>
                   <th className="num">rate</th>
-                  <th className="num">grade</th>
+                  <th className="num">age (months)</th>
+                  <th className="num">weak</th>
+                  <th className="num">not paying</th>
+                  <th className="num">lost</th>
+                  <th className="num">of original</th>
                 </tr>
               </thead>
               <tbody>
-                {sample.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.name}</td>
-                    <td className="num">{dollars(s.balance, unit)}</td>
-                    <td className="num">{pct(s.rate)}</td>
-                    <td className="num">g{s.grade}</td>
-                  </tr>
-                ))}
+                {r.pools.map((p) => {
+                  let w = 0;
+                  let n = 0;
+                  for (let g = 5; g < GRADES; g++) w += p.grades[g] ?? 0;
+                  for (let g = 6; g < GRADES; g++) n += p.grades[g] ?? 0;
+                  return (
+                    <tr key={p.vintage}>
+                      <td>{p.vintage}</td>
+                      <td className="num">{num(p.count)}</td>
+                      <td className="num">{dollars(p.balance, unit)}</td>
+                      <td className="num">{pct(p.rate)}</td>
+                      <td className="num">{p.ageMonths}</td>
+                      <td className={'num' + (p.balance > 0 && w / p.balance > 0.08 ? ' alert' : '')}>{pct(p.balance > 0 ? w / p.balance : 0, 1)}</td>
+                      <td className="num">{pct(p.balance > 0 ? n / p.balance : 0, 1)}</td>
+                      <td className="num">{dollars(p.cumLoss, unit)}</td>
+                      <td className="num">{pct(p.origBalance > 0 ? p.cumLoss / p.origBalance : 0)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            <p className="hint">One line per loan type and year made. A young year has had no time to go bad; an old one shows what it cost. Weak is the share graded 6 or worse; not paying is 7 or worse.</p>
           </td>
         </tr>
       )}
     </>
   );
-}
-
-// Ten loans drawn from the pool's grade distribution and average size.
-function samplePool(world: World, bank: Bank, p: Pool): { name: string; balance: number; rate: number; grade: number }[] {
-  const r = derive(world.seed, hashString(`${bank.id}:${p.type}:${p.vintage}:${p.ageMonths}`));
-  const out = [] as { name: string; balance: number; rate: number; grade: number }[];
-  const avg = p.count > 0 ? p.balance / p.count : TYPE[p.type].avgSize;
-  const names = ['Alvarez', 'Booth', 'Carver', 'Dunn', 'Eze', 'Farrow', 'Gaines', 'Huang', 'Ivers', 'Jost'];
-  for (let i = 0; i < 10; i++) {
-    let x = rand(r) * p.balance;
-    let grade = 1;
-    for (let g = 0; g < GRADES; g++) {
-      x -= p.grades[g] ?? 0;
-      if (x <= 0) {
-        grade = g + 1;
-        break;
-      }
-    }
-    out.push({ name: `${names[i]} ${TYPE[p.type].label.toLowerCase()} borrower`, balance: Math.max(1000, Math.round(avg * Math.exp(randNormal(r, 0, 0.6)))), rate: Math.round((p.rate + randNormal(r, 0, 0.003)) * 10_000) / 10_000, grade });
-  }
-  return out;
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;

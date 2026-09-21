@@ -273,7 +273,7 @@ function Deposits({ world, bank, unit, act }: Props) {
           })}
           <tr>
             <td colSpan={6} className="dim">
-              {bank.branches.length === 0 ? 'No branches: the playtest bank has no home town. ' : ''}Open a branch from the Map tab: hover a county and click Open a branch. {county ? `Home county ${county.name}.` : ''}
+              {bank.branches.length === 0 ? 'No branches: the playtest bank has no home town. ' : ''}Open a branch from the Map tab: pick one from the list of where to open next, or pin a county and open there. {county ? `Home county ${county.name}.` : ''}
             </td>
           </tr>
         </tbody>

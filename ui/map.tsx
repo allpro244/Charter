@@ -2,11 +2,9 @@
 // built GeoJSON, metro dots sized by real population, branch markers,
 // county shading by sector exposure or condition. Hover shows real stats.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Sector } from '../data/types';
-import { calibration } from '../data/calibration';
-import { km } from '../engine/deposits';
-import { branchFixedCost } from '../engine/state';
+import { type BranchCase, branchCandidates, branchCase, branchOpenCheck } from '../engine/deposits';
 import { SECTORS } from '../data/types';
 import type { Bank, CountyState, MetroState, World } from '../engine/state';
 import type { GeoCollection } from './data';
@@ -40,15 +38,6 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   const [hover, setHover] = useState<string | null>(null);
   // A click pins a county so the mouse can leave the map for the button.
   const [picked, setPicked] = useState<string | null>(null);
-  useEffect(() => {
-    if (!onOpenBranch || mode !== 'play') return;
-    const h = (e: KeyboardEvent) => {
-      const target = picked ?? hover;
-      if (e.key.toLowerCase() === 'o' && target) onOpenBranch(target);
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [hover, picked, onOpenBranch, mode]);
   const paths = useMemo<CountyPath[]>(
     () => geo.features.map((f) => ({ fips: f.properties.fips, name: f.properties.name, state: f.properties.state, d: pathFor(f.geometry, f.properties.state) })),
     [geo],
@@ -80,7 +69,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   const empty = paths.length === 0;
   return (
     <div className="mapwrap">
-      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers, click it to pin it, then open a branch there to gather its deposits and meet its borrowers. Shade the map by your share of each county's deposits, by a sector's share of jobs, or by how each county is doing.</p>}
+      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers and click it to pin it. The list under the map ranks where a new branch would earn the most; open one there or from a pinned county's card. Shade the map by your share of each county's deposits, by a sector's share of jobs, or by how each county is doing.</p>}
       {empty && <p className="hint">This build has no county map: the playtest bank has no home town. The map fills in once the county data is built.</p>}
       {onShade && !empty && (
         <div className="toolbar">
@@ -126,6 +115,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
                 cy={y}
                 r={r}
                 className={'metro' + (sel ? ' selected' : '') + (mode === 'start' ? ' startable' : '')}
+                style={mode === 'play' ? { pointerEvents: 'none' } : undefined}
                 onClick={() => onSelectMetro(m.cbsa)}
               >
                 <title>{`${m.name}: ${num(m.population)}`}</title>
@@ -145,21 +135,98 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
       </svg>
       <div className="maphover">
         {shown ? <CountyStats c={shown} world={world} /> : !empty && <span className="dim">hover a county for its real statistics{mode === 'start' ? '; click a green metro to start there' : '; click one to pin it'}</span>}
-        {shown && mode === 'play' && onOpenBranch && (
-          <span>
-            <button className="btn primary" onClick={() => onOpenBranch(shown.fips)}>
-              Open a branch in {shown.name}
-            </button>{' '}
-            {pinned && (
-              <button className="btn small" onClick={() => setPicked(null)}>
-                Unpin
-              </button>
-            )}
-          </span>
-        )}
+        {shown && mode === 'play' && onOpenBranch && <OpenButton world={world} c={shown} pinned={!!pinned} onOpenBranch={onOpenBranch} onUnpin={() => setPicked(null)} />}
       </div>
+      {mode === 'play' && bank && !empty && onOpenBranch && <WhereToOpen world={world} bank={bank} picked={picked} onPick={setPicked} onOpenBranch={onOpenBranch} />}
     </div>
   );
+}
+
+function OpenButton({ world, c, pinned, onOpenBranch, onUnpin }: { world: World; c: CountyState; pinned: boolean; onOpenBranch: (fips: string) => void; onUnpin: () => void }) {
+  const check = branchOpenCheck(world, c);
+  return (
+    <span>
+      <button className="btn primary" disabled={!check.ok} title={check.reason ?? `${usd(check.premises)} of cash becomes premises today`} onClick={() => onOpenBranch(c.fips)}>
+        Open a branch in {c.name} for {usd(check.premises)}
+      </button>{' '}
+      {!check.ok && <span className="dim">{check.reason}</span>}{' '}
+      {pinned && (
+        <button className="btn small" onClick={onUnpin}>
+          Unpin
+        </button>
+      )}
+    </span>
+  );
+}
+
+// Where a new branch would earn the most (D55): the ten best counties by a
+// mature year's margin on deposits less the cost of running the branch,
+// recomputed monthly and when the branch list changes.
+function WhereToOpen({ world, bank, picked, onPick, onOpenBranch }: { world: World; bank: Bank; picked: string | null; onPick: (fips: string | null) => void; onOpenBranch: (fips: string) => void }) {
+  const month = Math.floor(world.day / 30);
+  const branches = bank.branches.length;
+  const cands = useMemo(() => branchCandidates(world, bank, 10), [world, bank, month, branches]);
+  if (cands.length === 0) return null;
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Where to open next</th>
+          <th className="num">km from home</th>
+          <th className="num">deposit pool</th>
+          <th className="num">other banks' branches</th>
+          <th className="num">when mature, alone</th>
+          <th className="num">against them</th>
+          <th className="num">cost a year</th>
+          <th>pays for itself</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {cands.map((k) => {
+          const check = branchOpenCheck(world, world.geo.counties[k.fips] as CountyState);
+          return (
+            <tr key={k.fips} className={'row' + (picked === k.fips ? ' hover' : '')} onClick={() => onPick(picked === k.fips ? null : k.fips)}>
+              <td>
+                {k.name}, {k.state}
+              </td>
+              <td className="num">{num(k.distanceKm)}</td>
+              <td className="num">{short(k.pool)}</td>
+              <td className="num">{num(k.rivalBranches)}</td>
+              <td className="num">{short(k.mature)}</td>
+              <td className="num">{short(k.contested)}</td>
+              <td className="num">{short(k.fixedCost)}</td>
+              <td>{payback(k)}</td>
+              <td>
+                <button
+                  className="btn small"
+                  disabled={!check.ok}
+                  title={check.reason ?? `${usd(check.premises)} of cash becomes premises today`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPick(k.fips);
+                    onOpenBranch(k.fips);
+                  }}
+                >
+                  Open for {usd(check.premises)}
+                </button>
+              </td>
+            </tr>
+          );
+        })}
+        <tr>
+          <td colSpan={9} className="dim">
+            Ranked by a mature year's earnings against the banks already there: your margin ({pct(cands[0]?.margin ?? 0, 1)}) on the deposits the branch would hold, less its running cost. Alone is what one branch could gather with nobody contesting the county; against them is its share of the county contest after six years. Click a row to see the county on the map.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+function payback(k: BranchCase): string {
+  if (k.paybackYear === null) return `never: needs ${short(k.breakEven)} of deposits`;
+  return `year ${k.paybackYear}, past ${short(k.breakEven)}`;
 }
 
 function principal(world: World, m: MetroState): CountyState | null {
@@ -190,27 +257,14 @@ function BranchMarkers({ world, bank }: { world: World; bank: Bank }) {
   );
 }
 
-// What a branch in this county would be worth: the de novo ceiling of the
-// county's pool, faded by distance from home and capped by what one branch
-// can gather, against the real local cost of running it.
-function branchCase(c: CountyState, world: World): { deposits: number; cost: number; distanceKm: number; existing: number } | null {
-  const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
-  if (!bank) return null;
-  const home = bank.homeCounty ? world.geo.counties[bank.homeCounty] : null;
-  const distanceKm = home ? km(home.centroid, c.centroid) : 0;
-  const ceiling = calibration.deNovoShareCeiling.typical / 100;
-  const wageIndex = Math.max(0.5, Math.min(2, c.wage / 1300));
-  const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex;
-  const deposits = Math.round(Math.min(c.depositPool * ceiling * Math.exp(-distanceKm / 1500), perBranch));
-  return { deposits, cost: branchFixedCost(c), distanceKm, existing: bank.branches.filter((br) => br.county === c.fips).length };
-}
-
 function CountyStats({ c, world }: { c: CountyState; world: World }) {
   const top = SECTORS.map((s) => [s, c.sectors[s] ?? 0] as const)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
   const metro = c.cbsa ? world.geo.metros[c.cbsa] : undefined;
-  const branch = branchCase(c, world);
+  const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
+  const branch = bank ? branchCase(world, bank, c) : null;
+  const held = bank ? bank.branches.filter((br) => br.county === c.fips).reduce((s, br) => s + br.deposits, 0) : 0;
   return (
     <table className="stats">
       <tbody>
@@ -221,11 +275,17 @@ function CountyStats({ c, world }: { c: CountyState; world: World }) {
             {c.imputed ? ' [imputed cells]' : ''}
           </th>
         </tr>
-        {branch && (
+        {branch && branch.existing > 0 && (
           <tr className="total">
-            <td>{branch.existing > 0 ? `your branch here (${branch.existing})` : 'a branch here'}</td>
-            <td className="num">
-              about {usd(branch.deposits)} of deposits in 3 years, {usd(branch.cost)} a year to run{branch.distanceKm > 0 ? `, ${Math.round(branch.distanceKm)} km from home` : ''}
+            <td colSpan={2} style={{ whiteSpace: 'normal' }}>
+              Your branch here holds {usd(held)} of deposits and costs {usd(branch.fixedCost)} a year to run.
+            </td>
+          </tr>
+        )}
+        {branch && branch.existing === 0 && (
+          <tr className="total">
+            <td colSpan={2} style={{ whiteSpace: 'normal' }}>
+              A branch here could gather up to {usd(branch.year3)} of deposits in three years and {usd(branch.mature)} when mature{branch.rivalBranches > 0 ? `, about ${usd(branch.contested)} against the ${num(branch.rivalBranches)} ${branch.rivalBranches === 1 ? 'bank' : 'banks'} already here` : ''}. It costs {usd(branch.fixedCost)} a year to run and pays for itself {payback(branch)}{branch.distanceKm > 0 ? `. ${num(branch.distanceKm)} km from home` : ''}.
             </td>
           </tr>
         )}
