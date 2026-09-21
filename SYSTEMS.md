@@ -51,7 +51,7 @@ Invariants: failures cluster in recessions and spike in banking crises. Some sma
 
 ## 7. Event stream (D33)
 Cadence: daily.
-Owns: the news feed and the pending decision queue. Sources: borrower (application, missed payment, payoff, request for exception), depositor (large inflow/outflow, rate complaint), rival (branch opened, rate change, failure, for sale), officer (raise request, outside offer, resignation), regulator (letter, exam scheduled, finding), market (Fed move, curve shift, oil, regional index).
+Owns: the news feed and the pending decision queue. Sources: borrower (application, a borrower back for another loan, missed payment, payoff, request for exception), depositor (large inflow/outflow, rate complaint), rival (branch opened, rate change, failure, for sale), officer (raise request, resignation), regulator (letter, exam scheduled, finding), market (Fed move, curve shift, oil, regional index, local news from a county with a branch).
 Every event references the state change that produced it. Density targets: a normal day has one to three feed items; a normal week has one pause.
 Invariants: no event without a state change behind it. Pause frequency within the target band across seeds.
 

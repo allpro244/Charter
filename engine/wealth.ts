@@ -2,7 +2,7 @@
 // dividends, flat tax. Score is cash plus shares at book or market (D7).
 
 import { calibration } from '../data/calibration';
-import { type Ctx, emit } from './ctx';
+import { type Ctx, emit, milestone } from './ctx';
 import { netIncome, post } from './ledger';
 import { canPayDividend } from './regulation';
 import { type Bank, type World, playerBank, playerNetWorth } from './state';
@@ -55,6 +55,7 @@ export function payDividend(ctx: Ctx, b: Bank): number {
     p.cash += net;
     p.dividendsGross += gross;
     p.dividendsReceived += net;
+    if (b.dividendsPaid === d) milestone(ctx, `First dividend: ${money(d)} paid, ${money(net)} of it yours after tax`);
     emit(ctx, 'system', `${b.name} paid ${money(d)} in dividends. Your share ${money(gross)}, ${money(net)} after tax.`, {
       severity: 'good',
       bankId: b.id,

@@ -144,6 +144,7 @@ export interface Bank {
   applicationsByType: Record<LoanType, number>; // year to date, received
   declinedForFunding: number; // year to date: auto-declined because cash was short of the working cushion
   desk: DeskRecord; // the player's own calls, lifetime
+  customers?: Record<string, Customer>; // every borrower the bank has lent to, by name and county (D53)
   pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
   ratePeg: Record<DepositType, number> | null; // the deposit sheet follows the market at these offsets; null holds the sheet by hand (D50)
   investPolicy: InvestPolicy | null; // the CFO's standing order for cash above the target (D50)
@@ -331,6 +332,20 @@ export interface Memo {
   summary: string; // CCO summary, quality by skill
   redFlags: string[]; // what the CCO caught
   suggestedGrade: number;
+}
+
+// A borrower the bank has lent to before (D53): they come back, and their
+// record with the bank is on the memo.
+export interface Customer {
+  name: string;
+  county: string;
+  sector: Sector;
+  household: boolean;
+  tenureYears: number;
+  loans: number;
+  paidOff: number;
+  wentBad: number;
+  lastDay: number;
 }
 
 // What the player decided at the desk and how it turned out (D49).
@@ -550,6 +565,8 @@ export interface CountyState {
   condition: number; // local index, 100 at start
   localHpi: number; // 100 at start
   imputed: boolean;
+  condHist?: number[]; // last thirteen month ends of condition, kept for counties with a player branch (D53)
+  lastNewsDay?: number; // the last local news line about this county
 }
 
 export interface MetroState {

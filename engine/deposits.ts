@@ -6,7 +6,7 @@
 // counties at a fixed cost from local wages.
 
 import { calibration } from '../data/calibration';
-import { type Ctx, addPending, emit } from './ctx';
+import { type Ctx, addPending, emit, milestone } from './ctx';
 import { borrowFhlb, fhlbCapacity, sellSecurities, unrealizedToCapital } from './funding';
 import { DEPOSIT_TYPES, type DepositType, leverageRatio, post, totalAssets } from './ledger';
 import { nextFriday } from './regulation';
@@ -430,6 +430,7 @@ export function openBranch(ctx: Ctx, county: CountyState): Branch | null {
   post(b.acct, { cash: -premises, premises });
   const br: Branch = { id: nextId(world, 'br'), county: county.fips, openedDay: world.day, deposits: 0, fixedCost, distanceKm: Math.round(distanceKm), competitiveTarget: null };
   b.branches.push(br);
+  milestone(ctx, `Opened a branch in ${county.name}, ${county.state}${b.branches.length === 2 ? ', the first beyond home' : ''}`);
   emit(ctx, 'system', `Opened a branch in ${county.name}, ${county.state}: ${money(premises)} of premises, ${money(fixedCost)} a year to run, ${Math.round(distanceKm)} km from home`, { severity: 'good', bankId: b.id });
   return br;
 }

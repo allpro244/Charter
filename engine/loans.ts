@@ -10,7 +10,7 @@ import { type Ctx, emit } from './ctx';
 import { sectorReturn12 } from './economy';
 import { post } from './ledger';
 import { type Rng, chance, rand, randInt, randNormal } from './rng';
-import { type Bank, type Loan, type LoanType, type World, emptyDesk, nextId } from './state';
+import { type Bank, type Customer, type Loan, type LoanType, type World, emptyDesk, nextId } from './state';
 import { dateOf, daysInMonth, formatDate } from './time';
 import { money } from './format';
 
@@ -73,8 +73,30 @@ export function fundLoan(ctx: Ctx, b: Bank, app: Application, terms: FundTerms, 
   post(b.acct, { loans: terms.amount, cash: -terms.amount });
   b.originationsByType[app.type] += terms.amount;
   b.loans.push(loan);
+  rememberCustomer(world, b, app);
   rollToPools(ctx, b);
   return loan;
+}
+
+// The bank remembers who it lent to (D53): the record follows the name.
+function rememberCustomer(world: World, b: Bank, app: Application): void {
+  const customers = (b.customers ??= {});
+  const key = `${app.borrower}|${app.county}`;
+  const c = customers[key] ?? { name: app.borrower, county: app.county, sector: app.memo.sector, household: app.type === 'resi' || app.type === 'consumer' || app.type === 'cards', tenureYears: app.memo.tenureYears, loans: 0, paidOff: 0, wentBad: 0, lastDay: world.day };
+  c.loans += 1;
+  c.lastDay = world.day;
+  c.tenureYears = app.memo.tenureYears;
+  customers[key] = c;
+  // A bank remembers a few thousand names; the oldest fall away.
+  const keys = Object.keys(customers);
+  if (keys.length > 2500) {
+    keys.sort((x, y) => (customers[x]?.lastDay ?? 0) - (customers[y]?.lastDay ?? 0));
+    for (const k of keys.slice(0, 500)) delete customers[k];
+  }
+}
+
+export function customerOf(b: Bank, l: Loan): Customer | undefined {
+  return b.customers?.[`${l.borrower}|${l.county}`];
 }
 
 export function isActive(l: Loan): boolean {
@@ -256,6 +278,8 @@ function receivePayment(ctx: Ctx, b: Bank, l: Loan): void {
   if (l.balance <= 0) {
     l.status = 'paid';
     l.balance = 0;
+    const c = customerOf(b, l);
+    if (c) c.paidOff += 1;
     if (l.decision.by === 'player') (b.desk ??= emptyDesk()).paidOff += 1;
     emit(ctx, 'borrower', `${l.borrower} paid off the ${TYPE[l.type].label} loan`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
   }
@@ -285,6 +309,8 @@ function missPayment(ctx: Ctx, b: Bank, l: Loan): void {
     }
     l.grade = Math.max(l.grade, 7);
     l.attribution = attributionFor(l);
+    const c = customerOf(b, l);
+    if (c) c.wentBad += 1;
     if (l.decision.by === 'player') (b.desk ??= emptyDesk()).wentBad += 1;
     emit(ctx, 'borrower', `${l.borrower} is 90 days past due on ${money(l.balance)}: nonaccrual. ${l.attribution} predicted it. ${decidedText(l)}.`, {
       severity: 'alert',

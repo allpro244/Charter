@@ -243,7 +243,14 @@ export function applicationsDaily(ctx: Ctx): void {
     const branch = b.branches.length > 0 ? pick(world.rng, b.branches) : null;
     const county = world.geo.counties[branch ? branch.county : b.homeCounty];
     if (!county) continue;
-    const app = generateApplication(world, b, county, world.rng);
+    // About a third of the walk-ins are borrowers the bank knows (D53),
+    // back after at least a season.
+    const known = Object.values(b.customers ?? {}).filter((c) => c.county === county.fips && world.day - c.lastDay > 90);
+    const back = known.length > 0 && chance(world.rng, 0.3) ? pick(world.rng, known) : undefined;
+    let app = generateApplication(world, b, county, world.rng, back);
+    // A fresh applicant who happens to share a known customer's name is
+    // drawn again, so the records stay one borrower each.
+    if (!back && b.customers?.[`${app.borrower}|${county.fips}`]) app = generateApplication(world, b, county, world.rng);
     const m = demandMultiplier(b, app.type);
     if (m < best && !chance(world.rng, m / best)) continue;
     const offset = b.pricing ? (b.pricing[app.type] ?? 0) : 0;

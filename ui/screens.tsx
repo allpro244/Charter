@@ -1,3 +1,4 @@
+import { returningText } from '../engine/borrowers';
 // The shell's pieces and the core screens: the top bar with the clock,
 // the feed list, decisions as cards or a dock with their plain-words
 // preview, the balance sheet in three questions, the income statement,
@@ -168,6 +169,7 @@ function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pendin
             <span className={'pill ' + healthTone(h.score)}>{h.label}</span>
             <span className="verdict-text">
               {app.memo.purpose.charAt(0).toUpperCase() + app.memo.purpose.slice(1)}, {app.memo.termMonths} months at {pct(app.memo.rate)}.{' '}
+              {app.returning ? <b>{returningText(app)} </b> : ''}
               {h.concerns.length > 0 ? `Weak on ${h.concerns.join(', ')}.` : 'No weak spot on the memo.'}{' '}
               {h.strengths.length > 0 ? `Strong on ${h.strengths.slice(0, 3).join(', ')}.` : ''}
             </span>

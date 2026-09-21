@@ -5,7 +5,7 @@
 import { calibration } from '../data/calibration';
 import { SECTORS, type Sector } from '../data/types';
 import { type Ctx, emit, milestone } from './ctx';
-import { type Economy, type Regime, type World } from './state';
+import { type Economy, type Regime, type World, playerBank } from './state';
 import { chance, randNormal } from './rng';
 import { pct } from './format';
 
@@ -232,6 +232,44 @@ export function countyStep(world: World): void {
   }
 }
 
+const SECTOR_NAME: Record<Sector, string> = { energy: 'oil and gas', agriculture: 'farming', manufacturing: 'manufacturing', tech: 'technology', finance: 'finance', healthcare: 'health care', government: 'government', tourism: 'tourism and leisure', construction: 'construction and real estate', logistics: 'transport and logistics', other: 'everything else' };
+
+// Local news (D53): when a county with one of the player's branches moves
+// three percent against the country over a year, one line names the
+// sector behind it and counts the bank's borrowers in that sector.
+export function localNewsMonthly(ctx: Ctx): void {
+  const { world } = ctx;
+  const b = playerBank(world);
+  if (!b || b.status !== 'open') return;
+  const seen = new Set<string>();
+  for (const br of b.branches) {
+    if (seen.has(br.county)) continue;
+    seen.add(br.county);
+    const c = world.geo.counties[br.county];
+    if (!c) continue;
+    const hist = (c.condHist ??= []);
+    hist.push(c.condition);
+    if (hist.length > 13) hist.shift();
+    if (hist.length < 13) continue;
+    const change = c.condition / Math.max(1, hist[0] ?? 100) - 1;
+    if (Math.abs(change) < 0.03) continue;
+    if (c.lastNewsDay !== undefined && world.day - c.lastNewsDay < 180) continue;
+    let best: Sector = 'other';
+    let bestX = 0;
+    for (const s of SECTORS) {
+      const x = (c.sectors[s] ?? 0) * sectorReturn12(world.economy, s);
+      if (Math.abs(x) > Math.abs(bestX)) {
+        best = s;
+        bestX = x;
+      }
+    }
+    const move = sectorReturn12(world.economy, best);
+    const borrowers = b.loans.filter((l) => l.county === c.fips && l.memo.sector === best && l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'sold' && l.status !== 'reo').length;
+    emit(ctx, 'market', `${c.name}, ${c.state}: the local economy is ${change >= 0 ? 'up' : 'down'} ${(Math.abs(change) * 100).toFixed(0)}% against the country over the year. ${SECTOR_NAME[best].charAt(0).toUpperCase() + SECTOR_NAME[best].slice(1)}, ${(100 * (c.sectors[best] ?? 0)).toFixed(0)}% of local jobs, is ${move >= 0 ? 'up' : 'down'} ${(Math.abs(move) * 100).toFixed(0)}%.${borrowers > 0 ? ` ${borrowers} of your borrowers ${borrowers === 1 ? 'is' : 'are'} in it.` : ''}`, { severity: change < 0 ? 'alert' : 'good', bankId: b.id });
+    c.lastNewsDay = world.day;
+  }
+}
+
 export function economyMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const e = world.economy;
@@ -257,6 +295,7 @@ export function economyMonthly(ctx: Ctx): void {
   }
   e.nationalMomentum = w > 0 ? nm / w : 0;
   countyStep(world);
+  localNewsMonthly(ctx);
   e.hist.push({ month: e.month, sectors: { ...e.sectors }, hpi: e.hpi, unemployment: e.unemployment, oil: e.oil });
   if (e.hist.length > 13) e.hist.shift();
   e.month += 1;

@@ -13,8 +13,8 @@ import type { GeoCollection } from './data';
 import { HEIGHT, WIDTH, pathFor, projectPoint } from './projection';
 import { num, pct, short, usd } from './format';
 
-export type Shade = 'none' | 'condition' | Sector;
-export const SHADES: Shade[] = ['none', 'condition', ...SECTORS];
+export type Shade = 'none' | 'share' | 'condition' | Sector;
+export const SHADES: Shade[] = ['none', 'share', 'condition', ...SECTORS];
 
 interface Props {
   world: World;
@@ -34,7 +34,7 @@ interface CountyPath {
   d: string;
 }
 
-const SHADE_LABEL: Record<string, string> = { none: 'Plain', condition: 'Condition' };
+const SHADE_LABEL: Record<string, string> = { none: 'Plain', share: 'Your share', condition: 'Condition' };
 
 export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSelectMetro, onOpenBranch }: Props) {
   const [hover, setHover] = useState<string | null>(null);
@@ -59,6 +59,15 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
     const c = world.geo.counties[fips];
     if (!c || shade === 'none') return undefined;
     let t: number;
+    if (shade === 'share') {
+      // Your deposits in the county against its pool, on a log scale: a
+      // tenth of a percent shows, a tenth of the county is a full shade.
+      const held = bank ? bank.branches.filter((br) => br.county === fips).reduce((s, br) => s + br.deposits, 0) : 0;
+      const share = c.depositPool > 0 ? held / c.depositPool : 0;
+      if (share <= 0) return undefined;
+      const t = Math.min(1, Math.log10(1 + share * 1000) / 2);
+      return `rgba(76,201,138,${(0.3 + 0.55 * t).toFixed(2)})`;
+    }
     if (shade === 'condition') t = Math.max(-1, Math.min(1, (c.condition - 100) / 15));
     else t = Math.min(1, (c.sectors[shade] ?? 0) / 0.3);
     if (shade === 'condition') return t >= 0 ? `rgba(58,208,122,${(t * 0.7).toFixed(2)})` : `rgba(255,92,58,${(-t * 0.7).toFixed(2)})`;
@@ -71,7 +80,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   const empty = paths.length === 0;
   return (
     <div className="mapwrap">
-      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers, click it to pin it, then open a branch there to gather its deposits and meet its borrowers. Shade the map by a sector's share of jobs or by how each county is doing.</p>}
+      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers, click it to pin it, then open a branch there to gather its deposits and meet its borrowers. Shade the map by your share of each county's deposits, by a sector's share of jobs, or by how each county is doing.</p>}
       {empty && <p className="hint">This build has no county map: the playtest bank has no home town. The map fills in once the county data is built.</p>}
       {onShade && !empty && (
         <div className="toolbar">

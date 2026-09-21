@@ -102,14 +102,16 @@ export function loanHealth(world: World, b: Bank, app: Application): Health {
   const history = { clean: 100, minor: 65, none: 45, poor: 10 }[m.paymentHistory];
   const tenure = ramp(m.tenureYears, [[0, 20], [2, 50], [5, 80], [10, 100]]);
   const flagPenalty = Math.min(30, 10 * m.redFlags.length);
-  const character = 0.7 * history + 0.3 * tenure - flagPenalty;
+  const r = (app as { returning?: { loans: number; paidOff: number; wentBad: number } }).returning;
+  const relationship = r ? (r.wentBad > 0 ? -25 : r.paidOff > 0 ? 15 : 5) : 0;
+  const character = 0.7 * history + 0.3 * tenure - flagPenalty + relationship;
   factors.push({
     key: 'character',
     label: 'Character',
     reading: `${m.paymentHistory} history, ${m.tenureYears.toFixed(0)} years in place${m.redFlags.length ? `, ${m.redFlags.length} flag${m.redFlags.length === 1 ? '' : 's'}` : ''}`,
     score: clamp(character),
     weight: 15,
-    note: m.paymentHistory === 'poor' ? 'Has missed payments before. The best predictor of missing them again.' : m.paymentHistory === 'none' ? 'No record either way.' : m.tenureYears < 2 ? 'Pays on time so far, but new to this.' : 'Pays on time and has been around.',
+    note: r && r.wentBad > 0 ? 'Went bad on this bank before. The best predictor there is.' : r && r.paidOff > 0 ? 'Paid this bank back before. A relationship, not a stranger.' : m.paymentHistory === 'poor' ? 'Has missed payments before. The best predictor of missing them again.' : m.paymentHistory === 'none' ? 'No record either way.' : m.tenureYears < 2 ? 'Pays on time so far, but new to this.' : 'Pays on time and has been around.',
   });
 
   // Capital: the borrower's own money at risk.

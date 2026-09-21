@@ -4,7 +4,7 @@
 
 import { TYPE } from './credit';
 import { type Ctx, emit } from './ctx';
-import { interestIncome, netIncome } from './ledger';
+import { interestIncome, netIncome, totalDeposits } from './ledger';
 import { LOAN_TYPES, type Bank, type QuarterReview, type World } from './state';
 import { quarterOf } from './time';
 import { money, pct } from './format';
@@ -77,7 +77,11 @@ export function reviewQuarterly(ctx: Ctx): void {
       if (b.reviews.length > 400) b.reviews.shift();
       const assets = b.acct.cash + b.acct.loans - b.acct.allowance + b.acct.securitiesAFS + b.acct.securitiesHTM + b.acct.afsValuation + b.acct.reo + b.acct.interestReceivable + b.acct.premises + b.acct.goodwill + b.acct.otherAssets;
       const roa = assets > 0 ? (review.netIncome * 4) / assets : 0;
-      emit(ctx, 'system', `${review.quarter} closed: net income ${money(review.netIncome)}, ROA ${pct(roa)}, provision ${money(review.provision)}, charge-offs ${money(b.is.quarter.chargeOffs)}. See the Earnings tab for the review.`, {
+      const prev = b.reports[b.reports.length - 1];
+      const dep = totalDeposits(b.acct);
+      const depChange = prev && prev.deposits > 0 ? dep / prev.deposits - 1 : null;
+      const rank = world.ladder?.rank ?? 0;
+      emit(ctx, 'system', `${review.quarter}: ${review.netIncome >= 0 ? 'profit' : 'loss'} ${money(Math.abs(review.netIncome))} (${pct(roa)} on assets), deposits ${depChange === null ? money(dep) : `${depChange >= 0 ? 'up' : 'down'} ${pct(Math.abs(depChange), 1)}`}, charge-offs ${money(b.is.quarter.chargeOffs)}${rank > 0 ? `, rank #${rank.toLocaleString('en-US')}` : ''}. Home, results, has every line.`, {
         severity: review.netIncome >= 0 ? 'good' : 'alert',
         bankId: b.id,
       });

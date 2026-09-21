@@ -7,7 +7,7 @@ import { SECTORS, type Sector } from '../data/types';
 import { TYPE, baseRate } from './credit';
 import { sectorReturn12 } from './economy';
 import { type Rng, chance, pick, pickWeighted, rand, randInt, randLogNormal, randNormal } from './rng';
-import { type Bank, type CountyState, type LoanType, type Memo, type World } from './state';
+import { type Bank, type Customer, type CountyState, type LoanType, type Memo, type World } from './state';
 import { LOAN_TYPES } from './loantypes';
 import { money } from './format';
 
@@ -20,6 +20,16 @@ export interface Application {
   trueLgd: number;
   hidden: number;
   signals: { field: string; contribution: number; text: string }[];
+  returning?: { loans: number; paidOff: number; wentBad: number }; // a borrower the bank has lent to before (D53)
+}
+
+// The relationship in a sentence, for the memo and the desk.
+export function returningText(app: { returning?: Application['returning'] }): string {
+  const r = app.returning;
+  if (!r) return '';
+  if (r.wentBad > 0) return `Back after ${r.loans} loan${r.loans === 1 ? '' : 's'} here; the last one went bad.`;
+  if (r.paidOff > 0) return `Back for loan number ${r.loans + 1}; ${r.paidOff === 1 ? 'the last one' : `${r.paidOff} of them`} paid off on time.`;
+  return `Back for loan number ${r.loans + 1}; the first is still paying.`;
 }
 
 const SURNAMES = ['Delgado', 'Nguyen', 'Whitfield', 'Okafor', 'Brennan', 'Tanaka', 'Mahoney', 'Patel', 'Kowalski', 'Ruiz', 'Chen', 'Abernathy', 'Novak', 'Fischer', 'Hale', 'Moreau', 'Singh', 'Larsen', 'Baptiste', 'Gutierrez', 'Reyes', 'Holt', 'Pruitt', 'Osei', 'Vance', 'Ibarra', 'Kessler', 'Lund', 'Quintero', 'Shah'];
@@ -55,8 +65,12 @@ export function businessName(r: Rng, sector: Sector, county: CountyState): strin
   return pick(r, forms)();
 }
 
+const FIRST_NAMES = ['Priya', 'Marcus', 'Elena', 'Tomas', 'Grace', 'Amir', 'Nadia', 'Victor', 'Sofia', 'Kwame', 'Hannah', 'Luis', 'Mei', 'Owen', 'Aisha', 'Daniel', 'Ingrid', 'Rafael', 'Chloe', 'Samir', 'Yuki', 'Patrick', 'Leila', 'Andre', 'Ruth', 'Diego', 'Freya', 'Jamal', 'Nora', 'Henrik', 'Carmen', 'Isaac', 'Zara', 'Felix', 'Maya', 'Bruno', 'Ada', 'Elias', 'Rosa', 'Theo'];
+
+// A household is a person's name: first and last, so two families with the
+// same surname stay two customers (D53).
 export function householdName(r: Rng): string {
-  return `${pick(r, SURNAMES)} household`;
+  return `${pick(r, FIRST_NAMES)} ${pick(r, SURNAMES)}`;
 }
 
 // Draws a household income from the county's real ACS distribution
@@ -130,12 +144,13 @@ function typeChoices(sector: Sector): [LoanType, number][] {
 }
 
 // One application from a county. The county decides who walks in.
-export function generateApplication(world: World, b: Bank, county: CountyState, r: Rng): Application {
+export function generateApplication(world: World, b: Bank, county: CountyState, r: Rng, returning?: Customer): Application {
   const e = world.economy;
   const localWage = county.wage * 52;
   const homeValue = county.homeValue ?? Math.round(county.income * 3.5);
   const priceLevel = Math.max(0.4, Math.min(4, homeValue / 300_000));
-  const household = chance(r, 0.4);
+  const household = returning ? returning.household : chance(r, 0.4);
+  const yearsSince = returning ? Math.max(0, (world.day - returning.lastDay) / 365) : 0;
   let type: LoanType;
   let sector: Sector;
   let borrower: string;
@@ -145,17 +160,17 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
   if (household) {
     type = chance(r, 0.62) && b.policy.allowed.resi ? 'resi' : 'consumer';
     if (!b.policy.allowed[type]) type = b.policy.allowed.resi ? 'resi' : 'consumer';
-    sector = pickWeighted(r, SECTORS as unknown as Sector[], SECTORS.map((s) => county.sectors[s] ?? 0));
-    borrower = householdName(r);
+    sector = returning ? returning.sector : pickWeighted(r, SECTORS as unknown as Sector[], SECTORS.map((s) => county.sectors[s] ?? 0));
+    borrower = returning ? returning.name : householdName(r);
     income = Math.max(15_000, Math.round(drawIncome(r, county) * randLogNormal(r, 0.25, 0.25)));
-    tenure = Math.max(0, Math.round(randLogNormal(r, 1.3, 0.8) * 10) / 10);
+    tenure = returning ? Math.round((returning.tenureYears + yearsSince) * 10) / 10 : Math.max(0, Math.round(randLogNormal(r, 1.3, 0.8) * 10) / 10);
   } else {
-    sector = pickWeighted(r, SECTORS as unknown as Sector[], SECTORS.map((s) => (s === 'government' ? 0.2 : 1) * (county.sectors[s] ?? 0)));
+    sector = returning ? returning.sector : pickWeighted(r, SECTORS as unknown as Sector[], SECTORS.map((s) => (s === 'government' ? 0.2 : 1) * (county.sectors[s] ?? 0)));
     type = loanTypeFor(r, sector, b);
-    borrower = businessName(r, sector, county);
+    borrower = returning ? returning.name : businessName(r, sector, county);
     employees = Math.max(2, Math.min(400, Math.round(randLogNormal(r, Math.log(12), 1.0))));
     income = Math.round(employees * localWage * 2.2 * randLogNormal(r, 0, 0.3));
-    tenure = Math.max(0.5, Math.round(randLogNormal(r, 2.2, 0.7) * 10) / 10);
+    tenure = returning ? Math.round((returning.tenureYears + yearsSince) * 10) / 10 : Math.max(0.5, Math.round(randLogNormal(r, 2.2, 0.7) * 10) / 10);
   }
   const p = TYPE[type];
   const ebitda = household ? income : Math.round(income * (MARGIN[sector] + randNormal(r, 0, 0.03)));
@@ -279,7 +294,9 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
   dscr = Math.round(Math.max(0.3, Math.min(6, dscr)) * 100) / 100;
   leverage = Math.round(Math.max(0.2, Math.min(15, leverage)) * 10) / 10;
   const guarantor = household ? false : chance(r, 0.7);
-  const paymentHistory = pickWeighted(r, ['clean', 'minor', 'poor', 'none'] as const, [55, 25, 10, 10]);
+  // A borrower with a record here is read by it: paid us, or went bad on us.
+  const drawnHistory = pickWeighted(r, ['clean', 'minor', 'poor', 'none'] as const, [55, 25, 10, 10]);
+  const paymentHistory: Memo['paymentHistory'] = returning ? (returning.wentBad > 0 ? 'poor' : returning.paidOff > 0 ? 'clean' : drawnHistory === 'none' ? 'clean' : drawnHistory) : drawnHistory;
   const netWorth = household ? Math.round(income * (0.5 + 5.5 * rand(r))) : Math.round(income * (0.2 + 1.8 * rand(r)));
   const hidden = randNormal(r, 0, 0.35);
   const signals = scoreSignals({ dscr, ltv, leverage, guarantor, paymentHistory, tenure, sectorMove: sectorReturn12(e, sector), type, sizeToCapital: 0 });
@@ -309,7 +326,9 @@ export function generateApplication(world: World, b: Bank, county: CountyState, 
     redFlags: [],
     suggestedGrade: gradeFromZ(zVisible, type),
   };
-  return { borrower, type, county: county.fips, memo, truePd, trueLgd, hidden, signals };
+  const app: Application = { borrower, type, county: county.fips, memo, truePd, trueLgd, hidden, signals };
+  if (returning) app.returning = { loans: returning.loans, paidOff: returning.paidOff, wentBad: returning.wentBad };
+  return app;
 }
 
 export interface SignalInput {
@@ -393,6 +412,7 @@ export function ccoReview(app: Application, b: Bank, skill: number, r: Rng): voi
   consider(m.leverage > b.policy.maxLeverage, `leverage ${m.leverage.toFixed(1)}x is above policy ${b.policy.maxLeverage.toFixed(1)}x`);
   consider(m.suggestedGrade > (b.policy.maxGrade ?? 6), `grade ${m.suggestedGrade} is worse than policy grade ${b.policy.maxGrade ?? 6}`);
   consider(m.paymentHistory === 'poor', 'poor payment history');
+  if (app.returning && app.returning.wentBad > 0) flags.push('went bad on a loan here before');
   consider(m.paymentHistory === 'none', 'no payment history on file');
   consider(m.tenureYears < 2, `only ${m.tenureYears.toFixed(1)} years in place`);
   const sectorSignal = app.signals.find((s) => s.field === 'sector');

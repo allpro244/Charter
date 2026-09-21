@@ -129,6 +129,9 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
       const c = candidates.find((x) => x.price <= world.player.cash) ?? candidates[0]!;
       const bank = startTakeover({ world, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate: c });
       for (let d = 0; d < 365; d++) tick(world);
+      // A normal rate world: at a zero Fed a cut of 100bp floors at zero and
+      // opens no gap, which is a fact about zero rates, not about pricing.
+      world.economy.fedFunds = Math.max(world.economy.fedFunds, 0.04);
       for (const t of DEPOSIT_TYPES) setRate(world, t, marketRate(world, t));
       const before = coreDeposits(bank);
       const targetBefore = Object.values(depositTargets(world, bank)).reduce((x, y) => x + y, 0);
