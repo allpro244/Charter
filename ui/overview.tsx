@@ -10,6 +10,7 @@ import { bankDepositRate, marketDepositRate } from '../engine/deposits';
 import { fhlbCapacity } from '../engine/funding';
 import { type IncomeStatement, interestExpense, interestIncome, leverageRatio, netIncome, noninterestExpense, tier1Capital, totalAssets, totalDeposits } from '../engine/ledger';
 import { PEER_METRICS, levers, peerGroup } from '../engine/peers';
+import { RUNGS, ladder, rungs } from '../engine/ladder';
 import { PCA_LABEL, pcaCategory } from '../engine/regulation';
 import { type Bank, type FeedItem, type Pending, type World, emptyDesk } from '../engine/state';
 import { formatDate } from '../engine/time';
@@ -58,7 +59,7 @@ function gauges(world: World, b: Bank): Gauge[] {
     value: pct(cashShare, 1),
     tone: cashShare >= 0.05 ? 'good' : cashShare >= 0.03 ? 'warn' : 'bad',
     status: cashShare >= 0.05 ? 'Comfortable' : cashShare >= 0.03 ? 'Tight' : 'Thin',
-    meaning: `Cash and the Home Loan Bank line cover a run of ${pct(Math.min(1, cover), 0)} of deposits.${b.confidence < 0.9 ? ` Depositor confidence is ${pct(b.confidence, 0)}.` : ''}`,
+    meaning: deposits > 0 ? `Cash and the Home Loan Bank line cover a run of ${pct(Math.min(1, cover), 0)} of deposits.${b.confidence < 0.9 ? ` Depositor confidence is ${pct(b.confidence, 0)}.` : ''}` : 'No deposits yet: the doors just opened.',
     go: 'MONEY',
     goLabel: 'Money',
   });
@@ -73,7 +74,7 @@ function gauges(world: World, b: Bank): Gauge[] {
     value: `${pct(critShare, 1)} weak`,
     tone: critShare < 0.03 ? 'good' : critShare < 0.08 ? 'warn' : 'bad',
     status: critShare < 0.03 ? 'Healthy' : critShare < 0.08 ? 'Watch' : 'Trouble',
-    meaning: `${usd(crit)} of loans are graded weak and ${usd(non)} have stopped paying. The allowance holds ${usd(a.allowance)} against them.`,
+    meaning: `${usd(crit < 1000 ? 0 : crit)} of loans are graded weak and ${usd(non < 1000 ? 0 : non)} have stopped paying. The allowance holds ${usd(a.allowance)} against them.`,
     go: 'LENDING',
     goLabel: 'Lending',
   });
@@ -174,6 +175,7 @@ export function OverviewScreen({
           </button>
         ))}
       </div>
+      <Goal world={world} bank={bank} onGo={onGo} />
       <div className="feed-grid">
         <div>
           <Peers world={world} bank={bank} />
@@ -298,9 +300,34 @@ function SparkPanel({ label, value, values }: { label: string; value: string; va
   );
 }
 
+// The next step on the ladder, in one line under the gauges.
+function Goal({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: string) => void }) {
+  const month = Math.floor(world.day / 30);
+  const g = useMemo(() => {
+    const l = ladder(world);
+    const mine = totalAssets(bank.acct);
+    const nextRung = RUNGS.find((r) => l.rank > r) ?? null;
+    const all = rungs(world);
+    const rungAssets = nextRung !== null ? (all[nextRung - 2]?.assets ?? null) : null;
+    return { l, mine, nextRung, rungAssets };
+  }, [world, bank, month]);
+  const { l, mine, nextRung, rungAssets } = g;
+  if (!l.ahead) return null;
+  return (
+    <p className="hint">
+      Next on the ladder: pass {l.ahead.name ?? `a bank in ${l.ahead.state}`} at {usd(l.ahead.assets)} ({usd(Math.max(0, l.ahead.assets - mine))} to go).
+      {nextRung !== null && rungAssets !== null ? ` The top ${num(nextRung)} banks start at ${usd(rungAssets)}.` : ''}{' '}
+      <button className="btn small" onClick={() => onGo('YOU')}>
+        The ladder
+      </button>
+    </p>
+  );
+}
+
 // Banks your size (D56): the peer medians beside your own numbers.
 function Peers({ world, bank }: { world: World; bank: Bank }) {
-  const g = useMemo(() => peerGroup(world, bank), [world, bank, world.day]);
+  const month = Math.floor(world.day / 30);
+  const g = useMemo(() => peerGroup(world, bank), [world, bank, month]);
   const filed = bank.reports.length > 0;
   return (
     <table className="wrap">
@@ -342,7 +369,9 @@ function Peers({ world, bank }: { world: World; bank: Bank }) {
 
 // What moves the needle (D56): one step of each lever and a year of it.
 function Levers({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: string) => void }) {
-  const ls = useMemo(() => levers(world, bank), [world, bank, world.day]);
+  // The branch candidate scan is the costly part; a month is often enough.
+  const month = Math.floor(world.day / 30);
+  const ls = useMemo(() => levers(world, bank), [world, bank, month, bank.branches.length]);
   return (
     <table className="wrap">
       <thead>

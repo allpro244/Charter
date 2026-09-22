@@ -10,7 +10,7 @@ import { PD_BY_GRADE, TYPE, lgdNow } from './credit';
 import { unrealizedToCapital } from './funding';
 import { leverageRatio, netIncome, post, tier1Capital, totalAssets, totalDeposits } from './ledger';
 import { GRADES, type LoanType } from './loantypes';
-import { type Bank, type Camels, type Decision, type Finding, type Pending, type World, nextId } from './state';
+import { type Bank, type Camels, type Decision, type Finding, type Pending, type World, nextId, playerBank } from './state';
 import { dateOf, formatDate } from './time';
 import { money, pct } from './format';
 
@@ -222,7 +222,9 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   const weak = b.officers.filter((o) => o.skill < 40).length;
   const exceptions = b.applications.autoApproved > 0 ? b.loans.filter((l) => l.decision.note.includes('exception')).length / Math.max(1, b.loans.length) : 0;
   const unresolved = c.findings.filter((f) => !f.resolved && world.day - f.day > 365).length;
-  let management = 1 + (b.kind === 'player' ? vacancies : 0) + (weak > 0 ? 1 : 0) + (exceptions > 0.15 ? 1 : 0) + (unresolved > 0 ? 1 : 0);
+  // A finding ignored through two cycles is a management weakness of its own.
+  const ignoredTwice = c.findings.filter((f) => !f.resolved && world.day - f.day > 730).length;
+  let management = 1 + (b.kind === 'player' ? vacancies : 0) + (weak > 0 ? 1 : 0) + (exceptions > 0.15 ? 1 : 0) + (unresolved > 0 ? 1 : 0) + (ignoredTwice > 0 ? 1 : 0);
   management = Math.min(5, management);
   if (b.kind === 'player' && vacancies > 0) add('M', 'M:vacancies', `Management: ${vacancies} officer ${vacancies === 1 ? 'seat is' : 'seats are'} vacant. Fill them.`);
   if (exceptions > 0.15) add('M', 'M:exceptions', `Management: ${pct(exceptions, 0)} of relationship loans were policy exceptions. Follow the written policy or change it.`);
@@ -267,7 +269,12 @@ function escalate(ctx: Ctx, b: Bank, stack: CapitalStack): void {
   const unresolvedTwoCycles = c.findings.filter((f) => !f.resolved && world.day - f.day > 730).length;
   let target: Bank['enforcement'] = 'none';
   if (c.composite >= 3 || unresolved > 0) target = 'mou';
-  if (c.composite >= 4 || unresolvedTwoCycles > 0 || stack.category === 'under') target = 'consent';
+  // A formal order needs a bank rated 3 or worse, short of capital, or one
+  // that ignored a risk finding (assets, capital, liquidity, sensitivity)
+  // through two cycles; an old process finding on a sound bank stays an
+  // informal agreement.
+  const ignoredRisk = c.findings.filter((f) => !f.resolved && world.day - f.day > 730 && f.component !== 'M').length;
+  if (c.composite >= 4 || ignoredRisk > 0 || (unresolvedTwoCycles > 0 && c.composite >= 3) || stack.category === 'under') target = 'consent';
   if (c.composite >= 5 || stack.category === 'significant' || stack.category === 'critical') target = 'pca';
   if (LADDER[target] > LADDER[b.enforcement]) {
     b.enforcement = target;
@@ -290,7 +297,11 @@ function escalate(ctx: Ctx, b: Bank, stack: CapitalStack): void {
       milestone(ctx, `Regulators issued a ${LADDER_LABEL[target]}`);
     }
   } else if (LADDER[target] < LADDER[b.enforcement] && c.composite <= 2 && stack.category === 'well') {
-    emit(ctx, 'regulator', `${b.name}: the ${LADDER_LABEL[b.enforcement]} is lifted after a clean exam`, { severity: 'good', bankId: b.id });
+    // A rival's clean bill of health makes the feed only when it is in the
+    // player's market.
+    const player = playerBank(world);
+    const near = b.kind === 'player' || (player !== null && (b.branches.some((br) => player.branches.some((x) => x.county === br.county)) || (b.homeMetro !== null && b.homeMetro === player.homeMetro)));
+    if (near) emit(ctx, 'regulator', `${b.name}: the ${LADDER_LABEL[b.enforcement]} is lifted after a clean exam`, { severity: 'good', bankId: b.id });
     b.enforcement = 'none';
     b.enforcementSince = null;
     b.enforcementAssets = null;

@@ -65,7 +65,7 @@ export function ladder(world: World): Ladder {
   return { rank, total: all.length + 1, ahead, behind, largest: all[0] ?? null, top100: all[98]?.assets ?? 0 };
 }
 
-const RUNGS = [1000, 500, 250, 100, 50, 25, 10, 5, 2];
+export const RUNGS = [1000, 500, 250, 100, 50, 25, 10, 5, 2];
 
 // Monthly: keep the rank on the world and mark the rungs as they pass.
 export function ladderMonthly(ctx: Ctx): void {

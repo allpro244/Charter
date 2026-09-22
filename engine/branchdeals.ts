@@ -121,7 +121,11 @@ export function offerFrom(world: World, seller: Bank, buyer: Bank): { offer: Bra
       }
       county ??= nearest;
       if (county) {
-        const share = Math.round(coreDeposits(seller) / (seller.branches.length + (seller.officesExtra ?? 0)));
+        // An office holds an equal share of the seller's deposits, never more
+        // than one branch's capacity in that county.
+        const wageIndex = Math.max(0.5, Math.min(2, county.wage / 1300));
+        const capacity = Math.round(calibration.depositsPerBranch.typical * 1e6 * wageIndex * (world.economy.nominalIndex ?? 1));
+        const share = Math.min(capacity, Math.round(coreDeposits(seller) / (seller.branches.length + (seller.officesExtra ?? 0))));
         if (share >= 1_000_000) {
           best = { branchId: null, county: county.fips, deposits: share, fixedCost: branchFixedCost(county) };
           bestKm = km(home.centroid, county.centroid);
@@ -132,30 +136,37 @@ export function offerFrom(world: World, seller: Bank, buyer: Bank): { offer: Bra
   return best ? { offer: best, km: bestKm } : null;
 }
 
-// Monthly: a rival that is not pushing its network, with three branches
+// Monthly: a rival that is not pushing its network, with three offices
 // or more, offers the one nearest the player's home, when it is within
-// the player's reach. One offer on the desk at a time, thirty days to
-// answer, and passing is the default.
+// the player's reach, no bigger than four tenths of the player's own
+// deposits, and the player could buy it today. One offer on the desk at
+// a time, none within four months of the last, thirty days to answer,
+// and passing is the default.
 export function branchOffersMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const player = playerBank(world);
   if (!player || player.status !== 'open' || !player.homeCounty) return;
   if (world.pending.some((p) => p.kind === 'branch_offer')) return;
+  if (player.lastBranchOfferDay !== undefined && world.day - player.lastBranchOfferDay < 120) return;
   const home = world.geo.counties[player.homeCounty];
   if (!home) return;
+  const myDeposits = coreDeposits(player);
   const reach = calibration.branchReachKm.typical * Math.pow(Math.max(totalAssets(player.acct), 1e7) / 1e8, 0.25);
   for (const id of world.bankOrder) {
     const r = world.banks[id] as Bank;
     if (r.kind !== 'rival' || r.status !== 'open' || !r.ai || r.ai.branchPush >= 0.35) continue;
     if (r.branches.length + (r.officesExtra ?? 0) < 3) continue;
     // A stream of its own, so the offers never move the world's path.
-    if (!chance(derive(world.seed, hashString(`offer:${r.id}:${world.day}`)), 0.015)) continue;
+    if (!chance(derive(world.seed, hashString(`offer:${r.id}:${world.day}`)), 0.008)) continue;
     const found = offerFrom(world, r, player);
-    if (!found || found.km > 1.6 * reach) continue;
+    if (!found || found.km > 1.2 * reach) continue;
     const offer = found.offer;
+    if (offer.deposits > 0.4 * myDeposits || offer.deposits < 3_000_000) continue;
     const county = world.geo.counties[offer.county];
     if (!county) continue;
     const check = branchPurchaseCheck(world, player, r, offer);
+    if (!check.ok) continue;
+    player.lastBranchOfferDay = world.day;
     const rivals = rivalBranches(world);
     const kase = branchCase(world, player, county, rivals);
     const others = (rivals[county.fips] ?? []).filter((x) => x.br.id !== offer.branchId).length;
@@ -168,7 +179,7 @@ export function branchOffersMonthly(ctx: Ctx): void {
       lines: [
         `${r.name} is pulling back and will sell its branch in ${county.name}, ${county.state} (${Math.round(found.km)} km from your home) with its ${money(offer.deposits)} of deposits. ${others > 0 ? `${others} other ${others === 1 ? 'bank has a branch' : 'banks have branches'} there.` : 'No other simulated bank has a branch there.'}`,
         `You would assume the deposits and receive ${money(offer.deposits - check.premium)} of cash; the ${money(check.premium)} premium is booked as goodwill. The branch costs ${money(offer.fixedCost)} a year to run and, once yours, could hold up to ${money(kase.mature)} when mature.`,
-        check.ok ? `Pro forma leverage ${pct(check.leverageAfter, 1)}.` : `You cannot buy it today: ${check.reason}.`,
+        `Pro forma leverage ${pct(check.leverageAfter, 1)}.`,
         'Thirty days to answer; unanswered is a pass.',
       ],
       options: [

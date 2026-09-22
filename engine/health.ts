@@ -59,7 +59,9 @@ export function healthTone(score: number): Health['tone'] {
   return score >= 65 ? 'good' : score >= 50 ? 'warn' : 'bad';
 }
 
-export function loanHealth(world: World, b: Bank, app: Application): Health {
+// exception: the loan sits outside the written policy; the examiner counts
+// those, so the meter does too.
+export function loanHealth(world: World, b: Bank, app: Application, exception = false): Health {
   const m = app.memo;
   const t = TYPE[app.type];
   const household = m.employees === 0;
@@ -164,8 +166,10 @@ export function loanHealth(world: World, b: Bank, app: Application): Health {
   // whatever the numbers: the meter reads fair at best (the red flag stays).
   const characterScore = factors.find((f) => f.key === 'character')?.score ?? 100;
   if (characterScore < 35) score = Math.min(score, 60);
+  if (exception) score = Math.max(0, score - 15);
   const strengths = factors.filter((f) => f.score >= 80).map((f) => f.label.toLowerCase());
   const concerns = factors.filter((f) => f.score <= 45).map((f) => f.label.toLowerCase());
+  if (exception) concerns.push('your written policy (an exception the examiner counts)');
 
   // Pricing: the rate against the cost of money, the expected loss for the
   // CCO's grade, and the running cost of a loan.

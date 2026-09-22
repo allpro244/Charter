@@ -14,6 +14,7 @@ import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
 import { decideWorkout, loansDaily, loansMonthly } from './loans';
 import { branchOffersMonthly, decideBranchOffer } from './branchdeals';
+import { peerGroup } from './peers';
 import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
 import { rivalsMonthly, rivalsQuarterly } from './rivals';
@@ -350,7 +351,11 @@ function yearInReview(ctx: Ctx): void {
   const rank = world.ladder.rank;
   const rankAgo = world.ladder.rankYearAgo ?? null;
   const desk = b.desk;
-  const text = `${y} in review: ${ni >= 0 ? 'profit' : 'loss'} ${money(Math.abs(ni))} (${(100 * ni / Math.max(1, assets)).toFixed(2)}% on assets), assets ${money(assets)}${growth !== null ? `, ${growth >= 0 ? 'up' : 'down'} ${(100 * Math.abs(growth)).toFixed(1)}%` : ''}${rank > 0 ? `, rank #${rank.toLocaleString('en-US')}${rankAgo !== null && rankAgo > 0 ? ` (from #${rankAgo.toLocaleString('en-US')})` : ''}` : ''}${desk ? `, ${desk.approved} loans approved at your desk, ${desk.wentBad} went bad` : ''}`;
+  // Against the banks your size: the year's return on assets beside theirs.
+  const g = peerGroup(world, b);
+  const roa = ni / Math.max(1, assets);
+  const verdict = Number.isFinite(g.peers.roa) && g.n >= 3 ? (roa > g.peers.roa + 0.002 ? ` A better year than most of the ${g.n} banks your size (they earned ${(100 * g.peers.roa).toFixed(2)}%).` : roa < g.peers.roa - 0.002 ? ` A worse year than most of the ${g.n} banks your size (they earned ${(100 * g.peers.roa).toFixed(2)}%).` : ` About the same year as the ${g.n} banks your size.`) : '';
+  const text = `${y} in review: ${ni >= 0 ? 'profit' : 'loss'} ${money(Math.abs(ni))} (${(100 * ni / Math.max(1, assets)).toFixed(2)}% on assets), assets ${money(assets)}${growth !== null ? `, ${growth >= 0 ? 'up' : 'down'} ${(100 * Math.abs(growth)).toFixed(1)}%` : ''}${rank > 0 ? `, rank #${rank.toLocaleString('en-US')}${rankAgo !== null && rankAgo > 0 ? ` (from #${rankAgo.toLocaleString('en-US')})` : ''}` : ''}${desk ? `, ${desk.approved} loans approved at your desk, ${desk.wentBad} went bad` : ''}.${verdict}`;
   emit(ctx, 'system', text, { severity: ni >= 0 ? 'good' : 'alert', bankId: b.id });
   milestone(ctx, text);
   world.ladder.rankYearAgo = rank;

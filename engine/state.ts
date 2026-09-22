@@ -153,6 +153,7 @@ export interface Bank {
   originationsLastYear?: number; // all types, the calendar year before this one
   officesExtra?: number; // offices beyond the home branch a seeded rival runs, carried as cost without a branch record each
   boardWarnedDay?: number; // the last time the board said it was restless (D61)
+  lastBranchOfferDay?: number; // the last branch offer on the desk (D59)
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date

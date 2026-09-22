@@ -157,7 +157,7 @@ function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pendin
   const app = p.kind === 'loan_application' ? (p.data.app as Application | undefined) : undefined;
   const apps = p.kind === 'loan_batch' ? ((p.data.apps as Application[] | undefined) ?? []) : [];
   const [showRead, setShowRead] = useState(false);
-  const h = app && bank ? loanHealth(world, bank, app) : null;
+  const h = app && bank ? loanHealth(world, bank, app, !policyCheck(bank, app, termsFrom(app)).pass) : null;
   return (
     <>
       <div className="when">{formatDate(p.day)}</div>
@@ -232,7 +232,7 @@ function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pendin
 // The loan health meter: the five Cs and concentration from the memo,
 // an overall word, the CCO's grade beside it, and whether the rate pays.
 function HealthMeter({ world, bank, app }: { world: World; bank: Bank; app: Application }) {
-  const h = loanHealth(world, bank, app);
+  const h = loanHealth(world, bank, app, !policyCheck(bank, app, termsFrom(app)).pass);
   const m = app.memo;
   return (
     <div className="health">
@@ -314,7 +314,7 @@ function BatchHealth({ world, bank, apps }: { world: World; bank: Bank; apps: Ap
       </thead>
       <tbody>
         {apps.map((a, i) => {
-          const h = loanHealth(world, bank, a);
+          const h = loanHealth(world, bank, a, !policyCheck(bank, a, termsFrom(a)).pass);
           const check = policyCheck(bank, a, termsFrom(a));
           return (
             <tr key={i}>
