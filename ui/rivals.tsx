@@ -8,6 +8,7 @@ import { TYPE, bookByType } from '../engine/credit';
 import type { Ctx } from '../engine/ctx';
 import { dealCapacity, makeOffer, reservationPriceToBook } from '../engine/deals';
 import { rivalReport } from '../engine/rivals';
+import { rivalBranches } from '../engine/deposits';
 import { type Bank, type World } from '../engine/state';
 import { type Unit, dollars, num, pct, short, unitLabel } from './format';
 import { ReportsTable } from './screens';
@@ -91,8 +92,48 @@ export function RivalsScreen({ world, unit, act }: { world: World; unit: Unit; a
   const biggest = live.filter((r) => r.state === myState && !near.includes(r) && !forSale.includes(r)).slice(0, 5);
   const short = [...near.map((r) => ({ r, why: 'in your market' })), ...forSale.map((r) => ({ r, why: 'for sale nearby' })), ...biggest.map((r) => ({ r, why: `largest in ${myState}` }))];
   const useShort = !showAll && !q;
+  const byCounty = me && me.branches.length > 0 ? rivalBranches(world) : {};
+  const counties = me
+    ? me.branches
+        .map((br) => {
+          const c = world.geo.counties[br.county];
+          const others = (byCounty[br.county] ?? []).slice().sort((x, y) => y.br.deposits - x.br.deposits);
+          const top = others[0];
+          return { fips: br.county, name: c ? `${c.name}, ${c.state}` : br.county, pool: c?.depositPool ?? 0, mine: br.deposits, others: others.length, top: top ? `${top.bank.name} (${dollars(top.br.deposits, unit)})` : 'none simulated' };
+        })
+        .sort((x, y) => y.mine - x.mine)
+    : [];
   return (
     <div>
+      {useShort && counties.length > 0 && (
+        <table className="wrap">
+          <thead>
+            <tr>
+              <th>Your counties</th>
+              <th className="num">deposit pool</th>
+              <th className="num">yours</th>
+              <th className="num">your share</th>
+              <th className="num">other banks' branches</th>
+              <th>the biggest of them</th>
+            </tr>
+          </thead>
+          <tbody>
+            {counties.map((c) => (
+              <tr key={c.fips}>
+                <td>{c.name}</td>
+                <td className="num">{dollars(c.pool, unit)}</td>
+                <td className="num">{dollars(c.mine, unit)}</td>
+                <td className="num">{pct(c.pool > 0 ? c.mine / c.pool : 0, 2)}</td>
+                <td className="num">{num(c.others)}</td>
+                <td>{c.top}</td>
+              </tr>
+            ))}
+            <tr className="memo-row">
+              <td colSpan={6}>Who is winning each county you are in: the pool is the county's deposits, yours is what your branch holds, and the branches are the other simulated banks' (national and aggregate banks are not counted).</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
       <p className="hint">{useShort ? 'The banks that matter to you: the ones in your market, the ones for sale nearby, and the largest in your state. Click a bank for its call reports and its book, and to make an offer for it.' : 'Every other bank in the world, largest first. Click a bank for its call reports and its book, and to make an offer for it.'}</p>
       <div className="toolbar">
         <input className="filter" style={{ maxWidth: 260 }} placeholder="Find a bank, state or town" value={filter} onChange={(e) => setFilter(e.target.value)} />

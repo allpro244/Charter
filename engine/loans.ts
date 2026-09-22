@@ -438,9 +438,10 @@ export function decideWorkout(ctx: Ctx, pending: Pending, d: Decision | null): v
   const l = b.loans.find((x) => x.id === (pending.data.loanId as string));
   if (!l || (l.status !== 'nonaccrual' && l.status !== 'workout')) return;
   const choice = d ? d.choice : restructureCovers(world, l) ? 'r' : 'w';
+  if (!d) emit(ctx, 'borrower', `The workout on ${l.borrower} went unanswered for 45 days; the workout officer's rule ${choice === 'r' ? 'restructures it' : 'lets it run'}.`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
   if (choice === 'r') restructureLoan(ctx, b, l.id, d ? 'player' : 'officer');
   else if (choice === 's') sellLoan(ctx, b, l.id);
-  else emit(ctx, 'borrower', `Letting the workout on ${l.borrower} run.`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
+  else if (d) emit(ctx, 'borrower', `Letting the workout on ${l.borrower} run.`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
 }
 
 export function decidedText(l: Loan): string {

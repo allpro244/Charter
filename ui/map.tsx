@@ -8,7 +8,7 @@ import { type BranchCase, branchCandidates, branchCase, branchOpenCheck, rivalBr
 import { SECTORS } from '../data/types';
 import type { Bank, CountyState, MetroState, World } from '../engine/state';
 import type { GeoCollection } from './data';
-import { HEIGHT, WIDTH, pathFor, projectPoint } from './projection';
+import { HEIGHT, WIDTH, bboxFor, pathFor, projectPoint } from './projection';
 import { num, pct, short, usd } from './format';
 
 export type Shade = 'none' | 'share' | 'condition' | Sector;
@@ -30,6 +30,7 @@ interface CountyPath {
   name: string;
   state: string;
   d: string;
+  box: [number, number, number, number];
 }
 
 const SHADE_LABEL: Record<string, string> = { none: 'Plain', share: 'Your share', condition: 'Condition' };
@@ -39,7 +40,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   // A click pins a county so the mouse can leave the map for the button.
   const [picked, setPicked] = useState<string | null>(null);
   const paths = useMemo<CountyPath[]>(
-    () => geo.features.map((f) => ({ fips: f.properties.fips, name: f.properties.name, state: f.properties.state, d: pathFor(f.geometry, f.properties.state) })),
+    () => geo.features.map((f) => ({ fips: f.properties.fips, name: f.properties.name, state: f.properties.state, d: pathFor(f.geometry, f.properties.state), box: bboxFor(f.geometry, f.properties.state) })),
     [geo],
   );
   const metros = useMemo(() => Object.values(world.geo.metros).filter((m) => m.startable), [world.geo.metros]);
@@ -67,10 +68,49 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   const mine = new Set((bank?.branches ?? []).map((br) => br.county));
   const shown = pinned ?? hovered;
   const empty = paths.length === 0;
+  // Zoom: the whole country, or one state (the pinned county's, else home).
+  const [zoom, setZoom] = useState<'us' | 'state'>('us');
+  const focusState = pinned?.state ?? bank?.state ?? null;
+  const stateBox = useMemo(() => {
+    if (!focusState) return null;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const p of paths) {
+      if (p.state !== focusState) continue;
+      if (p.box[0] < x0) x0 = p.box[0];
+      if (p.box[1] < y0) y0 = p.box[1];
+      if (p.box[2] > x1) x1 = p.box[2];
+      if (p.box[3] > y1) y1 = p.box[3];
+    }
+    if (!Number.isFinite(x0)) return null;
+    const padX = Math.max(4, (x1 - x0) * 0.06);
+    const padY = Math.max(4, (y1 - y0) * 0.06);
+    return { x: x0 - padX, y: y0 - padY, w: x1 - x0 + 2 * padX, h: y1 - y0 + 2 * padY };
+  }, [paths, focusState]);
+  const zoomed = zoom === 'state' && stateBox !== null && mode === 'play';
+  const viewBox = zoomed && stateBox ? `${stateBox.x.toFixed(1)} ${stateBox.y.toFixed(1)} ${stateBox.w.toFixed(1)} ${stateBox.h.toFixed(1)}` : `0 0 ${WIDTH} ${HEIGHT}`;
+  // Marks shrink with the zoom so they stay the size they are on the country map.
+  const k = zoomed && stateBox ? Math.max(1, Math.min(WIDTH / stateBox.w, HEIGHT / stateBox.h)) : 1;
   return (
     <div className="mapwrap">
       {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers and click it to pin it; a city dot stands for its metro, so hovering or clicking it shows the metro's main county and every county in the metro below. The list under the map ranks where a new branch would earn the most; open one there, from the metro's counties, or from a pinned county's card. Shade the map by your share of each county's deposits, by a sector's share of jobs, or by how each county is doing.</p>}
       {empty && <p className="hint">This build has no county map: the playtest bank has no home town. The map fills in once the county data is built.</p>}
+      {mode === 'play' && !empty && focusState && (
+        <div className="toolbar">
+          <span className="seg-label">Zoom</span>
+          <div className="seg">
+            <button className={zoom === 'us' ? 'on' : ''} onClick={() => setZoom('us')}>
+              Whole country
+            </button>
+            <button className={zoom === 'state' ? 'on' : ''} onClick={() => setZoom('state')}>
+              {world.geo.states[focusState]?.name ?? focusState}
+            </button>
+          </div>
+          <span className="dim">{zoomed ? 'Pin a county in another state to zoom there.' : 'Zoom in to pick a small county.'}</span>
+        </div>
+      )}
       {onShade && !empty && (
         <div className="toolbar">
           <span className="seg-label">Shade by</span>
@@ -83,7 +123,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
           </div>
         </div>
       )}
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="map" role="img" aria-label="United States counties">
+      <svg viewBox={viewBox} className="map" role="img" aria-label="United States counties">
         <g>
           {paths.map((p) => (
             <path
@@ -106,7 +146,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
             const c = principal(world, m);
             if (!c) return null;
             const [x, y] = projectPoint(c.centroid[0], c.centroid[1], c.state);
-            const r = Math.max(1.5, Math.sqrt(m.population / 1e6) * 4);
+            const r = Math.max(1.5, Math.sqrt(m.population / 1e6) * 4) / k;
             const sel = selectedMetro === m.cbsa;
             return (
               <circle
@@ -124,7 +164,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
             );
           })}
         </g>
-        {bank && <BranchMarkers world={world} bank={bank} onHover={(f) => mode === 'play' && setHover(f)} onLeave={(f) => mode === 'play' && setHover((h) => (h === f ? null : h))} onPick={(f) => mode === 'play' && setPicked((cur) => (cur === f ? null : f))} />}
+        {bank && <BranchMarkers world={world} bank={bank} k={k} onHover={(f) => mode === 'play' && setHover(f)} onLeave={(f) => mode === 'play' && setHover((h) => (h === f ? null : h))} onPick={(f) => mode === 'play' && setPicked((cur) => (cur === f ? null : f))} />}
         {Object.values(world.banks)
           .filter((b) => b.kind === 'rival' && b.status === 'open' && b.homeCounty)
           .map((b) => {
@@ -134,10 +174,10 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
             return (
               <rect
                 key={b.id}
-                x={x - 1.5}
-                y={y - 1.5}
-                width={3}
-                height={3}
+                x={x - 1.5 / k}
+                y={y - 1.5 / k}
+                width={3 / k}
+                height={3 / k}
                 className="rival"
                 onMouseEnter={() => mode === 'play' && setHover(c.fips)}
                 onMouseLeave={() => mode === 'play' && setHover((h) => (h === c.fips ? null : h))}
@@ -300,7 +340,7 @@ function principal(world: World, m: MetroState): CountyState | null {
   return best;
 }
 
-function BranchMarkers({ world, bank, onHover, onLeave, onPick }: { world: World; bank: Bank; onHover: (fips: string) => void; onLeave: (fips: string) => void; onPick: (fips: string) => void }) {
+function BranchMarkers({ world, bank, k, onHover, onLeave, onPick }: { world: World; bank: Bank; k: number; onHover: (fips: string) => void; onLeave: (fips: string) => void; onPick: (fips: string) => void }) {
   return (
     <g>
       {bank.branches.map((br) => {
@@ -309,8 +349,8 @@ function BranchMarkers({ world, bank, onHover, onLeave, onPick }: { world: World
         const [x, y] = projectPoint(c.centroid[0], c.centroid[1], c.state);
         return (
           <g key={br.id} className="branch" onMouseEnter={() => onHover(c.fips)} onMouseLeave={() => onLeave(c.fips)} onClick={() => onPick(c.fips)}>
-            <line x1={x - 4} y1={y} x2={x + 4} y2={y} />
-            <line x1={x} y1={y - 4} x2={x} y2={y + 4} />
+            <line x1={x - 4 / k} y1={y} x2={x + 4 / k} y2={y} />
+            <line x1={x} y1={y - 4 / k} x2={x} y2={y + 4 / k} />
             <title>{`${bank.name} branch, ${c.name}: ${short(br.deposits)} deposits`}</title>
           </g>
         );

@@ -73,3 +73,26 @@ export function pathFor(
   if (geometry.type === 'Polygon') return geometry.coordinates.map((r) => ring(r, state)).join('');
   return geometry.coordinates.map((poly) => poly.map((r) => ring(r, state)).join('')).join('');
 }
+
+// The projected bounding box of a county: [minX, minY, maxX, maxY].
+export function bboxFor(
+  geometry: { type: 'Polygon'; coordinates: number[][][] } | { type: 'MultiPolygon'; coordinates: number[][][][] },
+  state: string,
+): [number, number, number, number] {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  const rings = geometry.type === 'Polygon' ? geometry.coordinates : geometry.coordinates.flat();
+  for (const r of rings) {
+    for (const c of r) {
+      const [x, y] = projectPoint(c[0] as number, c[1] as number, state);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < x0) x0 = x;
+      if (y < y0) y0 = y;
+      if (x > x1) x1 = x;
+      if (y > y1) y1 = y;
+    }
+  }
+  return [x0, y0, x1, y1];
+}

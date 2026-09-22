@@ -6,6 +6,9 @@
 import { LOAN_TYPES } from './loantypes';
 import { type IncomeStatement, netInterestIncome, noninterestExpense, totalAssets, totalDeposits } from './ledger';
 import { type Bank, type World, branchFixedCost } from './state';
+import { calibration } from '../data/calibration';
+import { tier1Capital } from './ledger';
+import { TYPE } from './credit';
 import { bankDepositRate, branchCandidates, branchMargin, marketDepositRate } from './deposits';
 import { bookByType, typeBand } from './credit';
 import { defaultSalary } from './wealth';
@@ -172,6 +175,42 @@ export function levers(world: World, b: Bank): Lever[] {
     const contribution = br.deposits * margin - (county ? branchFixedCost(county) : br.fixedCost);
     if (contribution < 0 && (!weakest || contribution < -weakest.loss)) weakest = { name: county ? county.name : br.county, loss: -contribution };
   }
+  // Interest rates: a one point rise, the way every bank reports it. Assets
+  // that reprice within a year against liabilities that do, at the deposit
+  // betas; and what the bond book loses in value at its duration.
+  let floating = 0;
+  let fixedReprice = 0;
+  for (const r of book) {
+    const tp = TYPE[r.type];
+    if (tp.base === 'ff') floating += r.balance;
+    else fixedReprice += r.balance * Math.min(1, 12 / (tp.balloon ?? tp.term));
+  }
+  let secReprice = 0;
+  let bondHit = 0;
+  let durWeight = 0;
+  let bondValue = 0;
+  for (const lot of b.lots) {
+    const v = lot.fair > 0 ? lot.fair : lot.cost;
+    secReprice += lot.duration <= 1 ? v : v / Math.max(1, lot.duration);
+    bondHit += v * lot.duration * 0.01;
+    durWeight += v * lot.duration;
+    bondValue += v;
+  }
+  const betas = calibration.depositBeta;
+  const liabReprice = a.checking * betas.checking.typical + a.savings * betas.savings.typical + a.mmda * betas.mmda.typical + a.cd * betas.cd.typical + a.brokered + a.fhlb + a.fedFundsPurchased;
+  const assetReprice = a.cash + floating + fixedReprice + secReprice;
+  const nii = Math.round(0.01 * (assetReprice - liabReprice));
+  const tier1 = Math.max(1, tier1Capital(a));
+  const duration = bondValue > 0 ? durWeight / bondValue : 0;
+  out.push({
+    key: 'rates',
+    label: 'Interest rates',
+    today: `bond book ${duration.toFixed(1)} years; ${pct(a.loans > 0 ? floating / a.loans : 0, 0)} of loans float`,
+    step: 'the Fed raises a point',
+    effect: nii,
+    note: `${money(assetReprice)} of assets reprice within a year against ${money(Math.round(liabReprice))} of funding at the deposit betas. The bonds would lose about ${money(Math.round(bondHit))} of value (${pct(bondHit / tier1, 0)} of tier 1), which examiners rate and depositors read; a cut does the reverse. Shorten the bond book or lend floating to trade margin for safety.`,
+    tab: 'MONEY',
+  });
   const board = defaultSalary(assets);
   const salary = world.player.salary;
   if (weakest) {

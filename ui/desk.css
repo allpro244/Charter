@@ -830,6 +830,7 @@ pre.memo {
   fill: #1f2a36;
   stroke: #33414f;
   stroke-width: 0.35;
+  vector-effect: non-scaling-stroke;
 }
 
 .county.hover {
@@ -860,6 +861,7 @@ pre.memo {
 .branch line {
   stroke: var(--good);
   stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
 }
 
 .rival {

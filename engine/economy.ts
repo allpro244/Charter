@@ -241,11 +241,17 @@ export function localNewsMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const b = playerBank(world);
   if (!b || b.status !== 'open') return;
+  // Every county with a branch, and every county of the home metro: the
+  // paper the CEO reads covers the whole metro.
   const seen = new Set<string>();
-  for (const br of b.branches) {
-    if (seen.has(br.county)) continue;
-    seen.add(br.county);
-    const c = world.geo.counties[br.county];
+  const fipsList = b.branches.map((br) => br.county);
+  const home = b.homeCounty ? world.geo.counties[b.homeCounty] : undefined;
+  const metro = home?.cbsa ? world.geo.metros[home.cbsa] : undefined;
+  if (metro) fipsList.push(...metro.counties);
+  for (const fips of fipsList) {
+    if (seen.has(fips)) continue;
+    seen.add(fips);
+    const c = world.geo.counties[fips];
     if (!c) continue;
     const hist = (c.condHist ??= []);
     hist.push(c.condition);

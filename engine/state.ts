@@ -151,6 +151,8 @@ export interface Bank {
   lendersBooked: number; // pooled loans the lenders booked last month under the written policy (D50)
   operatingBase?: number; // business borrowers' operating balances, recomputed monthly (D58)
   originationsLastYear?: number; // all types, the calendar year before this one
+  officesExtra?: number; // offices beyond the home branch a seeded rival runs, carried as cost without a branch record each
+  boardWarnedDay?: number; // the last time the board said it was restless (D61)
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
@@ -494,7 +496,7 @@ export interface PlayerRecord {
   bankName: string;
   from: number;
   to: number | null;
-  outcome: 'running' | 'failed' | 'sold';
+  outcome: 'running' | 'failed' | 'sold' | 'removed';
 }
 
 export interface Player {
@@ -630,7 +632,8 @@ export type PendingKind =
   | 'capital_raise'
   | 'ipo_window'
   | 'assisted_auction'
-  | 'workout';
+  | 'workout'
+  | 'branch_offer';
 
 export interface PendingOption {
   key: string; // the keyboard key
@@ -687,7 +690,7 @@ export interface World {
 
 export interface DealRecord {
   day: number;
-  kind: 'assisted' | 'whole' | 'rival';
+  kind: 'assisted' | 'whole' | 'rival' | 'branch';
   buyer: string;
   target: string;
   assets: number;

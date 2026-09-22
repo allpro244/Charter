@@ -32,7 +32,7 @@ Invariants: cumulative net charge-offs over 20 year runs in FDIC bands per type.
 
 ## 4. Deposits and funding
 Cadence: daily flows; monthly rate resets and beta updates.
-Owns: deposits by type per branch, rate sheet, betas, stickiness, runs, brokered, FHLB capacity, fed funds, later swaps. Operating accounts (D58): the checking target carries the `operatingBalanceShare` band of the business loan book. Branch inflows go to the branches with room under their own targets.
+Owns: deposits by type per branch, rate sheet, betas, stickiness, runs, brokered, FHLB capacity, fed funds, later swaps. Branch purchases (D59): the deposits move with cash less a premium at the `branchDepositPremium` band; the premium is goodwill. Operating accounts (D58): the checking target carries the `operatingBalanceShare` band of the business loan book. Branch inflows go to the branches with room under their own targets.
 Branches on real counties and metros. Fixed cost scales with local wages and rents from the data. The case for a branch (what it could gather after one and three years and when mature, its break even at the bank's margin) comes from the same target formula the branch runs on, and the ten best counties by a mature year's earnings are ranked for the player (D55). County deposit pools are derived from real population, income, and FDIC deposit totals. Share capture vs rivals based on rate, branch count, years in market, reputation. Distance penalty for far-from-home branches: the reach scale grows with the fourth root of assets (`branchReachKm`).
 Run trigger: capital ratio, unrealized loss vs equity, and rival failure news combine into confidence. Uninsured runs first.
 Invariants: county deposits across all banks equal the county pool. Deposit cost tracks Fed funds with plausible beta by type. Fed +400bp shock produces outflow and unrealized loss in plausible bands.
@@ -46,7 +46,7 @@ Invariants: 90 CCO vs 30 CCO shows measurably lower auto-decision loss across se
 ## 6. Rivals
 Cadence: monthly.
 Owns: every non-player bank, pools only, scoped per D42: individual banks in the home state and neighbors, one aggregate per other state until entered. AI policy per bank: risk appetite, growth target, rate aggressiveness, acquisitiveness. Generated to match real FDIC counts and size distribution per state, plus a handful of national banks present in every major metro.
-Behavior (D35): price for deposits, open branches against the player, bid on the same acquisitions, fail.
+Behavior (D35): price for deposits, open branches against the player and grow their own networks (D60), offer branches for sale (D59), bid on the same acquisitions, fail. A seeded rival's offices beyond its home branch are carried as running cost from the FDIC office count.
 Invariants: failures cluster in recessions and spike in banking crises. Some small banks are always for sale. 300 individual banks plus 50 state aggregates over 40 years runs under 60 seconds. Expanding a state aggregate into individual banks conserves total assets and deposits.
 
 ## 7. Event stream (D33)

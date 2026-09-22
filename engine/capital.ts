@@ -5,7 +5,8 @@
 // Invariants: shares x price = market cap; ownership sums to 100%.
 
 import { calibration } from '../data/calibration';
-import { type Ctx, emit, milestone } from './ctx';
+import { type Ctx, addPending, emit, milestone } from './ctx';
+import { randomPolicy } from './rivals';
 import { leverageRatio, post, tier1Capital, totalAssets, totalEquity } from './ledger';
 import { PCA_WELL } from './regulation';
 import { randNormal } from './rng';
@@ -114,6 +115,84 @@ export function formHoldingCompany(ctx: Ctx, b: Bank): boolean {
   return true;
 }
 
+// The price a private raise would set today (D61), so the desk can show
+// where a raise would leave the CEO's stake before it happens.
+export function raiseTerms(world: World, b: Bank, amount: number): { price: number; discount: number } | null {
+  const maxRound = Math.max(1_000_000, Math.round(totalEquity(b.acct) * 0.75));
+  if (amount <= 0 || amount > maxRound) return null;
+  const book = bookValuePerShare(b);
+  if (book <= 0) return null;
+  let discount = Math.min(1.2, Math.max(0.55, 0.85 * priceToBook(world, b)));
+  if (leverageRatio(b.acct) < PCA_WELL) discount *= 0.8;
+  return { price: Math.max(0.01, book * discount), discount };
+}
+
+// Where a raise leaves the CEO's stake.
+export function stakeAfterRaise(world: World, b: Bank, amount: number, playerPortion: number): number | null {
+  const t = raiseTerms(world, b, amount);
+  if (!t) return null;
+  const own = Math.round(Math.max(0, Math.min(amount, playerPortion)) / t.price);
+  const issued = Math.max(1, Math.round(amount / t.price));
+  return (world.player.shares + own) / Math.max(1, b.shares + issued);
+}
+
+// Control (D61). With half the shares the CEO is the owner; below it the
+// CEO serves at the board's pleasure, like nearly every real bank CEO.
+export function controlWord(share: number): 'owner' | 'pleasure' {
+  return share >= 0.5 ? 'owner' : 'pleasure';
+}
+
+// Quarterly: a board the CEO does not control replaces a CEO who has lost
+// money for two years running, once the bank is past its third year (a
+// de novo's early losses are the plan). It says it is restless a year in.
+export function boardQuarterly(ctx: Ctx): void {
+  const { world } = ctx;
+  const b = playerBank(world);
+  if (!b || b.status !== 'open') return;
+  const share = ownership(world, b).player;
+  if (share >= 0.5) return;
+  if (world.day - b.charteredDay < 3 * 365) return;
+  const reports = b.reports;
+  let losing = 0;
+  for (let i = reports.length - 1; i >= 0 && reports[i]!.netIncome < 0; i--) losing++;
+  if (losing >= 4 && losing < 8 && (b.boardWarnedDay === undefined || world.day - b.boardWarnedDay >= 360)) {
+    b.boardWarnedDay = world.day;
+    emit(ctx, 'system', `The board is restless: ${losing} losing quarters and you hold ${pct(share, 0)} of the shares. Two years of losses and it will replace you.`, { severity: 'alert', bankId: b.id });
+  }
+  if (losing >= 8) removeCeo(ctx, b, `${losing} quarters of losses`);
+}
+
+function removeCeo(ctx: Ctx, b: Bank, why: string): void {
+  const { world } = ctx;
+  const p = world.player;
+  // The CEO's shares are sold on the way out at the private sale price.
+  const price = bookValuePerShare(b) * 0.8;
+  const gross = Math.round(p.shares * Math.max(0, price));
+  const net = Math.round(gross * (1 - p.taxRate));
+  p.cash += net;
+  p.stockSaleProceeds += net;
+  p.shares = 0;
+  p.bankId = null;
+  world.playerBankId = null;
+  const rec = p.record.find((x) => x.bankId === b.id);
+  if (rec) {
+    rec.to = world.day;
+    rec.outcome = 'removed';
+  }
+  b.kind = 'rival';
+  b.ai = randomPolicy(world.rng);
+  milestone(ctx, `The board of ${b.name} replaced you after ${why}`);
+  emit(ctx, 'system', `The board of ${b.name} replaced you as chief executive after ${why}. Your shares were sold at ${price.toFixed(2)}: ${money(net)} after tax.`, { severity: 'alert', bankId: b.id });
+  addPending(ctx, {
+    kind: 'failure',
+    bankId: b.id,
+    title: `The board of ${b.name} has replaced you`,
+    lines: [`After ${why} with you holding under half the shares, the board named a new chief executive. The bank goes on without you.`, `Your shares were sold at ${price.toFixed(2)} a share, ${money(net)} after tax. You have ${money(p.cash)}.`, 'A CEO who keeps half the shares cannot be removed; a raise that takes you under half hands the board that power.'],
+    options: [{ key: 'k', label: 'Acknowledge' }],
+    data: {},
+  });
+}
+
 // Private placement to passive investors at a discount to book that
 // widens when the bank is weak or the cycle is bad. The player may take
 // part of the round with personal cash. Everyone else is diluted.
@@ -124,13 +203,9 @@ export function raiseCapital(ctx: Ctx, b: Bank, amount: number, playerPortion: n
   if (amount <= 0) return null;
   const isPlayer = world.playerBankId === b.id;
   if (isPlayer && playerPortion > world.player.cash) return null;
-  const maxRound = Math.max(1_000_000, Math.round(totalEquity(b.acct) * 0.75));
-  if (amount > maxRound) return null;
-  const book = bookValuePerShare(b);
-  if (book <= 0) return null;
-  let discount = Math.min(1.2, Math.max(0.55, 0.85 * priceToBook(world, b)));
-  if (leverageRatio(b.acct) < PCA_WELL) discount *= 0.8;
-  const price = Math.max(0.01, book * discount);
+  const terms = raiseTerms(world, b, amount);
+  if (!terms) return null;
+  const { price, discount } = terms;
   const shares = Math.max(1, Math.round(amount / price));
   post(b.acct, { cash: amount, commonStock: amount });
   b.shares += shares;

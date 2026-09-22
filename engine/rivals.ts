@@ -67,6 +67,7 @@ export function rivalFromSeed(world: World, seed: BankSeed, r: Rng, taken: Set<s
     securitiesHTM: securities - Math.round(securities * 0.7),
     criticized: 0.03 + 0.07 * ai.riskAppetite,
   });
+  bank.officesExtra = Math.max(0, Math.round(seed.offices ?? 1) - 1);
   bank.national = opts.national ?? false;
   adoptPolicy(bank, ai, r);
   bank.overheadRate = Math.max(0.015, randNormal(r, 0.025, 0.004));
@@ -266,6 +267,23 @@ export function rivalsMonthly(ctx: Ctx): void {
         const home = b.homeCounty ? world.geo.counties[b.homeCounty] : undefined;
         b.branches.push({ id: nextId(world, 'br'), county: county.fips, openedDay: world.day, deposits: 0, fixedCost: Math.round(county.wage * 52 * 6 * 1.35), distanceKm: home ? Math.round(distanceKm(home, county)) : 0, competitiveTarget: null });
         emit(ctx, 'rival', `${b.name} opened a branch in ${county.name}, across the street from yours`, { severity: 'alert', bankId: b.id });
+      }
+    } else if (b.kind === 'rival' && b.homeCounty && ai.branchPush > 0.5 && b.branches.length < 12 && leverageRatio(b.acct) >= 0.08 && chance(derive(world.seed, hashString(`expand:${b.id}:${world.day}`)), 0.003 * ai.branchPush)) {
+      // A pushy rival grows its own network (D60): the largest county pool
+      // in its state within 300 km of home where it has no branch.
+      const home = world.geo.counties[b.homeCounty];
+      let best: CountyState | undefined;
+      if (home) {
+        for (const c of Object.values(world.geo.counties)) {
+          if (c.state !== b.state || c.depositPool <= 0 || b.branches.some((x) => x.county === c.fips)) continue;
+          if (distanceKm(home, c) > 300) continue;
+          if (!best || c.depositPool > best.depositPool) best = c;
+        }
+      }
+      if (home && best && b.acct.cash > best.wage * 52 * 12) {
+        b.branches.push({ id: nextId(world, 'br'), county: best.fips, openedDay: world.day, deposits: 0, fixedCost: Math.round(best.wage * 52 * 6 * 1.35), distanceKm: Math.round(distanceKm(home, best)), competitiveTarget: null });
+        if (player && player.branches.some((x) => x.county === best!.fips)) emit(ctx, 'rival', `${b.name} opened a branch in ${best.name}, where you have one`, { severity: 'alert', bankId: b.id });
+        else if (player && player.state === b.state) emit(ctx, 'rival', `${b.name} opened a branch in ${best.name}, ${best.state}`, { bankId: b.id });
       }
     }
   }

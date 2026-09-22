@@ -7,7 +7,7 @@ import { bankDepositRate, marketDepositRate } from '../engine/deposits';
 import { leverageRatio, totalAssets, totalDeposits } from '../engine/ledger';
 import { capitalStack, creConcentration } from '../engine/regulation';
 import { dealCapacity, reservationPriceToBook } from '../engine/deals';
-import { tangibleEquity } from '../engine/capital';
+import { ownership, tangibleEquity } from '../engine/capital';
 import { defaultSalary } from '../engine/wealth';
 import { type World, playerBank } from '../engine/state';
 import { dateOf } from '../engine/time';
@@ -66,6 +66,12 @@ export function adviceFor(world: World): Card[] {
     if (price <= cap.cash) out.push({ key: 'buy', text: `${target.name} (${short(totalAssets(target.acct))} of assets) is for sale nearby for about ${short(price)}, and you can pay it. Buying a bank is the fastest way up the ladder: World tab, the other banks, open it and make an offer.` });
   }
   if (ageYears >= 3 && strong && b.dividendPayout === 0 && b.reports.slice(-4).every((r) => r.netIncome > 0) && b.reports.length >= 4) out.push({ key: 'div', text: `Three years in, profitable and well capitalized: the bank can start paying a dividend. You own ${pct(world.player.shares / Math.max(1, b.shares), 0)} of it, so a payout is your money too. You tab, dividend payout.` });
+  const share = ownership(world, b).player;
+  if (share < 0.5 && ageYears >= 2.5) {
+    let losing = 0;
+    for (let i = b.reports.length - 1; i >= 0 && b.reports[i]!.netIncome < 0; i--) losing++;
+    if (losing >= 2) out.push({ key: 'control', text: `You hold ${pct(share, 0)} of the bank and it has lost money for ${losing} quarters. Under half, the board can replace you after two years of losses. Put your own money into the next raise on the You tab, or get the bank back in the black.` });
+  }
   const boardPay = defaultSalary(assets);
   if (world.player.salary < boardPay * 0.5 && assets > 50_000_000 && strong) out.push({ key: 'pay', text: `A CEO of a ${short(assets)} bank is usually paid about ${short(boardPay)}; you take ${short(world.player.salary)}. The You tab sets your salary. Too much and the board notices; the advisor says so at 1% of assets.` });
   if (b.forSale === false && b.reviews.length >= 4) {

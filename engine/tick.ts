@@ -13,10 +13,11 @@ import { markSecurities, securitiesRunoff, investPolicyMonthly } from './funding
 import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
 import { decideWorkout, loansDaily, loansMonthly } from './loans';
+import { branchOffersMonthly, decideBranchOffer } from './branchdeals';
 import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
 import { rivalsMonthly, rivalsQuarterly } from './rivals';
-import { stockMonthly } from './capital';
+import { stockMonthly, boardQuarterly } from './capital';
 import { dealsMonthly, decideAuction, decideCompetingBid, decideOffer, expireDeals } from './deals';
 import { feesMonthly, linesMonthly, linesYearEnd } from './lines';
 import { emptyByType } from './loantypes';
@@ -41,7 +42,7 @@ import {
   tier1Capital,
 } from './ledger';
 import { assessmentRate, growthRestricted, regulationMonthly, stressTestAnnual } from './regulation';
-import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP } from './state';
+import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP, branchFixedCost } from './state';
 import { dateOf, daysInMonth, formatDate, isMonthEnd, isQuarterEnd, isYearEnd, quarterOf } from './time';
 import { wealthMonthly, wealthQuarterly } from './wealth';
 
@@ -95,6 +96,9 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
       return;
     case 'workout':
       decideWorkout(ctx, pending, decision);
+      return;
+    case 'branch_offer':
+      decideBranchOffer(ctx, pending, decision);
       return;
     case 'assisted_auction':
       decideAuction(ctx, pending, decision);
@@ -210,6 +214,12 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
   const avgEarning = (adb.cash + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
   let branchCost = 0;
   for (const br of b.branches) branchCost += br.fixedCost;
+  // A seeded rival's other offices cost what a branch costs at home, without
+  // a branch record each (aggregation): the FDIC office count is real.
+  if (b.officesExtra) {
+    const home = b.homeCounty ? ctx.world.geo.counties[b.homeCounty] : undefined;
+    if (home) branchCost += b.officesExtra * branchFixedCost(home);
+  }
   const overhead = accrue(avgEarning, b.overheadRate, days) + accrue(branchCost + officerPayroll(b), 1, days);
   if (overhead > 0) {
     const salaries = Math.round((overhead * calibration.salariesShareOfNie.typical) / 100);
@@ -268,6 +278,7 @@ function monthlyClose(ctx: Ctx): void {
   }
   rivalsMonthly(ctx);
   dealsMonthly(ctx);
+  branchOffersMonthly(ctx);
   stockMonthly(ctx);
   depositsMonthly(ctx);
   officersMonthly(ctx);
@@ -294,6 +305,7 @@ function quarterlyClose(ctx: Ctx): void {
     taxQuarter(b);
   }
   wealthQuarterly(ctx);
+  boardQuarterly(ctx);
   reviewQuarterly(ctx);
   rivalsQuarterly(ctx);
   globalQuarterly(ctx);

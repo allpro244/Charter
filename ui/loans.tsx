@@ -8,7 +8,7 @@ import { TYPE, bookByType } from '../engine/credit';
 import { GRADES, LOAN_TYPES, type LoanType, emptyByType } from '../engine/loantypes';
 import { type Bank, type Loan, type Pool, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
-import { decidedText, isTroubled, noteSalePrice, reoQuickPrice, sellLoan, sellReoNow } from '../engine/loans';
+import { customerOf, decidedText, isTroubled, noteSalePrice, reoQuickPrice, sellLoan, sellReoNow } from '../engine/loans';
 import { nonperformingSale, sellNonperforming } from '../engine/credit';
 import type { Ctx } from '../engine/ctx';
 import { PRICING_MAX, PRICING_MIN, autoSizeLine, committeeLine, demandMultiplier, setDial, setDialMode, setPolicy, setPricing, setTypeAllowed } from '../engine/underwriting';
@@ -81,11 +81,9 @@ export function LoansScreen({ world, bank, unit, refresh, act }: Props) {
                 <td className="num">{dollars(r.balance, unit)}</td>
                 <td className="num">{pct(total > 0 ? r.balance / total : 0, 1)}</td>
                 <td className="num">{pct(r.yield)}</td>
-                <td>
-                  <HealthBar share={weak} />
-                </td>
-                <td className={'num' + (weak > 0.08 ? ' alert' : '')}>{pct(weak, 1)}</td>
-                <td className="num">{pct(r.balance > 0 ? r.nonaccrual / r.balance : 0, 1)}</td>
+                <td>{r.balance >= 1_000_000 ? <HealthBar share={weak} /> : <span className="dim">under $1MM</span>}</td>
+                <td className={'num' + (weak > 0.08 && r.balance >= 1_000_000 ? ' alert' : '')}>{r.balance >= 1_000_000 ? pct(weak, 1) : ''}</td>
+                <td className="num">{r.balance >= 1_000_000 ? pct(r.balance > 0 ? r.nonaccrual / r.balance : 0, 1) : ''}</td>
                 <td className="num">{dollars(bank.lifetimeChargeOffsByType[r.type], unit)}</td>
               </tr>
             );
@@ -260,6 +258,11 @@ function LoanRows({ world, bank, l, unit, open, toggle, act }: { world: World; b
                 `Leverage ${l.memo.leverage.toFixed(1)}x, ${l.memo.paymentHistory} history, ${l.memo.tenureYears.toFixed(1)} years in place, sector ${l.memo.sector}, ${l.memo.employees > 0 ? `revenue ${short(l.memo.income)}, ${l.memo.employees} employees` : `income ${short(l.memo.income)}`}.`,
                 `Original ${short(l.principal)} over ${l.termMonths} months, payment ${short(l.payment)} on day ${l.paymentDay}. Months late ${l.monthsLate}. Loss to date ${short(l.lossToDate)}.`,
                 `${decidedText(l)}: ${l.decision.note}.${l.attribution ? ` Default signal: ${l.attribution}.` : ''}`,
+                ...(() => {
+                  const c = customerOf(bank, l);
+                  return c && c.loans > 1 ? [`Customer since ${formatDate(l.originated - Math.round(c.tenureYears * 365))}: ${c.loans} loans here, ${c.paidOff} paid off, ${c.wentBad} went bad.`] : [];
+                })(),
+                ...(l.restructured ? [`Restructured on ${formatDate(l.restructured.day)}: was ${pct(l.restructured.oldRate)} and ${short(l.restructured.oldPayment)} a month; ${l.restructured.paidSince} clean payments since.`] : []),
                 `CCO: ${l.memo.summary}`,
                 ...l.memo.redFlags.map((f) => `  flag: ${f}`),
               ].join('\n')}

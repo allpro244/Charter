@@ -2,7 +2,7 @@
 // buyback, secondary, share sales, subordinated debt.
 
 import { useState } from 'react';
-import { IPO_FLOOR, buyback, canIpo, fairPrice, formHoldingCompany, ipo, issueSubDebt, marketCap, ownership, priceToBook, raiseCapital, secondary, sellPlayerShares } from '../engine/capital';
+import { IPO_FLOOR, buyback, canIpo, controlWord, fairPrice, formHoldingCompany, ipo, issueSubDebt, marketCap, ownership, priceToBook, raiseCapital, raiseTerms, secondary, sellPlayerShares, stakeAfterRaise } from '../engine/capital';
 import type { Ctx } from '../engine/ctx';
 import { totalAssets, totalEquity } from '../engine/ledger';
 import { type Bank, type World, bookValuePerShare } from '../engine/state';
@@ -40,6 +40,13 @@ export function CapitalPanel({ world, bank, act }: { world: World; bank: Bank; a
             <td></td>
           </tr>
           <tr>
+            <td>Control</td>
+            <td className="num">{controlWord(own.player) === 'owner' ? 'yours' : "the board's"}</td>
+            <td className={controlWord(own.player) === 'owner' ? 'dim' : 'alert'}>
+              {controlWord(own.player) === 'owner' ? 'You hold half the shares or more: nobody can remove you.' : 'Under half, you serve at the board\u2019s pleasure: after the third year it can replace you after two years of losses.'}
+            </td>
+          </tr>
+          <tr>
             <td>Book value per share / fair value per share</td>
             <td className="num">
               {bookValuePerShare(bank).toFixed(2)} / {fairPrice(world, bank).toFixed(2)} ({priceToBook(world, bank).toFixed(2)}x book)
@@ -63,7 +70,13 @@ export function CapitalPanel({ world, bank, act }: { world: World; bank: Bank; a
               <input className="amount" type="number" value={raise} step={step} min={step} onChange={(e) => setRaise(Number(e.target.value))} />
             </td>
             <td>
-              <button className="btn primary small" disabled={bank.isPublic} onClick={() => act((c) => raiseCapital(c, bank, raise, playerPart))}>Raise</button>
+              <button className="btn primary small" disabled={bank.isPublic} onClick={() => act((c) => raiseCapital(c, bank, raise, playerPart))}>Raise</button>{' '}
+              {(() => {
+                const t = raiseTerms(world, bank, raise);
+                const after = stakeAfterRaise(world, bank, raise, playerPart);
+                if (!t || after === null) return <span className="dim">too large a round for the equity</span>;
+                return <span className={after < 0.5 && own.player >= 0.5 ? 'alert' : 'dim'}>at {t.price.toFixed(2)} a share you would hold {pct(after, 1)}{after < 0.5 && own.player >= 0.5 ? ': below half, the board could replace you' : ''}</span>;
+              })()}
             </td>
           </tr>
           <tr>

@@ -5,6 +5,7 @@
 // failure resolved by a purchase and assumption.
 
 import { decideWorkout } from './loans';
+import { decideBranchOffer } from './branchdeals';
 import { calibration } from '../data/calibration';
 import { fairPrice, ownership, priceToBook, tangibleEquity } from './capital';
 import { TYPE, absorbPool, consolidatePools, lgdNow, PD_BY_GRADE, stressFor } from './credit';
@@ -602,6 +603,7 @@ export function expireDeals(ctx: Ctx): void {
       if (buyer) closeForeign(ctx, buyer, p.data.foreign as ForeignCandidate);
     } else if (p.kind === 'acquisition_offer') decideOffer(ctx, p, null);
     else if (p.kind === 'workout') decideWorkout(ctx, p, null);
+    else if (p.kind === 'branch_offer') decideBranchOffer(ctx, p, null);
   }
 }
 

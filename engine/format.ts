@@ -6,7 +6,7 @@ export function money(x: number): string {
   let s: string;
   if (abs >= 1e12) s = `$${(abs / 1e12).toFixed(2)}T`;
   else if (abs >= 1e9) s = `$${(abs / 1e9).toFixed(2)}B`;
-  else if (abs >= 1e6) s = `$${(abs / 1e6).toFixed(1)}M`;
+  else if (abs >= 1e6) s = `$${(abs / 1e6).toFixed(1)}MM`;
   else if (abs >= 1e3) s = `$${(abs / 1e3).toFixed(0)}K`;
   else s = `$${abs.toFixed(0)}`;
   return x < 0 ? `(${s})` : s;
