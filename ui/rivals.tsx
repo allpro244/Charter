@@ -162,9 +162,9 @@ function RivalRows({ r, bank, world, unit, open, toggle, act, why }: { r: Return
         <td className="num">{dollars(r.deposits, unit)}</td>
         <td className="num">{dollars(r.loans, unit)}</td>
         <td className={'num' + (r.leverage < 0.05 && r.status === 'open' ? ' alert' : '')}>{pct(r.leverage, 1)}</td>
-        <td className="num">{pct(r.roa)}</td>
-        <td className="num">{pct(r.nim)}</td>
-        <td className="num">{pct(r.nco)}</td>
+        <td className="num">{r.filed ? pct(r.roa) : 'n/a'}</td>
+        <td className="num">{r.filed ? pct(r.nim) : 'n/a'}</td>
+        <td className="num">{r.filed ? pct(r.nco) : 'n/a'}</td>
         <td className="num">{r.branches}</td>
         <td>{r.status}</td>
       </tr>

@@ -660,6 +660,18 @@ export function noteLifetimeLoss(b: Bank, t: LoanType, amount: number): void {
   b.lifetimeChargeOffsByType[t] += amount;
 }
 
+// Operating accounts (D58): a business that borrows keeps its operating
+// balances with the lender. The share of C&I and owner occupied CRE
+// balances kept on deposit is a hand band; recomputed at the monthly
+// close and read by the deposit targets daily.
+export function businessBalances(b: Bank): number {
+  const share = calibration.operatingBalanceShare.typical / 100;
+  let business = 0;
+  for (const p of b.pools) if (p.type === 'ci' || p.type === 'cre_oo') business += p.balance;
+  for (const l of b.loans) if ((l.type === 'ci' || l.type === 'cre_oo') && l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'reo' && l.status !== 'sold') business += l.balance;
+  return Math.round(business * share);
+}
+
 // Bank-level view for the desk.
 export function bookByType(b: Bank): { type: LoanType; label: string; balance: number; count: number; criticized: number; nonaccrual: number; yield: number }[] {
   const out = [] as ReturnType<typeof bookByType>;

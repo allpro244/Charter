@@ -6,13 +6,13 @@
 // 11, 21; D30.)
 
 import { calibration } from '../data/calibration';
-import { originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
+import { businessBalances, originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
 import { type Ctx, emit, milestone } from './ctx';
 import { decideRatePrompt, depositsDaily, depositsMonthly } from './deposits';
 import { markSecurities, securitiesRunoff, investPolicyMonthly } from './funding';
 import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
-import { loansDaily, loansMonthly } from './loans';
+import { decideWorkout, loansDaily, loansMonthly } from './loans';
 import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
 import { rivalsMonthly, rivalsQuarterly } from './rivals';
@@ -92,6 +92,9 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
       return;
     case 'rate_prompt':
       decideRatePrompt(ctx, pending, decision);
+      return;
+    case 'workout':
+      decideWorkout(ctx, pending, decision);
       return;
     case 'assisted_auction':
       decideAuction(ctx, pending, decision);
@@ -243,6 +246,7 @@ function monthlyClose(ctx: Ctx): void {
     feesMonthly(ctx, b);
     if (b.id === world.playerBankId) loansMonthly(ctx, b, days, b.losses);
     poolsMonthly(ctx, b, days);
+    b.operatingBase = businessBalances(b);
     linesMonthly(ctx, b);
     if (b.foreign.length > 0) foreignMonthly(ctx, b, days);
     // Rivals lend through pools. So do the player's lenders, under the
@@ -306,6 +310,7 @@ function quarterlyClose(ctx: Ctx): void {
     if (isYearEnd(world.day)) {
       b.is.lastYear = b.is.year;
       b.is.year = emptyIS();
+      b.originationsLastYear = Object.values(b.originationsByType).reduce((s, x) => s + x, 0);
       b.originationsByType = emptyByType(0);
       b.applicationsByType = emptyByType(0);
       b.declinedForFunding = 0;

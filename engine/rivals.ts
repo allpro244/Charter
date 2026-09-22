@@ -429,6 +429,7 @@ export function rivalReport(world: World, b: Bank) {
     deposits: totalDeposits(b.acct),
     loans: b.acct.loans,
     leverage: leverageRatio(b.acct),
+    filed: !!last,
     roa: last?.roa ?? 0,
     nim: last?.nim ?? 0,
     nco: last?.ncoRate ?? 0,

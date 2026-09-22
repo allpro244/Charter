@@ -91,8 +91,10 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   // Capacity caps growth; it never pushes out what a branch already holds,
   // it grows with nominal income like every other dollar figure, and a
   // full branch can still add a few percent a month toward its share.
+  // Far from home the capacity shrinks with the reach too: an unknown
+  // name fills no branch, however big the county.
   const index = world.economy.nominalIndex ?? 1;
-  return Math.round(Math.min(fromShare, Math.max(perBranch * index, br.deposits * 1.04)));
+  return Math.round(Math.min(fromShare, Math.max(perBranch * index * distance, br.deposits * 1.04)));
 }
 
 // Attractiveness of a branch to depositors in its county: the rate sheet
@@ -175,6 +177,9 @@ export function depositTargets(world: World, b: Bank): Record<DepositType, numbe
     const rateFactor = Math.max(0.2, 1 + elasticity * SENSITIVITY[t] * (gap / 0.01));
     out[t] = Math.round(base * DEFAULT_MIX[t] * rateFactor * conf);
   }
+  // Business borrowers keep their operating accounts here (D58): checking
+  // that follows the loan, not the rate sheet.
+  out.checking += Math.round((b.operatingBase ?? 0) * conf);
   return out;
 }
 
@@ -226,12 +231,21 @@ function allocateToBranches(world: World, b: Bank, flow: number): void {
     (b.branches[0] as Branch).deposits = coreDeposits(b);
     return;
   }
+  // Inflows go to the branches with room under their own targets and
+  // outflows leave in proportion to what each branch holds, so every
+  // branch gathers toward its own target rather than a share of the
+  // bank's. With no room anywhere, the targets share the flow.
   let weight = 0;
-  const w = b.branches.map((br) => {
-    const x = Math.max(1, branchTarget(world, b, br));
-    weight += x;
-    return x;
-  });
+  let w = b.branches.map((br) => (flow >= 0 ? Math.max(0, branchTarget(world, b, br) - br.deposits) : br.deposits));
+  for (const x of w) weight += x;
+  if (weight <= 0) {
+    weight = 0;
+    w = b.branches.map((br) => {
+      const x = Math.max(1, branchTarget(world, b, br));
+      weight += x;
+      return x;
+    });
+  }
   b.branches.forEach((br, i) => {
     br.deposits = Math.max(0, br.deposits + Math.round((flow * (w[i] as number)) / weight));
   });

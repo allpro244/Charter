@@ -2,13 +2,14 @@
 // plain-words profit summary, three sparklines, what to do next, and the
 // recent feed. Every gauge links to the tab that changes it.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type React from 'react';
 import { calibration } from '../data/calibration';
 import { bookByType } from '../engine/credit';
 import { bankDepositRate, marketDepositRate } from '../engine/deposits';
 import { fhlbCapacity } from '../engine/funding';
 import { type IncomeStatement, interestExpense, interestIncome, leverageRatio, netIncome, noninterestExpense, tier1Capital, totalAssets, totalDeposits } from '../engine/ledger';
+import { PEER_METRICS, levers, peerGroup } from '../engine/peers';
 import { PCA_LABEL, pcaCategory } from '../engine/regulation';
 import { type Bank, type FeedItem, type Pending, type World, emptyDesk } from '../engine/state';
 import { formatDate } from '../engine/time';
@@ -157,10 +158,9 @@ export function OverviewScreen({
   const mine = bank.loans.filter((l) => l.decision.by === 'player');
   const late = mine.filter((l) => l.status === 'late30' || l.status === 'late60').length;
   const nonaccrual = mine.filter((l) => l.status === 'nonaccrual').length;
-  const reports = bank.reports.slice(-40);
   return (
     <div>
-      <p className="hint">How the bank is doing, in five numbers. Hover any underlined word for what it means; click a gauge to open the tab that changes it.</p>
+      <p className="hint">How the bank is doing, in five numbers, then against the banks your size, then what one step of each lever is worth. Hover any underlined word for what it means; click a gauge or a lever to open the tab that changes it.</p>
       <div className="gauges">
         {g.map((x) => (
           <button key={x.key} className={'gauge ' + x.tone} onClick={() => onGo(x.go)}>
@@ -176,6 +176,8 @@ export function OverviewScreen({
       </div>
       <div className="feed-grid">
         <div>
+          <Peers world={world} bank={bank} />
+          <Levers world={world} bank={bank} onGo={onGo} />
           <table className="wrap">
             <thead>
               <tr>
@@ -199,13 +201,6 @@ export function OverviewScreen({
               })}
             </tbody>
           </table>
-          {reports.length >= 2 && (
-            <div className="sparks">
-              <SparkPanel label="Assets" value={usd(totalAssets(bank.acct))} values={reports.map((r) => r.assets)} />
-              <SparkPanel label="Profit by quarter" value={usd(reports[reports.length - 1]!.netIncome)} values={reports.map((r) => r.netIncome)} />
-              <SparkPanel label="Deposits" value={usd(totalDeposits(bank.acct))} values={reports.map((r) => r.deposits)} />
-            </div>
-          )}
           <div className="side-title">
             {fullFeed ? 'The full feed' : 'Recent'}
             <button className="btn small" onClick={() => setFullFeed((v) => !v)}>
@@ -278,6 +273,19 @@ export function OverviewScreen({
   );
 }
 
+// The three sparklines: assets, profit by quarter, deposits, on Results.
+export function Sparks({ bank }: { bank: Bank }) {
+  const reports = bank.reports.slice(-40);
+  if (reports.length < 2) return null;
+  return (
+    <div className="sparks">
+      <SparkPanel label="Assets" value={usd(totalAssets(bank.acct))} values={reports.map((r) => r.assets)} />
+      <SparkPanel label="Profit by quarter" value={usd(reports[reports.length - 1]!.netIncome)} values={reports.map((r) => r.netIncome)} />
+      <SparkPanel label="Deposits" value={usd(totalDeposits(bank.acct))} values={reports.map((r) => r.deposits)} />
+    </div>
+  );
+}
+
 function SparkPanel({ label, value, values }: { label: string; value: string; values: number[] }) {
   return (
     <div className="spark-panel">
@@ -287,6 +295,78 @@ function SparkPanel({ label, value, values }: { label: string; value: string; va
       </div>
       <Sparkline values={values} width={300} height={40} />
     </div>
+  );
+}
+
+// Banks your size (D56): the peer medians beside your own numbers.
+function Peers({ world, bank }: { world: World; bank: Bank }) {
+  const g = useMemo(() => peerGroup(world, bank), [world, bank, world.day]);
+  const filed = bank.reports.length > 0;
+  return (
+    <table className="wrap">
+      <thead>
+        <tr>
+          <th>Banks your size ({num(g.n)} of them)</th>
+          <th className="num">you</th>
+          <th className="num">they</th>
+          <th>which is</th>
+        </tr>
+      </thead>
+      <tbody>
+        {PEER_METRICS.map((m) => {
+          const you = g.you[m.key];
+          const they = g.peers[m.key];
+          const have = filed && Number.isFinite(you) && Number.isFinite(they);
+          const diff = have ? you - they : 0;
+          const close = Math.abs(diff) < 0.001;
+          const better = m.higherIsBetter ? diff > 0 : diff < 0;
+          const word = !have ? '' : close ? 'about the same' : better ? 'better' : 'worse';
+          return (
+            <tr key={m.key}>
+              <td>
+                <Term k={m.label}>{m.label}</Term>
+              </td>
+              <td className="num">{have ? pct(you, 2) : filed ? 'n/a' : ''}</td>
+              <td className="num">{Number.isFinite(they) ? pct(they, 2) : 'n/a'}</td>
+              <td className={word === 'better' ? 'positive' : word === 'worse' ? 'alert' : 'dim'}>{word}</td>
+            </tr>
+          );
+        })}
+        <tr className="memo-row">
+          <td colSpan={4}>{filed ? 'Medians of the simulated banks between a third and three times your assets, from their last call report; growth needs a year of reports.' : 'Your first call report closes at the end of the quarter; the other banks have filed.'}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+// What moves the needle (D56): one step of each lever and a year of it.
+function Levers({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: string) => void }) {
+  const ls = useMemo(() => levers(world, bank), [world, bank, world.day]);
+  return (
+    <table className="wrap">
+      <thead>
+        <tr>
+          <th>What moves the needle</th>
+          <th>today</th>
+          <th>one step</th>
+          <th className="num">a year of it</th>
+        </tr>
+      </thead>
+      <tbody>
+        {ls.map((l) => (
+          <tr key={l.key} className="row" onClick={() => onGo(l.tab)} title={l.note}>
+            <td>{l.label}</td>
+            <td>{l.today}</td>
+            <td>{l.step}</td>
+            <td className={'num' + (l.effect > 0 ? ' positive' : l.effect < 0 ? ' alert' : '')}>{l.effect === 0 ? '' : (l.effect > 0 ? '+' : '-') + usd(Math.abs(l.effect))}</td>
+          </tr>
+        ))}
+        <tr className="memo-row">
+          <td colSpan={4}>Profit before tax from one step, on today's balances, before anyone reacts; hover a line for what it leaves out. Click a line to open the tab that moves it.</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 

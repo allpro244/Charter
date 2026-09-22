@@ -7,6 +7,7 @@ import type { Unit } from './format';
 import { GrowthScreen } from './growth';
 import { QtrScreen } from './qtr';
 import { IncomeScreen } from './screens';
+import { Sparks } from './overview';
 
 export function EarningsScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const [tab, setTab] = useState<'period' | 'why' | 'qoq' | 'yoy'>('period');
@@ -29,6 +30,7 @@ export function EarningsScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
           </button>
         </div>
       </div>
+      {tab === 'period' && <Sparks bank={bank} />}
       {tab === 'period' && <IncomeScreen bank={bank} unit={unit} />}
       {tab === 'why' && <QtrScreen bank={bank} unit={unit} />}
       {(tab === 'qoq' || tab === 'yoy') && <GrowthScreen bank={bank} mode={tab} />}

@@ -86,10 +86,11 @@ describe('where to open a branch (D55)', () => {
       }
       results.push(br.deposits / top.mature);
     }
-    // The case is the uncontested ceiling; a real branch reaches a good part of it and never more than the ceiling by much.
+    // The case is the uncontested ceiling at opening; a real branch reaches a
+    // good part of it, and can pass it as the bank grows and its reach with it.
     for (const x of results) {
       expect(x).toBeGreaterThan(0.3);
-      expect(x).toBeLessThan(1.3);
+      expect(x).toBeLessThan(2);
     }
   });
 });

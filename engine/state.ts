@@ -149,6 +149,8 @@ export interface Bank {
   ratePeg: Record<DepositType, number> | null; // the deposit sheet follows the market at these offsets; null holds the sheet by hand (D50)
   investPolicy: InvestPolicy | null; // the CFO's standing order for cash above the target (D50)
   lendersBooked: number; // pooled loans the lenders booked last month under the written policy (D50)
+  operatingBase?: number; // business borrowers' operating balances, recomputed monthly (D58)
+  originationsLastYear?: number; // all types, the calendar year before this one
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
@@ -388,6 +390,7 @@ export interface Loan {
   lossToDate: number;
   reoValue: number;
   signals: { field: string; contribution: number; text: string }[]; // visible score at approval
+  restructured?: { day: number; oldRate: number; oldPayment: number; paidSince: number; misses: number }; // the workout concession (D57)
 }
 
 export interface LoanPolicy {
@@ -626,7 +629,8 @@ export type PendingKind =
   | 'officer_event'
   | 'capital_raise'
   | 'ipo_window'
-  | 'assisted_auction';
+  | 'assisted_auction'
+  | 'workout';
 
 export interface PendingOption {
   key: string; // the keyboard key

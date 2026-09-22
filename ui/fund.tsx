@@ -128,6 +128,9 @@ function Deposits({ world, bank, unit, act }: Props) {
               </tr>
             );
           })}
+          <tr className="memo-row">
+            <td colSpan={6}>Operating accounts: your business borrowers keep about {usd(bank.operatingBase ?? 0)} of their working cash in checking here, {pct(core > 0 ? (bank.operatingBase ?? 0) / core : 0, 1)} of core deposits. It follows the C&I and owner occupied CRE book, not the rate sheet.</td>
+          </tr>
           <tr className="total">
             <td>Core deposits</td>
             <td className="num">{dollars(core, unit)}</td>

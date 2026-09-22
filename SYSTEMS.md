@@ -20,7 +20,7 @@ Invariants: curve within historical bounds. Recessions average every 7 to 12 yea
 
 ## 3. Credit (the core)
 Cadence: daily applications and payments; monthly migration, reserve, pool roll.
-Owns: borrowers, applications, relationship book, pools, delinquencies, workouts, foreclosures, REO, allowance, charge-offs, recoveries, loan policy, delegation dial.
+Owns: borrowers, applications, relationship book, pools, delinquencies, workouts, foreclosures, REO, allowance, charge-offs, recoveries, loan policy, delegation dial. The workout (D57): at nonaccrual a loan the CEO decided or above the size line comes to the desk (restructure, sell the note, let it run); below the line the officer restructures when the new payment is covered; a restructured loan returns to accrual after six clean payments and re-defaults on a second miss at the `tdrRedefaultRate` band.
 Two representations (D29):
 - Relationship book: individual loans for the player's bank, capped. Each has a borrower, a memo, a decision record (who approved, when, under what policy), and a full lifecycle.
 - Pools: per bank, per loan type, per vintage year. Count, balance, grade distribution (buckets 1 to 9), delinquency buckets, cumulative loss. Migration matrix moves balance between grades monthly, driven by the economy. Rivals are pools only.
@@ -32,7 +32,7 @@ Invariants: cumulative net charge-offs over 20 year runs in FDIC bands per type.
 
 ## 4. Deposits and funding
 Cadence: daily flows; monthly rate resets and beta updates.
-Owns: deposits by type per branch, rate sheet, betas, stickiness, runs, brokered, FHLB capacity, fed funds, later swaps.
+Owns: deposits by type per branch, rate sheet, betas, stickiness, runs, brokered, FHLB capacity, fed funds, later swaps. Operating accounts (D58): the checking target carries the `operatingBalanceShare` band of the business loan book. Branch inflows go to the branches with room under their own targets.
 Branches on real counties and metros. Fixed cost scales with local wages and rents from the data. The case for a branch (what it could gather after one and three years and when mature, its break even at the bank's margin) comes from the same target formula the branch runs on, and the ten best counties by a mature year's earnings are ranked for the player (D55). County deposit pools are derived from real population, income, and FDIC deposit totals. Share capture vs rivals based on rate, branch count, years in market, reputation. Distance penalty for far-from-home branches: the reach scale grows with the fourth root of assets (`branchReachKm`).
 Run trigger: capital ratio, unrealized loss vs equity, and rival failure news combine into confidence. Uninsured runs first.
 Invariants: county deposits across all banks equal the county pool. Deposit cost tracks Fed funds with plausible beta by type. Fed +400bp shock produces outflow and unrealized loss in plausible bands.

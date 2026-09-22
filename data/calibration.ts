@@ -133,6 +133,8 @@ export const calibration = {
   depositsPerBranch: hand(40, 400, 120, 'millions of dollars per branch', 'FDIC Summary of Deposits, deposits divided by offices'),
   deNovoShareCeiling: hand(1, 5, 2.5, 'percent of home county deposits after ramp', 'FDIC de novo studies, share after 5 years'),
   branchReachKm: hand(150, 800, 400, 'km from home at which a branch of a $100M bank gathers a third of what it would at home; reach grows with the fourth root of assets', 'no public study found; community bank branch networks are regional, national banks reach everywhere'),
+  tdrRedefaultRate: hand(20, 50, 35, 'percent of restructured loans 60 or more days late again within a year', 'OCC Mortgage Metrics Report, modified loans re-defaulting within twelve months, 2012 to 2019'),
+  operatingBalanceShare: hand(5, 20, 10, 'percent of C&I and owner occupied CRE balances the borrowers keep on deposit with the lender', 'compensating balance practice; Federal Reserve Senior Loan Officer Opinion Survey on business deposit relationships'),
   takeoverPremium: hand(100, 160, 125, 'percent of book value for a control stake', 'S&P bank M&A price to tangible book, small deals'),
   // Global stage (D45). Start values for the countries the game opens
   // with. Sources are FRED and BIS series; hand-entered until a script

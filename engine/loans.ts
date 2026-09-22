@@ -6,13 +6,14 @@
 
 import { type Application, attributionFor, gradeFromZ, scoreSignals } from './borrowers';
 import { TYPE, addToPool, lgdNow, stressFor, chargeOff } from './credit';
-import { type Ctx, emit } from './ctx';
+import { type Ctx, addPending, emit } from './ctx';
 import { sectorReturn12 } from './economy';
 import { post } from './ledger';
 import { type Rng, chance, rand, randInt, randNormal } from './rng';
-import { type Bank, type Customer, type Loan, type LoanType, type World, emptyDesk, nextId } from './state';
+import { type Bank, type Customer, type Decision, type Loan, type LoanType, type Pending, type World, emptyDesk, nextId } from './state';
 import { dateOf, daysInMonth, formatDate } from './time';
-import { money } from './format';
+import { money, pct } from './format';
+import { calibration } from '../data/calibration';
 
 export const RELATIONSHIP_CAP = 500;
 const HISTORY_KEEP_DAYS = 730;
@@ -237,7 +238,9 @@ export function loansDaily(ctx: Ctx, b: Bank): void {
         pays = chance(world.rng, 0.2);
         break;
       default:
-        pays = chance(world.rng, 0.12);
+        // In workout a restructured borrower pays the new payment most
+        // months; the ones who fail again do so at the modification band.
+        pays = l.restructured && l.restructured.misses < 2 ? !chance(world.rng, Math.min(0.5, TDR_MISS_M * Math.max(1, s))) : chance(world.rng, 0.12);
     }
     if (pays) receivePayment(ctx, b, l);
     else missPayment(ctx, b, l);
@@ -268,10 +271,15 @@ function receivePayment(ctx: Ctx, b: Bank, l: Loan): void {
       l.monthsLate = Math.max(0, l.monthsLate - 1);
     } else if (l.status === 'nonaccrual' || l.status === 'workout') {
       l.monthsLate = Math.max(0, l.monthsLate - 1);
-      if (l.monthsLate === 0) {
+      if (l.restructured) l.restructured.paidSince += 1;
+      // Back on accrual: brought fully current, or six clean payments on
+      // the restructured terms (the sustained performance rule).
+      if (l.restructured ? l.restructured.misses < 2 && l.restructured.paidSince >= 6 : l.monthsLate === 0) {
+        l.monthsLate = 0;
+        if (l.restructured) l.restructured.misses = 0;
         l.status = 'current';
         l.grade = Math.min(l.grade, 6);
-        emit(ctx, 'borrower', `${l.borrower} brought the ${TYPE[l.type].label} loan current`, { severity: 'good', bankId: b.id, ref: { kind: 'loan', id: l.id } });
+        emit(ctx, 'borrower', l.restructured ? `${l.borrower} made six clean payments on the restructured ${TYPE[l.type].label} loan: back on accrual` : `${l.borrower} brought the ${TYPE[l.type].label} loan current`, { severity: 'good', bankId: b.id, ref: { kind: 'loan', id: l.id } });
       }
     }
   }
@@ -288,6 +296,11 @@ function receivePayment(ctx: Ctx, b: Bank, l: Loan): void {
 function missPayment(ctx: Ctx, b: Bank, l: Loan): void {
   const { world } = ctx;
   l.monthsLate += 1;
+  if (l.restructured && l.status === 'workout') {
+    l.restructured.paidSince = 0;
+    l.restructured.misses += 1;
+    if (l.restructured.misses === 2) emit(ctx, 'borrower', `${l.borrower} missed a second payment on the restructured ${TYPE[l.type].label} loan: the restructure has failed and the workout runs to its end`, { severity: 'alert', bankId: b.id, ref: { kind: 'loan', id: l.id } });
+  }
   const prev = l.status;
   if (l.status === 'current') l.status = 'late30';
   else if (l.status === 'late30') l.status = 'late60';
@@ -317,8 +330,117 @@ function missPayment(ctx: Ctx, b: Bank, l: Loan): void {
       bankId: b.id,
       ref: { kind: 'loan', id: l.id },
     });
+    openWorkout(ctx, b, l);
     void world;
   }
+}
+
+// The workout (D57). At nonaccrual the choices are real: restructure the
+// loan (a point off the rate, the remaining term extended by half, the
+// payment recomputed on the balance), sell the note, or let the workout
+// run to foreclosure or charge-off at nine months late. Loans the CEO
+// decided or above the size line come to the desk; the rest the workout
+// officer restructures when the new payment is covered and the history
+// is not poor.
+// The monthly chance of a missed payment on restructured terms, solved so
+// that two misses inside a year (sixty days late again) happen at the
+// band: the re-default that ends the restructure.
+const TDR_MISS_M = (() => {
+  const target = calibration.tdrRedefaultRate.typical / 100;
+  let lo = 0;
+  let hi = 0.5;
+  for (let i = 0; i < 40; i++) {
+    const p = (lo + hi) / 2;
+    const twoPlus = 1 - Math.pow(1 - p, 12) - 12 * p * Math.pow(1 - p, 11);
+    if (twoPlus < target) lo = p;
+    else hi = p;
+  }
+  return (lo + hi) / 2;
+})();
+
+export interface RestructureTerms {
+  rate: number;
+  termMonths: number; // remaining, after the extension
+  payment: number;
+  dscr: number; // the memo's coverage at the new payment
+}
+
+export function restructureTerms(world: World, l: Loan): RestructureTerms {
+  const age = Math.max(0, Math.floor((world.day - l.originated) / 30.4));
+  const remaining = Math.max(12, l.termMonths - age);
+  const termMonths = Math.min(360, Math.round(remaining * 1.5));
+  const rate = Math.max(0.01, Math.round((l.rate - 0.01) * 10_000) / 10_000);
+  const payment = levelPayment(l.balance, rate, termMonths);
+  const dscr = payment > 0 ? Math.round(l.memo.dscr * (l.payment / payment) * 100) / 100 : l.memo.dscr;
+  return { rate, termMonths, payment, dscr };
+}
+
+function restructureCovers(world: World, l: Loan): boolean {
+  return restructureTerms(world, l).dscr >= 1 && l.memo.paymentHistory !== 'poor';
+}
+
+export function restructureLoan(ctx: Ctx, b: Bank, loanId: string, by: 'player' | 'officer' = 'player'): boolean {
+  const { world } = ctx;
+  const l = b.loans.find((x) => x.id === loanId);
+  if (!l || (l.status !== 'nonaccrual' && l.status !== 'workout') || l.balance <= 0) return false;
+  const t = restructureTerms(world, l);
+  const age = Math.max(0, Math.floor((world.day - l.originated) / 30.4));
+  const oldPayment = l.payment;
+  l.restructured = { day: world.day, oldRate: l.rate, oldPayment, paidSince: 0, misses: 0 };
+  l.rate = t.rate;
+  l.termMonths = age + t.termMonths;
+  l.payment = t.payment;
+  l.status = 'workout';
+  l.grade = Math.max(l.grade, 7);
+  emit(ctx, 'borrower', `${by === 'player' ? 'Restructured' : 'The workout officer restructured'} the ${TYPE[l.type].label} loan to ${l.borrower}: ${pct(t.rate)} over ${t.termMonths} months, ${money(t.payment)} a month against ${money(oldPayment)}. Six clean payments bring it back on accrual.`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
+  return true;
+}
+
+function openWorkout(ctx: Ctx, b: Bank, l: Loan): void {
+  const { world } = ctx;
+  if (b.id !== world.playerBankId) return;
+  const t = restructureTerms(world, l);
+  const covers = restructureCovers(world, l);
+  const mine = l.decision.by === 'player' || l.balance > b.dial.maxAuto;
+  if (!mine) {
+    if (covers) restructureLoan(ctx, b, l.id, 'officer');
+    return;
+  }
+  const price = noteSalePrice(world, l);
+  const recovery = expectedRecovery(world, l);
+  addPending(ctx, {
+    kind: 'workout',
+    bankId: b.id,
+    blocking: false,
+    expires: world.day + 45,
+    title: `Workout: ${l.borrower}, ${money(l.balance)} ${TYPE[l.type].label}`,
+    lines: [
+      `${l.borrower} is 90 days past due on ${money(l.balance)}. ${l.attribution ?? 'The memo'} predicted it.`,
+      `Restructure: ${pct(t.rate)} over ${t.termMonths} months, ${money(t.payment)} a month against ${money(l.payment)} today. At that payment the coverage is ${t.dscr.toFixed(2)}x${t.dscr >= 1 ? (covers ? ', so it covers.' : ', which covers, but the history is poor.') : l.memo.paymentHistory === 'poor' ? ', so it does not cover, and the history is poor.' : ', so it does not cover.'} About ${calibration.tdrRedefaultRate.typical}% of restructured loans fail again within a year; six clean payments put it back on accrual.`,
+      `Sell the note: a distressed debt buyer pays ${money(price)} now and ${money(Math.max(0, l.balance - price))} is charged off today.`,
+      `Let the workout run: foreclosure or charge-off at nine months late, recovering about ${money(recovery)}.`,
+      'Unanswered for 45 days, the workout officer follows the rule: restructure when it covers, otherwise wait.',
+    ],
+    options: [
+      { key: 'r', label: `Restructure to ${money(t.payment)} a month` },
+      { key: 's', label: `Sell the note for ${money(price)}` },
+      { key: 'w', label: 'Let the workout run' },
+    ],
+    data: { loanId: l.id },
+  });
+}
+
+// The desk's answer, or the officer's rule when the item expires.
+export function decideWorkout(ctx: Ctx, pending: Pending, d: Decision | null): void {
+  const { world } = ctx;
+  const b = pending.bankId ? world.banks[pending.bankId] : undefined;
+  if (!b) return;
+  const l = b.loans.find((x) => x.id === (pending.data.loanId as string));
+  if (!l || (l.status !== 'nonaccrual' && l.status !== 'workout')) return;
+  const choice = d ? d.choice : restructureCovers(world, l) ? 'r' : 'w';
+  if (choice === 'r') restructureLoan(ctx, b, l.id, d ? 'player' : 'officer');
+  else if (choice === 's') sellLoan(ctx, b, l.id);
+  else emit(ctx, 'borrower', `Letting the workout on ${l.borrower} run.`, { bankId: b.id, ref: { kind: 'loan', id: l.id } });
 }
 
 export function decidedText(l: Loan): string {

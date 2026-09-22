@@ -4,6 +4,7 @@
 // time, rival competing bids, rival consolidation, and the player's own
 // failure resolved by a purchase and assumption.
 
+import { decideWorkout } from './loans';
 import { calibration } from '../data/calibration';
 import { fairPrice, ownership, priceToBook, tangibleEquity } from './capital';
 import { TYPE, absorbPool, consolidatePools, lgdNow, PD_BY_GRADE, stressFor } from './credit';
@@ -600,6 +601,7 @@ export function expireDeals(ctx: Ctx): void {
       const buyer = p.bankId ? world.banks[p.bankId] : undefined;
       if (buyer) closeForeign(ctx, buyer, p.data.foreign as ForeignCandidate);
     } else if (p.kind === 'acquisition_offer') decideOffer(ctx, p, null);
+    else if (p.kind === 'workout') decideWorkout(ctx, p, null);
   }
 }
 
