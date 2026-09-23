@@ -6,6 +6,7 @@
 
 import { decideWorkout } from './loans';
 import { decideBranchOffer } from './branchdeals';
+import { decideDepositOffer } from './depositors';
 import { calibration } from '../data/calibration';
 import { fairPrice, ownership, priceToBook, tangibleEquity } from './capital';
 import { TYPE, absorbPool, consolidatePools, lgdNow, PD_BY_GRADE, stressFor } from './credit';
@@ -604,6 +605,7 @@ export function expireDeals(ctx: Ctx): void {
     } else if (p.kind === 'acquisition_offer') decideOffer(ctx, p, null);
     else if (p.kind === 'workout') decideWorkout(ctx, p, null);
     else if (p.kind === 'branch_offer') decideBranchOffer(ctx, p, null);
+    else if (p.kind === 'deposit_offer') decideDepositOffer(ctx, p, null);
   }
 }
 

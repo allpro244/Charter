@@ -14,6 +14,7 @@ import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
 import { decideWorkout, loansDaily, loansMonthly } from './loans';
 import { branchOffersMonthly, decideBranchOffer } from './branchdeals';
+import { decideDepositOffer, depositOffersMonthly, relationshipsMonthly } from './depositors';
 import { peerGroup } from './peers';
 import { decideOfficerEvent, officerPayroll, officersMonthly } from './officers';
 import { reviewQuarterly } from './review';
@@ -100,6 +101,9 @@ function resolve(ctx: Ctx, pending: Pending, decision: Decision): void {
       return;
     case 'branch_offer':
       decideBranchOffer(ctx, pending, decision);
+      return;
+    case 'deposit_offer':
+      decideDepositOffer(ctx, pending, decision);
       return;
     case 'assisted_auction':
       decideAuction(ctx, pending, decision);
@@ -194,6 +198,14 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
       m[isKey(t)] += x;
     }
   }
+  // The premium on negotiated accounts (D62), over the sheet rate.
+  for (const rel of b.relationships ?? []) {
+    const x = accrue(rel.balance, rel.premium, days);
+    if (x > 0) {
+      post(a, { [rel.type]: x, retainedEarnings: -x } as Partial<Accounts>);
+      m[isKey(rel.type)] += x;
+    }
+  }
   const brokered = accrue(adb.brokered / days, b.brokeredRate, days);
   if (brokered !== 0) {
     post(a, { brokered, retainedEarnings: -brokered });
@@ -213,8 +225,11 @@ export function accrueMonth(ctx: Ctx, b: Bank): void {
   // the fixed cost of every branch from real local wages and the officers'
   // pay.
   const avgEarning = (adb.cash + adb.securitiesAFS + adb.securitiesHTM + adb.loans) / days;
+  // The officers are three of the home branch's six seats: a one branch
+  // bank does not pay for them twice.
   let branchCost = 0;
-  for (const br of b.branches) branchCost += br.fixedCost;
+  const seated = Math.min(3, b.officers.length);
+  for (const br of b.branches) branchCost += br.county === b.homeCounty ? Math.round((br.fixedCost * (6 - seated)) / 6) : br.fixedCost;
   // A seeded rival's other offices cost what a branch costs at home, without
   // a branch record each (aggregation): the FDIC office count is real.
   if (b.officesExtra) {
@@ -258,6 +273,7 @@ function monthlyClose(ctx: Ctx): void {
     if (b.id === world.playerBankId) loansMonthly(ctx, b, days, b.losses);
     poolsMonthly(ctx, b, days);
     b.operatingBase = businessBalances(b);
+    relationshipsMonthly(ctx, b);
     linesMonthly(ctx, b);
     if (b.foreign.length > 0) foreignMonthly(ctx, b, days);
     // Rivals lend through pools. So do the player's lenders, under the
@@ -280,6 +296,7 @@ function monthlyClose(ctx: Ctx): void {
   rivalsMonthly(ctx);
   dealsMonthly(ctx);
   branchOffersMonthly(ctx);
+  depositOffersMonthly(ctx);
   stockMonthly(ctx);
   depositsMonthly(ctx);
   officersMonthly(ctx);

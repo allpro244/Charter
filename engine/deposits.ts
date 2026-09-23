@@ -180,6 +180,9 @@ export function depositTargets(world: World, b: Bank): Record<DepositType, numbe
   // Business borrowers keep their operating accounts here (D58): checking
   // that follows the loan, not the rate sheet.
   out.checking += Math.round((b.operatingBase ?? 0) * conf);
+  // Negotiated accounts (D62) stay for their term while confidence holds;
+  // they are the first money out when it slips.
+  if (b.relationships && b.confidence >= 0.8) for (const rel of b.relationships) if (rel.until > world.day) out[rel.type] += rel.balance;
   return out;
 }
 

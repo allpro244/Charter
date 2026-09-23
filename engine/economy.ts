@@ -279,7 +279,8 @@ export function localNewsMonthly(ctx: Ctx): void {
 export function economyMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const e = world.economy;
-  const r = world.rng;
+  // The economy's own stream (old saves fall back to the world's).
+  const r = world.rngEconomy ?? world.rng;
   // Previous values are last month's recorded ones, so a shock applied
   // between closes (a scripted bust, a test) is seen by the sector step.
   const last = e.hist[e.hist.length - 1];

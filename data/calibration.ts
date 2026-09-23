@@ -136,6 +136,7 @@ export const calibration = {
   tdrRedefaultRate: hand(20, 50, 35, 'percent of restructured loans 60 or more days late again within a year', 'OCC Mortgage Metrics Report, modified loans re-defaulting within twelve months, 2012 to 2019'),
   operatingBalanceShare: hand(5, 20, 10, 'percent of C&I and owner occupied CRE balances the borrowers keep on deposit with the lender', 'compensating balance practice; Federal Reserve Senior Loan Officer Opinion Survey on business deposit relationships'),
   branchDepositPremium: hand(2, 8, 4, 'percent of deposits assumed in a branch purchase', 'S&P Global Market Intelligence, US branch deal deposit premiums 2015 to 2023'),
+  largeDepositPremium: hand(25, 100, 50, 'basis points over the market rate on a negotiated business or public deposit', 'public funds and corporate treasury deposit pricing practice; FDIC national rate cap methodology'),
   takeoverPremium: hand(100, 160, 125, 'percent of book value for a control stake', 'S&P bank M&A price to tangible book, small deals'),
   // Global stage (D45). Start values for the countries the game opens
   // with. Sources are FRED and BIS series; hand-entered until a script

@@ -154,6 +154,7 @@ export interface Bank {
   officesExtra?: number; // offices beyond the home branch a seeded rival runs, carried as cost without a branch record each
   boardWarnedDay?: number; // the last time the board said it was restless (D61)
   lastBranchOfferDay?: number; // the last branch offer on the desk (D59)
+  relationships?: DepositRelationship[]; // negotiated large accounts (D62)
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
   applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
@@ -468,6 +469,18 @@ export function defaultPolicy(): LoanPolicy {
   };
 }
 
+// A negotiated large account (D62): a balance at a premium over the market
+// for a term, sticky while the term runs.
+export interface DepositRelationship {
+  id: string;
+  name: string;
+  type: DepositType;
+  balance: number;
+  premium: number; // annual, over the market rate for the type
+  since: number;
+  until: number;
+}
+
 export interface Branch {
   id: string;
   county: string; // fips
@@ -634,7 +647,8 @@ export type PendingKind =
   | 'ipo_window'
   | 'assisted_auction'
   | 'workout'
-  | 'branch_offer';
+  | 'branch_offer'
+  | 'deposit_offer';
 
 export interface PendingOption {
   key: string; // the keyboard key
@@ -669,6 +683,7 @@ export interface World {
   version: 1;
   seed: number;
   rng: Rng;
+  rngEconomy?: Rng; // the economy's own stream: bank behavior never moves the macro path
   day: number;
   economy: Economy;
   geo: Geo;
@@ -860,6 +875,7 @@ export function createWorld(seed: number, data: WorldData | null = null): World 
     version: 1,
     seed,
     rng: makeRng(seed),
+    rngEconomy: derive(seed, hashString('economy')),
     day: 0,
     economy: initialEconomy(data),
     geo,
