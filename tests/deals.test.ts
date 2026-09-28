@@ -13,6 +13,7 @@ import { makeRng, randLogNormal } from '../engine/rng';
 import { type Bank, type World, createBank, createWorld } from '../engine/state';
 import { makeOfficer } from '../engine/officers';
 import { tick } from '../engine/tick';
+import { previewFor } from '../ui/preview';
 import { isYearEnd } from '../engine/time';
 
 function balanced(world: World) {
@@ -205,6 +206,11 @@ describe('capital markets and deals', () => {
     expect(totalAssets(weak.acct)).toBe(0);
     const snapDeposits = auction!.data.deposits as number;
     expect(snapDeposits).toBeGreaterThan(0);
+    // The desk says what the auction means before the bid (D76).
+    const lines = previewFor(world, auction!);
+    expect(lines.length).toBe(4);
+    expect(lines[1]).toMatch(/leave your leverage at/);
+    expect(lines[2]).toMatch(/80% of losses/);
     const mine = totalDeposits(me.acct);
     tick(world, [{ pendingId: auction!.id, choice: '3' }]);
     // The failed bank's remaining deposits (some ran before the closure) come over.

@@ -11,12 +11,39 @@ import { totalAssets } from '../engine/ledger';
 import { type Pending, type World, playerBank } from '../engine/state';
 import type { Application } from '../engine/borrowers';
 import { counterTerms, policyCheck, termsFrom } from '../engine/underwriting';
+import { type Snapshot, leverageAfterAssuming, liabilitiesOf, totalAssetsOf } from '../engine/deals';
+import { ladder, rungs } from '../engine/ladder';
 import { pct, usd } from './format';
 
 export function previewFor(world: World, p: Pending): string[] {
   const b = playerBank(world);
   if (!b) return [];
   switch (p.kind) {
+    case 'assisted_auction': {
+      // The best day of the game made legible (D76): the prize, what each
+      // bid costs and leaves, the FDIC's loss share, and what bids run in
+      // this cycle. The rivals' own bids stay theirs.
+      const snap = p.data.snap as Snapshot;
+      const deposits = p.data.deposits as number;
+      const assets = totalAssetsOf(snap.acct);
+      const liabilities = liabilitiesOf(snap.acct);
+      const mine = totalAssets(b.acct);
+      const l = ladder(world);
+      const after = 1 + rungs(world).filter((r) => r.assets > mine + assets && r.name !== snap.name).length;
+      const bids = [0.005, 0.015, 0.03];
+      const lev = bids.map((x) => leverageAfterAssuming(b, liabilities, Math.round(deposits * x)));
+      const band = calibration.assistedDepositPremium.typical / 100;
+      const cycle = world.economy.regime === 'recession' ? 0.5 : 1;
+      const lo = band * cycle;
+      const hi = band * 2.5 * cycle;
+      const expected = snap.expectedLoss;
+      return [
+        `Win it and you take ${usd(deposits)} of deposits, ${snap.branches.length} ${snap.branches.length === 1 ? 'branch' : 'branches'} and its loans: about ${usd(mine + assets)} together, from #${l.rank.toLocaleString('en-US')} to about #${after.toLocaleString('en-US')} in America.`,
+        `The bids cost ${bids.map((x) => usd(Math.round(deposits * x))).join(', ')} (booked as goodwill) and leave your leverage at ${lev.map((x) => pct(x, 1)).join(', ')}; the FDIC takes bids only from a bank that stays above 5%.`,
+        `Loss share: the FDIC pays 80% of losses on its loans for five years. The expected loss is ${usd(expected)}, so your part is about ${usd(Math.round(expected * 0.2))}.`,
+        `In ${world.economy.regime === 'recession' ? 'a recession' : world.economy.regime === 'recovery' ? 'a recovery' : 'good times'} winning bids for a bank like this usually run ${pct(lo, 1)} to ${pct(hi, 1)} of deposits; the highest bid wins, and a tie goes to you.`,
+      ];
+    }
     case 'loan_application': {
       const app = p.data.app as Application | undefined;
       if (!app) return [];

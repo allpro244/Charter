@@ -54,6 +54,11 @@ export function adviceFor(world: World): Card[] {
     const where = open.map((f) => (f.component === 'A' ? 'the troubled loans (Loans tab: sell the notes or wait out the workouts, and tighten the policy)' : f.component === 'M' ? (/exception/.test(f.text) ? 'policy exceptions (approve inside the written policy, or change the policy)' : 'the empty officer seats (You tab, your team)') : f.component === 'C' ? 'capital (Money tab, balance sheet and capital: raise it, or shrink)' : f.component === 'E' ? 'earnings (Home, results: the margin and the costs)' : f.component === 'L' ? 'cash (Money tab: hold more, borrow less)' : 'the bond book (Money tab, bonds: shorter)'));
     out.push({ key: 'enf', text: `Under ${b.enforcement === 'mou' ? 'an informal agreement' : b.enforcement === 'consent' ? 'a consent order' : 'a directive'}: ${where.length > 0 ? `fix ${[...new Set(where)].join('; ')}` : 'fix the findings'} before the next exam. Ignored, it escalates.` });
   }
+  // The cycle (D76): the inverted curve that comes before a recession, and
+  // the recession that is a strong bank's chance.
+  const e = world.economy;
+  if (e.curve.y10 < e.curve.m3 && e.regime !== 'recession') out.push({ key: 'curve', text: `The yield curve is inverted: the 10 year pays ${pct(e.curve.y10)} against ${pct(e.curve.m3)} for 3 months. In the record a recession has followed within a year or two. Banks that come through tighten the worst grade their officers may approve (Loans, policy and dial), go easy on construction and investor CRE, and keep capital and cash for the banks that do not come through.` });
+  if (e.regime === 'recession' && lev >= 0.09 && b.enforcement === 'none') out.push({ key: 'crisis-buy', text: `A recession, and your capital is strong (${pct(lev, 1)}). This is when failed banks go to FDIC auction with loss share and healthy ones sell cheap: World, the other banks, shows who is for sale; auctions come to your desk.` });
   // Growing: the moves a strong bank can make, named while it can make them.
   const strong = lev >= 0.09 && b.enforcement === 'none' && b.status === 'open';
   const ageYears = (world.day - b.charteredDay) / 365;

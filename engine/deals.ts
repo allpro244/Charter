@@ -189,7 +189,7 @@ export function assume(ctx: Ctx, buyer: Bank, snap: Snapshot, premium: number, l
   });
 }
 
-function totalAssetsOf(a: Accounts): number {
+export function totalAssetsOf(a: Accounts): number {
   return a.cash + a.securitiesAFS + a.securitiesHTM + a.afsValuation + a.loans - a.allowance + a.interestReceivable + a.reo + a.premises + a.goodwill + a.otherAssets;
 }
 
@@ -202,7 +202,7 @@ export function leverageAfterAssuming(buyer: Bank, liabilities: number, premium:
   return assets > 0 ? tier1 / assets : 0;
 }
 
-function liabilitiesOf(a: Accounts): number {
+export function liabilitiesOf(a: Accounts): number {
   return a.checking + a.savings + a.mmda + a.cd + a.brokered + a.fhlb + a.fedFundsPurchased + a.subDebt + a.interestPayable + a.otherLiabilities;
 }
 

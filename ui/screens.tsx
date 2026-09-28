@@ -22,6 +22,7 @@ import { TYPE } from '../engine/credit';
 import { counterTerms, fundable, policyCheck, termsFrom } from '../engine/underwriting';
 import { lendingLimit } from '../engine/regulation';
 import { ladder, nextThreshold } from '../engine/ladder';
+import { RecordsTable } from './years';
 
 // Days per real second by speed. Normal reads the feed as it happens;
 // Max runs a year in about six seconds for the long waits between the
@@ -1005,6 +1006,7 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
               ))}
             </tbody>
           </table>
+          {bank && <RecordsTable world={world} bank={bank} />}
           <table className="wrap">
             <thead>
               <tr>

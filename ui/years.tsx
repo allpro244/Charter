@@ -6,7 +6,7 @@
 import type { Bank, World, YearReview } from '../engine/state';
 import { leverageRatio, totalAssets } from '../engine/ledger';
 import { planScore } from '../engine/plan';
-import { dayOf } from '../engine/time';
+import { dateOf, dayOf } from '../engine/time';
 import { num, pct, usd } from './format';
 
 function verdict(r: YearReview): { text: string; tone: 'positive' | 'alert' | '' } {
@@ -173,6 +173,63 @@ export function PlanPanel({ world, bank }: { world: World; bank: Bank }) {
               : 'Filed with the FDIC with the charter. The asset path is what a well run new bank in your county gathers; the examiners hold you to the capital line.'}
           </td>
         </tr>
+      </tbody>
+    </table>
+  );
+}
+
+// Your records (D77): the run's own bests, read only from what the game
+// already kept (the year reviews, the deal log and the desk's lifetime
+// record). Nothing is scored that did not happen.
+export function personalRecords(world: World, bank: Bank): { label: string; value: string; when: string }[] {
+  const rows: { label: string; value: string; when: string }[] = [];
+  const years = bank.years ?? [];
+  const best = <T,>(xs: T[], f: (x: T) => number): T | null => xs.reduce<T | null>((b, x) => (b === null || f(x) > f(b) ? x : b), null);
+  const profit = best(years, (y) => y.profit);
+  if (profit && profit.profit > 0) rows.push({ label: 'Best year by profit', value: usd(profit.profit), when: String(profit.year) });
+  const roa = best(years.filter((y) => !y.deNovo), (y) => y.roa);
+  if (roa && roa.roa > 0) rows.push({ label: 'Best return on assets', value: pct(roa.roa), when: String(roa.year) });
+  const climbs = years.filter((y) => y.rankAgo !== null);
+  const climb = best(climbs, (y) => (y.rankAgo as number) - y.rank);
+  if (climb && (climb.rankAgo as number) > climb.rank) rows.push({ label: 'Biggest climb in a year', value: `${num((climb.rankAgo as number) - climb.rank)} places`, when: String(climb.year) });
+  const peak = years.reduce<YearReview | null>((b, y) => (b === null || y.rank < b.rank ? y : b), null);
+  if (peak) rows.push({ label: 'Best rank at a year end', value: `#${num(peak.rank)}`, when: String(peak.year) });
+  const deal = best((world.deals ?? []).filter((d) => d.buyer === bank.name), (d) => d.assets);
+  if (deal) rows.push({ label: 'Biggest deal', value: `${deal.target}, ${usd(deal.assets)}`, when: String(dateOf(deal.day).y) });
+  const d = bank.desk;
+  if (d.approved > 0) {
+    rows.push({ label: 'Loans approved at the desk', value: `${num(d.approved)} for ${usd(d.approvedAmount)}`, when: 'lifetime' });
+    rows.push({ label: 'Desk losses', value: d.approvedAmount > 0 ? `${pct(d.lost / d.approvedAmount)} of what you lent` : usd(d.lost), when: `${num(d.wentBad)} went bad` });
+  }
+  return rows;
+}
+
+export function RecordsTable({ world, bank }: { world: World; bank: Bank }) {
+  const rows = personalRecords(world, bank);
+  return (
+    <table className="wrap">
+      <thead>
+        <tr>
+          <th>Your records</th>
+          <th className="num"></th>
+          <th className="num">when</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label}>
+            <td>{r.label}</td>
+            <td className="num">{r.value}</td>
+            <td className="num">{r.when}</td>
+          </tr>
+        ))}
+        {rows.length === 0 && (
+          <tr>
+            <td colSpan={3} className="empty">
+              Records start with your first December.
+            </td>
+          </tr>
+        )}
       </tbody>
     </table>
   );
