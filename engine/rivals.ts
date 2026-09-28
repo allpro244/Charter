@@ -134,6 +134,14 @@ export function aggregateBank(world: World, state: string, count: number, assets
     securitiesHTM: securities - Math.round(securities * 0.75),
   });
   bank.represents = Math.max(1, count);
+  // Wholesale funding for what deposits and capital do not fund, as for an
+  // individual rival: a state with card banks (Nevada, Utah, Delaware,
+  // South Dakota) carries real assets its deposits never paid for (D70).
+  const gap = assets - capital - dep - bank.acct.cash;
+  if (gap > 0 && gap < assets * 0.4) {
+    bank.acct.fhlb += gap;
+    bank.acct.cash += gap;
+  }
   bank.ai = { riskAppetite: 0.45, growthTarget: 0.04, rateAggression: 0, acquisitive: 0, branchPush: 0 };
   bank.loansToDeposits = 0.78;
   bank.dividendPayout = calibration.rivalDividendPayout.typical / 100;

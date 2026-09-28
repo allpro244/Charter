@@ -574,7 +574,7 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
                 Worst <Term k="grade">grade</Term> the loan officer may approve alone
               </td>
               <td>
-                <Stepper value={p.maxGrade ?? 6} steps={[{ d: 1, label: '1' }, { d: 2, label: '2' }]} fmt={(v) => `grade ${v}`} onChange={(v) => set({ maxGrade: Math.round(v) })} min={1} max={8} />
+                <Stepper value={p.maxGrade ?? 5} steps={[{ d: 1, label: '1' }, { d: 2, label: '2' }]} fmt={(v) => `grade ${v}`} onChange={(v) => set({ maxGrade: Math.round(v) })} min={1} max={8} />
               </td>
             </tr>
             <tr>

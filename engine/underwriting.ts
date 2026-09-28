@@ -137,7 +137,7 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
   if (leverageTested(app.type) && m.leverage > p.maxLeverage) reasons.push(`leverage ${m.leverage.toFixed(1)}x over ${p.maxLeverage.toFixed(1)}x`);
   if (p.requireGuarantor && !terms.guarantor && m.employees > 0) reasons.push('no guarantor');
   if (terms.amount > p.maxSize) reasons.push(`size ${money(terms.amount)} over ${money(p.maxSize)}`);
-  const maxGrade = p.maxGrade ?? 6;
+  const maxGrade = p.maxGrade ?? 5;
   if (m.suggestedGrade > maxGrade) reasons.push(`grade ${m.suggestedGrade} is worse than policy grade ${maxGrade}`);
   const limit = lendingLimit(b);
   if (terms.amount > limit) reasons.push(`over the legal lending limit of ${money(limit)} to one borrower`);

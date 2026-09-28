@@ -5,19 +5,12 @@
     "principalCity": "Washington",
     "state": "DC",
     "counties": [
-      "24021",
-      "24031",
-      "11001",
-      "24009",
-      "24017",
-      "24033",
       "51013",
       "51043",
       "51047",
       "51059",
       "51061",
       "51107",
-      "51113",
       "51153",
       "51157",
       "51177",
@@ -29,13 +22,18 @@
       "51630",
       "51683",
       "51685",
-      "54037"
+      "54037",
+      "24021",
+      "24031",
+      "11001",
+      "24017",
+      "24033"
     ],
-    "population": 6332069,
-    "rank": 6,
+    "population": 6436489,
+    "rank": 7,
     "startable": true,
-    "hpi": null,
-    "hpiChange5y": null
+    "hpi": 1148.76,
+    "hpiChange5y": 0.36154174370644276
   },
   {
     "cbsa": "19820",
@@ -50,25 +48,25 @@
       "26125",
       "26147"
     ],
-    "population": 4382832,
+    "population": 4400578,
     "rank": 14,
     "startable": true,
-    "hpi": null,
-    "hpiChange5y": null
+    "hpi": 740.67,
+    "hpiChange5y": 0.4459997657256647
   },
   {
     "cbsa": "29820",
-    "name": "Las Vegas-Henderson-Paradise, NV",
+    "name": "Las Vegas-Henderson-North Las Vegas, NV",
     "principalCity": "Las Vegas",
     "state": "NV",
     "counties": [
       "32003"
     ],
-    "population": 2231147,
-    "rank": 30,
+    "population": 2398871,
+    "rank": 29,
     "startable": true,
-    "hpi": null,
-    "hpiChange5y": null
+    "hpi": 1095.31,
+    "hpiChange5y": 0.5528822978988854
   },
   {
     "cbsa": "41940",
@@ -79,11 +77,11 @@
       "06069",
       "06085"
     ],
-    "population": 1995351,
-    "rank": 35,
+    "population": 1995484,
+    "rank": 36,
     "startable": true,
-    "hpi": null,
-    "hpiChange5y": null
+    "hpi": 2883.61,
+    "hpiChange5y": 0.30826989211211653
   },
   {
     "cbsa": "33260",
@@ -94,10 +92,10 @@
       "48317",
       "48329"
     ],
-    "population": 172177,
-    "rank": 250,
+    "population": 188766,
+    "rank": 242,
     "startable": false,
-    "hpi": null,
-    "hpiChange5y": null
+    "hpi": 847.36,
+    "hpiChange5y": 0.1959071342883354
   }
 ]

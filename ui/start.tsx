@@ -88,7 +88,7 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
                   <button className="btn">Take over an existing bank</button>
                   <div className="dim">Buy control of a running bank: a book of loans, deposits, officers and someone else's problems from day one. The busier start.</div>
                 </td>
-                <td className="dim">buy a control stake in one of {candidates.length} banks for sale here</td>
+                <td className="dim">buy a control stake in one of {candidates.length} banks for sale here; {candidates.filter((c) => c.price <= world.player.cash).length === 0 ? 'none within reach of your cash' : `${candidates.filter((c) => c.price <= world.player.cash).length} within reach of your cash`}</td>
               </tr>
             </tbody>
           </table>
@@ -141,6 +141,7 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
               <tr>
                 <th>Banks for sale</th>
                 <th>bank</th>
+                <th>home</th>
                 <th className="num">assets</th>
                 <th className="num">deposits</th>
                 <th className="num">equity</th>
@@ -155,6 +156,7 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
                 <tr key={c.key} className={'row' + (c.price > cash ? ' dim' : '')} onClick={() => c.price <= cash && onTakeover(metro.cbsa, c)}>
                   <td>{c.key}</td>
                   <td>{c.name}</td>
+                  <td>{world.geo.counties[c.county]?.name ?? c.county}{metro.counties.includes(c.county) ? '' : ', near the city'}</td>
                   <td className="num">{short(c.assets)}</td>
                   <td className="num">{short(c.deposits)}</td>
                   <td className="num">{short(c.equity)}</td>
@@ -166,6 +168,11 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
               ))}
             </tbody>
           </table>
+          {candidates.length > 0 && candidates.every((c) => c.price > cash) && (
+            <p className="hint alert">
+              No bank in or near {metro.name} is small enough for your {short(cash)}: the cheapest control stake here costs {short(Math.min(...candidates.map((c) => c.price)))}. Charter a new bank here, or pick a smaller city where small banks still trade.
+            </p>
+          )}
           {candidates.map((c) => (
             <pre key={c.key} className="memo">
               {describeCandidate(c).join('\n')}

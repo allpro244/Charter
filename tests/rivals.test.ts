@@ -7,12 +7,12 @@ import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../en
 import { adoptPolicy, expandState, randomPolicy } from '../engine/rivals';
 import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
-import { newPlayer, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
+import { newPlayer, startCharter, startTakeover, startableMetros } from '../engine/start';
 import { tick } from '../engine/tick';
 import { depositTargets, marketDepositRate, marketRate, setRate } from '../engine/deposits';
 import { DEPOSIT_TYPES } from '../engine/ledger';
 import { buildBigWorld } from './helpers/bigworld';
-import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
+import { FIXTURES_MISSING, hasFixtures, loadFixtures, affordableTakeover } from './helpers/fixtures';
 
 describe('rivals', () => {
   it('failures cluster in recessions and spike in banking crises over the big world', () => {
@@ -135,9 +135,7 @@ describe.skipIf(!hasFixtures())(`rivals with real geography (${hasFixtures() ? '
       const data = loadFixtures();
       const world = createWorld(3, data);
       newPlayer(world);
-      const metro = startableMetros(world)[0]!;
-      const candidates = takeoverCandidates(world, metro, seedsForMetro(world, metro));
-      const c = candidates.find((x) => x.price <= world.player.cash) ?? candidates[0]!;
+      const { metro, candidate: c } = affordableTakeover(world);
       const bank = startTakeover({ world, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate: c });
       for (let d = 0; d < 365; d++) tick(world);
       // A normal rate world: at a zero Fed a cut of 100bp floors at zero and

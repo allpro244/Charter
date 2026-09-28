@@ -125,6 +125,18 @@ for (let d = 0; d < years * 365; d++) {
     const top = rivals.map((x) => `${((bankDepositRate(x) - marketDepositRate(world)) * 1e4).toFixed(0)}bp/${(x.branches.filter((q) => q.county === br.county).reduce((s2, q) => s2 + q.deposits, 0) / 1e6).toFixed(0)}`).join(' ');
     console.log(`  m${(world.day / 365).toFixed(2)} br dep ${(br.deposits / 1e6).toFixed(0)} own ${(branchTarget(world, bank, { ...br, competitiveTarget: null }) / 1e6).toFixed(0)} comp ${br.competitiveTarget === null ? '-' : (br.competitiveTarget / 1e6).toFixed(0)} tg ${Object.values(tg).map((v) => (v / 1e6).toFixed(0)).join('/')} me ${((bankDepositRate(bank) - marketDepositRate(world)) * 1e4).toFixed(0)}bp conf ${bank.confidence.toFixed(2)} rivals ${top}`);
   }
+  if (process.env.CRIT && isYearEnd(world.day)) {
+    const critPools = bank.pools.reduce((x, p) => x + p.grades.slice(5).reduce((a, g) => a + g, 0), 0);
+    const pooled = bank.pools.reduce((x, p) => x + p.balance, 0);
+    const book = bank.loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'reo');
+    const critLoans = book.filter((l) => l.grade >= 6).reduce((x, l) => x + l.balance, 0);
+    const bookBal = book.reduce((x, l) => x + l.balance, 0);
+    const byGrade = book.reduce((m, l) => ((m[l.grade] = (m[l.grade] ?? 0) + l.balance), m), {} as Record<number, number>);
+    const g6 = book.filter((l) => l.grade >= 6);
+    const tally = g6.reduce((m, l) => { const k = `${l.decision.by}:${l.memo.suggestedGrade >= 6 ? 'born6' : 'migrated'}`; m[k] = (m[k] ?? 0) + Math.round(l.balance / 1e6); return m; }, {} as Record<string, number>);
+    console.log(`   grade6 by origin ${JSON.stringify(tally)}`);
+    console.log(`   crit pools ${(100 * critPools / Math.max(1, pooled)).toFixed(1)}% of ${(pooled / 1e6).toFixed(0)}MM; files ${(100 * critLoans / Math.max(1, bookBal)).toFixed(1)}% of ${(bookBal / 1e6).toFixed(0)}MM; files by grade ${JSON.stringify(Object.fromEntries(Object.entries(byGrade).map(([g, v]) => [g, Math.round(v / 1e6)])))}; pool grades ${JSON.stringify(bank.pools.reduce((a, p) => { p.grades.forEach((g, i) => (a[i + 1] = (a[i + 1] ?? 0) + Math.round(g / 1e6))); return a; }, {} as Record<number, number>))}`);
+  }
   if (isYearEnd(world.day)) {
     const y = Math.round(world.day / 365);
     console.log(

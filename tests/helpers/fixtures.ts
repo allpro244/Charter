@@ -5,6 +5,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { WorldData } from '../../data/types';
+import type { World, MetroState } from '../../engine/state';
+import { seedsForMetro, startableMetros, takeoverCandidates, type TakeoverCandidate } from '../../engine/start';
 
 const DIR = join(import.meta.dirname, '..', '..', 'data', 'fixtures');
 
@@ -24,3 +26,14 @@ export function loadFixtures(): WorldData {
 }
 
 export const FIXTURES_MISSING = 'data/fixtures/ missing: run npm run fetch-data and npm run build-data -- --fixtures';
+
+// The first startable metro with a takeover the founder can afford, and
+// that candidate: with the real FDIC list, the biggest cities have no bank
+// small enough for a founder's cash, as in life (D70).
+export function affordableTakeover(world: World): { metro: MetroState; candidate: TakeoverCandidate } {
+  for (const metro of startableMetros(world)) {
+    const c = takeoverCandidates(world, metro, seedsForMetro(world, metro)).find((x) => x.price <= world.player.cash);
+    if (c) return { metro, candidate: c };
+  }
+  throw new Error('no affordable takeover in the fixtures');
+}

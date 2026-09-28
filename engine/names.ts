@@ -7,7 +7,7 @@ const PREFIX = ['First', 'Citizens', 'Peoples', 'Farmers', 'Merchants', 'Pioneer
 const SUFFIX = ['Bank', 'State Bank', 'National Bank', 'Bank & Trust', 'Savings Bank', 'Bancorp', 'Community Bank', 'Trust Company'];
 
 export function generateBankName(r: Rng, place: string, state: string, taken: Set<string>): string {
-  const base = place.replace(/ County$/, '').replace(/ Parish$/, '').replace(/ Borough$/, '');
+  const base = place.replace(/ County$/, '').replace(/ Parish$/, '').replace(/ Borough$/, '').replace(/ Planning Region$/, '').replace(/ (City and Borough|Census Area|Municipality)$/, '');
   const forms = [
     () => `${pick(r, PREFIX)} ${pick(r, SUFFIX)} of ${base}`,
     () => `${base} ${pick(r, SUFFIX)}`,

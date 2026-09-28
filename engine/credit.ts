@@ -569,7 +569,7 @@ function playerMix(world: World, b: Bank): Record<LoanType, number> {
 // policy keep the migration below the industry's, a loose policy above.
 function playerTilt(b: Bank): number {
   const skill = ccoSkill(b);
-  const grade = b.policy.maxGrade ?? 6;
+  const grade = b.policy.maxGrade ?? 5;
   const policy = grade >= 7 ? 1.15 : grade <= 4 ? 0.9 : 1;
   return Math.round(Math.max(0.6, Math.min(1.6, (1 - (skill - 55) / 250) * policy)) * 100) / 100;
 }

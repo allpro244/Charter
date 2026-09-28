@@ -28,7 +28,9 @@ import * as fs from 'node:fs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
-import * as XLSX from 'xlsx';
+import * as XLSXns from 'xlsx';
+// Under tsx the CommonJS build arrives with its functions on default.
+const XLSX = ((XLSXns as unknown as { default?: typeof XLSXns }).default ?? XLSXns) as typeof XLSXns;
 import { SECTORS, type BankSeed, type CountyRecord, type MetroRecord, type NationalRecord, type Sector, type StateRecord } from '../data/types';
 import {
   ACS_B19001_VARS,
@@ -436,13 +438,26 @@ async function loadBea(zipPath: string): Promise<{ gdp: Map<string, number | nul
 
 function loadFhfa(path: string, codeCandidates: string[], codeWidth: number): { series: Map<string, Map<number, number>>; rows: number } {
   const file = basename(path);
-  const rows = parseCsv(readFileSync(path, 'utf8'));
+  // The workbook FHFA now publishes carries a title block above the header
+  // row; start from the row that names Year and HPI.
+  let rows: string[][];
+  if (/\.xlsx?$/i.test(path)) {
+    const wb = XLSX.readFile(path);
+    const ws = wb.Sheets[wb.SheetNames[0] ?? ''];
+    if (!ws) throw new Error(`${file}: no sheet`);
+    const all = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true }).map((r) => r.map((v) => (v === null || v === undefined ? '' : String(v).trim())));
+    const at = all.findIndex((r) => r.includes('Year') && r.includes('HPI'));
+    if (at < 0) throw new Error(`${file}: no header row with Year and HPI`);
+    rows = all.slice(at);
+  } else rows = parseCsv(readFileSync(path, 'utf8'));
   const header = rows[0] ?? [];
   const first = rows[1] ?? [];
   let cCode = -1;
   for (const cand of codeCandidates) {
     const i = findColumnOrNull(header, [cand]);
-    if (i >= 0 && /^\d{3,5}$/.test((first[i] ?? '').trim())) {
+    // Five digit codes appear somewhere in the column (the CBSA file opens with the
+    // states' non-metro areas, two digit codes, before the metros).
+    if (i >= 0 && rows.slice(1).some((r) => /^\d{5}$/.test((r[i] ?? '').trim()))) {
       cCode = i;
       break;
     }
@@ -1141,8 +1156,19 @@ async function main(): Promise<void> {
     }
 
     // income and housing
-    const a = acs.counties.get(fips);
+    let a = acs.counties.get(fips);
     const aSt = acs.states.get(p.stateFips);
+    // A county newer than the ACS vintage (Connecticut's nine planning
+    // regions replaced its eight counties in 2022; the 2021 tables know only
+    // the old ones) takes the state's figures, its housing scaled by its
+    // share of the state's population, flagged imputed (rule 18).
+    if (!a && aSt) {
+      const statePop = pop.states.get(p.stateFips) ?? 0;
+      const share = statePop > 0 ? p.population / statePop : 0;
+      const scale = (v: number | null) => (v === null ? null : Math.round(v * share));
+      a = { ...aSt, housingUnits: scale(aSt.housingUnits), vacant: scale(aSt.vacant) };
+      imputedFields.push('medianHouseholdIncome', 'incomeBuckets', 'perCapitaIncome', 'medianHomeValue', 'medianRent', 'housingUnits');
+    }
     if (!a) missing.push('ACS row');
     let medianHouseholdIncome = a?.medianHouseholdIncome ?? null;
     if (medianHouseholdIncome === null && a) {

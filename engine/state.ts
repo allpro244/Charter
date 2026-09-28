@@ -484,7 +484,7 @@ export function defaultPolicy(): LoanPolicy {
     maxSize: 5_000_000,
     allowed: { ci: true, cre_oo: true, cre_inv: true, construction: true, resi: true, consumer: true, ag: true, energy: true, cards: false },
     sectorCap: 0.35,
-    maxGrade: 6,
+    maxGrade: 5, // the last pass grade: 6 and worse are criticized from the day they are booked (D70)
     targetLoansToDeposits: 0.75,
     version: 1,
   };

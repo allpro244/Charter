@@ -110,15 +110,15 @@ Freeze one year per source as the world's 2024 starting point. Record the vintag
 
 Bulk download URLs (verify each at run time; agencies move files):
 - Census PEP county totals: https://www2.census.gov/programs-surveys/popest/datasets/ under the latest `2020-20XX/counties/totals/co-est20XX-alldata.csv`
-- Census ACS 5 year: the Census API without a key allows enough calls for a one-time pull of a few tables for all counties. Endpoint pattern: https://api.census.gov/data/20XX/acs/acs5?get=NAME,B19013_001E,B25077_001E,B25064_001E,B01003_001E&for=county:*
+- Census ACS 5 year: the Census API now answers "Missing Key" without a key (checked 2026-09-28), so the ACS tables come from the tract level mirror below, summed to counties. The API, if it reopens: Endpoint pattern: https://api.census.gov/data/20XX/acs/acs5?get=NAME,B19013_001E,B25077_001E,B25064_001E,B01003_001E&for=county:*
   If throttled, fall back to the ACS summary file CSVs under https://www2.census.gov/programs-surveys/acs/summary_file/
 - BLS QCEW county annual averages, all industries by ownership: https://data.bls.gov/cew/data/files/20XX/csv/20XX_annual_singlefile.zip
 - BLS LAUS county annual averages: https://www.bls.gov/lau/laucntycur14.txt (current) and https://www.bls.gov/lau/ annual tables `laucntyXX.xlsx`
 - BEA GDP by county (CAGDP2, all industries): https://apps.bea.gov/regional/zip/CAGDP2.zip
-- FHFA HPI county and metro annual: https://www.fhfa.gov/hpi/download/annual under "Counties (Developmental Index)" and "Metropolitan Areas" CSVs
-- OMB CBSA delineation file: https://www.census.gov/geographies/reference-files/time-series/demo/metro-micro/delineation-files.html (latest `list1_20XX.xls`)
-- FDIC institutions and financials: public API, no key: https://banks.data.fdic.gov/api/institutions?filters=ACTIVE:1&fields=CERT,NAME,STALP,ASSET,DEP,OFFICES&limit=10000&format=json and https://banks.data.fdic.gov/api/financials for call report fields used in calibration
-- FDIC Summary of Deposits by county: https://www7.fdic.gov/sod/ bulk download, or the API `/api/sod` if available
+- FHFA HPI county and metro annual: https://www.fhfa.gov/hpi/download/annual/hpi_at_county.xlsx and hpi_at_cbsa.xlsx (the 2025 site; the old `hpi_at_bdl_*.csv` names return 404), linked from https://www.fhfa.gov/data/hpi/datasets
+- OMB CBSA delineation file: https://www.census.gov/geographies/reference-files/time-series/demo/metro-micro/delineation-files.html (latest `list1_20XX.xlsx`; 2023 is the first vintage with Connecticut's nine planning regions)
+- FDIC institutions and financials: public API, no key: https://api.fdic.gov/banks/institutions?filters=ACTIVE:1&fields=CERT,NAME,STALP,ASSET,DEP,OFFICES&limit=10000&format=json and https://api.fdic.gov/banks/financials for call report fields used in calibration (the old banks.data.fdic.gov host redirects; the financials endpoint returns only about 160 fields unless `fields=` names them)
+- FDIC Summary of Deposits, branch level: https://api.fdic.gov/banks/sod?filters=YEAR:20XX&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT (paged, 10,000 a page); also the source of the depositsPerBranch and mainOfficeMultiple bands
 - FRED series as CSV without a key: https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS (and DGS3MO, DGS2, DGS10, DGS30, CPIAUCSL, UNRATE, DCOILWTICO, CSUSHPISA, SP500)
 - Census cartographic county boundaries 1:5m: https://www2.census.gov/geo/tiger/GENZ20XX/shp/cb_20XX_us_county_5m.zip, converted to simplified GeoJSON in the build
 

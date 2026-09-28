@@ -95,11 +95,11 @@ function acsUrl(vars: readonly string[], level: 'county' | 'state'): string {
 
 function fdicInstitutionsUrl(): string {
   const fields = 'CERT,NAME,STALP,STCNTY,COUNTY,CITY,ASSET,DEP,OFFICES,OFFDOM';
-  return `https://banks.data.fdic.gov/api/institutions?filters=ACTIVE:1&fields=${fields}&limit=10000&format=json`;
+  return `https://api.fdic.gov/banks/institutions?filters=ACTIVE:1&fields=${fields}&limit=10000&format=json`;
 }
 
 function fdicSodUrl(): string {
-  return `https://banks.data.fdic.gov/api/sod?filters=YEAR:${VINTAGE}&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT&limit=10000&format=json`;
+  return `https://api.fdic.gov/banks/sod?filters=YEAR:${VINTAGE}&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT&limit=10000&format=json`;
 }
 
 export const SOURCES: Source[] = [
@@ -193,6 +193,8 @@ export const SOURCES: Source[] = [
     kind: 'file',
     required: false,
     urls: [
+      // FHFA's 2025 site links the annual county index as a workbook.
+      { url: 'https://www.fhfa.gov/hpi/download/annual/hpi_at_county.xlsx', file: 'hpi_at_county.xlsx' },
       { url: 'https://www.fhfa.gov/hpi/download/annual/hpi_at_bdl_county.csv', file: 'hpi_at_bdl_county.csv' },
       {
         url: 'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_county.csv',
@@ -206,6 +208,7 @@ export const SOURCES: Source[] = [
     kind: 'file',
     required: false,
     urls: [
+      { url: 'https://www.fhfa.gov/hpi/download/annual/hpi_at_cbsa.xlsx', file: 'hpi_at_cbsa.xlsx' },
       { url: 'https://www.fhfa.gov/hpi/download/annual/hpi_at_bdl_cbsa.csv', file: 'hpi_at_bdl_cbsa.csv' },
       {
         url: 'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_BDL_cbsa.csv',
@@ -220,8 +223,8 @@ export const SOURCES: Source[] = [
     required: false,
     urls: [
       {
-        url: `https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/${OMB_LIST_YEAR}/delineation-files/list1_${OMB_LIST_YEAR}.xls`,
-        file: `list1_${OMB_LIST_YEAR}.xls`,
+        url: `https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/${OMB_LIST_YEAR}/delineation-files/list1_${OMB_LIST_YEAR}.xlsx`,
+        file: `list1_${OMB_LIST_YEAR}.xlsx`,
       },
       {
         url: 'https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2020/delineation-files/list1_2020.xls',

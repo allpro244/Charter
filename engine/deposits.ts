@@ -98,7 +98,7 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   // the end of year one, all of it after four years. A de novo in a huge
   // county still starts small.
   const seasoning = Math.min(1, 0.05 + years / 4);
-  const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1) * seasoning;
+  const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? calibration.mainOfficeMultiple.typical : 1) * seasoning;
   // Capacity caps growth; it never pushes out what a branch already holds,
   // it grows with nominal income like every other dollar figure, and a
   // full branch can still add a little each month toward its share

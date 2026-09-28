@@ -49,7 +49,8 @@ Pages are cached in raw/fdic-financials/ so a re-run does not refetch.
 Exit code 1 if any computable band could not be computed.
 `;
 
-const API = 'https://banks.data.fdic.gov/api';
+// The FDIC moved BankFind to api.fdic.gov in 2025; the old host redirects.
+const API = 'https://api.fdic.gov/banks';
 const CACHE_DIR = join(RAW_DIR, 'fdic-financials');
 const PAGE_LIMIT = 10000;
 const CRISIS_FAILURES = 25; // a year with at least this many failures is a crisis year
@@ -159,8 +160,15 @@ async function discoverFields(year: number): Promise<FieldInfo> {
   if (!first) throw new Error(`no financial record found for REPDTE ${year}1231`);
   const available = new Set(Object.keys(first));
   log(`  ${available.size} fields on a sample record`);
+  // The default record carries only about 160 of the call report's fields.
+  // Ask for every candidate by name on a few records; a field that comes
+  // back with a number on any of them is available.
+  const wanted = [...new Set(Object.values(METRICS).flatMap((m) => m.candidates))];
+  const named = fdicRows(await getJson(`${API}/financials?filters=REPDTE:${year}1231&fields=${wanted.join(',')}&limit=25&format=json`));
+  for (const row of named) for (const [k, v] of Object.entries(row)) if (typeof v === 'number') available.add(k);
+  log(`  ${available.size} fields after asking for the ${wanted.length} candidates by name`);
   const titles = new Map<string, string>();
-  const yaml = await fetchText('https://banks.data.fdic.gov/docs/financial_properties.yaml');
+  const yaml = await fetchText('https://api.fdic.gov/banks/docs/financial_properties.yaml');
   if (yaml.ok) {
     // Best effort scan: "  FIELD:" lines followed by a "title:" line.
     let current: string | null = null;
@@ -535,6 +543,51 @@ async function main(): Promise<void> {
     } else failures.push(`failuresPerYear.crisis: no year with ${CRISIS_FAILURES} or more failures in the window`);
   } catch (err) {
     failures.push(`failuresPerYear: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Branch deposits from the Summary of Deposits fetch-data already
+  // downloaded (raw/fdic_sod_<vintage>.json): what one office holds, and how
+  // much more a bank's main office holds than a median branch (D70).
+  try {
+    const sodPath = join(RAW_DIR, `fdic_sod_${VINTAGE}.json`);
+    if (!existsSync(sodPath)) throw new Error(`${sodPath} missing; run npm run fetch-data`);
+    const sod = JSON.parse(readFileSync(sodPath, 'utf8')) as { data: { data?: Record<string, unknown> }[] };
+    const rows = sod.data.map((r) => (r.data ?? r) as Record<string, unknown>);
+    const dollars = (r: Record<string, unknown>) => (typeof r.DEPSUMBR === 'number' ? r.DEPSUMBR * 1000 : null);
+    const branches = rows.filter((r) => r.BRNUM !== 0).map(dollars).filter((x): x is number => x !== null && x > 0).sort((a, b) => a - b);
+    const mains = rows.filter((r) => r.BRNUM === 0).map(dollars).filter((x): x is number => x !== null && x > 0).sort((a, b) => a - b);
+    const pct = (a: number[], p: number) => a[Math.min(a.length - 1, Math.floor(a.length * p))] ?? 0;
+    if (branches.length < 1000 || mains.length < 1000) throw new Error(`only ${branches.length} branches and ${mains.length} main offices in the SOD file`);
+    const sodSource = `FDIC Summary of Deposits ${VINTAGE}, branch level (raw/fdic_sod_${VINTAGE}.json)`;
+    const sodQuery = `https://api.fdic.gov/banks/sod?filters=YEAR:${VINTAGE}&fields=STCNTYBR,DEPSUMBR,BRNUM,CERT`;
+    setBand(tree, 'depositsPerBranch', {
+      low: round(pct(branches, 0.05) / 1e6, 1),
+      high: round(pct(branches, 0.95) / 1e6, 1),
+      typical: round(pct(branches, 0.5) / 1e6, 1),
+      unit: 'millions of dollars per branch',
+      source: sodSource,
+      verified: true,
+      note: `Computed by scripts/calibrate.ts: 5th, 50th and 95th percentile of deposits per office across ${branches.length} branch offices (main offices excluded).`,
+      query: sodQuery,
+      window: `June 30, ${VINTAGE}`,
+      computedOn: new Date().toISOString().slice(0, 10),
+    });
+    const mid = pct(branches, 0.5);
+    setBand(tree, 'mainOfficeMultiple', {
+      low: round(pct(mains, 0.25) / mid, 2),
+      high: round(pct(mains, 0.75) / mid, 2),
+      typical: round(pct(mains, 0.5) / mid, 2),
+      unit: 'main office deposits over the median branch office',
+      source: sodSource,
+      verified: true,
+      note: `Computed by scripts/calibrate.ts: the 25th, 50th and 75th percentile of deposits at ${mains.length} main offices divided by the median branch office.`,
+      query: sodQuery,
+      window: `June 30, ${VINTAGE}`,
+      computedOn: new Date().toISOString().slice(0, 10),
+    });
+    computed.push(`depositsPerBranch: median ${round(mid / 1e6, 1)}MM over ${branches.length} branches; mainOfficeMultiple ${round(pct(mains, 0.5) / mid, 2)}`);
+  } catch (err) {
+    failures.push(`depositsPerBranch: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   log('\nComputed bands:');

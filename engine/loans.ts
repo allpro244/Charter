@@ -509,8 +509,15 @@ function regrade(world: World, b: Bank, l: Loan): void {
   for (const s of signals) z += s.contribution;
   const base = gradeFromZ(z + baseFor(l.type), l.type);
   const target = Math.max(1, Math.min(7, base + (l.monthsLate > 0 ? 1 : 0)));
+  // Grades are sticky, as at a real bank: a review moves a loan one notch
+  // toward what the reviewer sees (the model's target and the CCO's noise),
+  // and a paying loan is criticized only when the numbers say so, never on
+  // the reviewer's noise alone. Memoryless noise flipped a fifth of the
+  // pass grade 5 loans into criticized at every review (D70).
   const noise = randNormal(world.rng, 0, 0.6);
-  const next = Math.round(target + noise);
+  const seen = Math.round(target + noise);
+  let next = seen > l.grade ? l.grade + 1 : seen < l.grade ? l.grade - 1 : l.grade;
+  if (next >= 6 && target < 6 && l.monthsLate === 0) next = Math.max(l.grade <= 5 ? 1 : 6, Math.min(next, 5));
   l.grade = Math.max(1, Math.min(l.status === 'current' ? 6 : 7, next));
   void b;
 }

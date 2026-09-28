@@ -91,11 +91,13 @@ describe('loan health meter', () => {
   });
 
   it('the written policy has a worst grade the CCO may approve alone', () => {
-    expect(policyCheck(bank, memo({ suggestedGrade: 6 }), termsFrom(memo({ suggestedGrade: 6 }))).pass).toBe(true);
-    const weak = memo({ suggestedGrade: 7 });
+    // The default is the last pass grade (D70): a criticized grade 6 is an
+    // exception from the day it is booked.
+    expect(policyCheck(bank, memo({ suggestedGrade: 5 }), termsFrom(memo({ suggestedGrade: 5 }))).pass).toBe(true);
+    const weak = memo({ suggestedGrade: 6 });
     const check = policyCheck(bank, weak, termsFrom(weak));
     expect(check.pass).toBe(false);
-    expect(check.reasons.join(' ')).toMatch(/grade 7 is worse than policy grade 6/);
+    expect(check.reasons.join(' ')).toMatch(/grade 6 is worse than policy grade 5/);
   });
 
   it('the desk cannot lend over the legal limit or beyond what it can fund', () => {

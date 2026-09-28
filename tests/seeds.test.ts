@@ -14,7 +14,14 @@ const tag = (name: string) => (calibration.banksPerMillionPeople.verified ? name
 describe.skipIf(!hasFixtures())(`generated bank seeds (${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
   it(tag('builds a banking sector from income when the data has no FDIC list, deterministic by seed'), () => {
     const data = loadFixtures();
-    const stripped = { ...data, banksByState: Object.fromEntries(Object.keys(data.banksByState).map((k) => [k, []])) };
+    // No FDIC list at any level: no seeds, no state totals, no county
+    // Summary of Deposits (the fixtures now carry the real list).
+    const stripped = {
+      ...data,
+      banksByState: Object.fromEntries(Object.keys(data.banksByState).map((k) => [k, []])),
+      states: data.states.map((s) => ({ ...s, bankCount: 0, totalAssets: 0, totalDeposits: 0 })),
+      counties: data.counties.map((c) => ({ ...c, bankDeposits: null, bankOffices: null })),
+    };
     const a = createWorld(7, stripped);
     const b = createWorld(7, stripped);
     expect(a.geo.bankData).toBe('generated');

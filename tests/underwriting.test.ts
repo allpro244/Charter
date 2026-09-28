@@ -6,13 +6,13 @@ import { generateApplication, ccoReview } from '../engine/borrowers';
 import { LOAN_TYPES } from '../engine/loantypes';
 import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
-import { newPlayer, principalCounty, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
+import { newPlayer, principalCounty, startCharter, startTakeover, startableMetros } from '../engine/start';
 import { tick } from '../engine/tick';
 import { isYearEnd } from '../engine/time';
 import { applicationsDaily, demandMultiplier, setDial, setPolicy, setPricing } from '../engine/underwriting';
 import { createBank } from '../engine/state';
 import { calibration } from '../data/calibration';
-import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
+import { FIXTURES_MISSING, hasFixtures, loadFixtures, affordableTakeover } from './helpers/fixtures';
 
 const SEEDS = process.env.CHARTER_FULL ? 50 : 20;
 
@@ -68,9 +68,7 @@ describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loade
     const data = loadFixtures();
     const world = createWorld(3, data);
     newPlayer(world);
-    const metro = startableMetros(world)[0]!;
-    const seeds = seedsForMetro(world, metro);
-    const c = takeoverCandidates(world, metro, seeds).find((x) => x.price <= world.player.cash)!;
+    const { metro, candidate: c } = affordableTakeover(world);
     const bank = startTakeover({ world, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate: c });
     setDial(world, 50_000_000, 7); // everything auto
     for (let d = 0; d < 5 * 365; d++) {

@@ -8,7 +8,7 @@ import { type Ctx, emit, milestone } from './ctx';
 import { totalEquity } from './ledger';
 import { generateBankName } from './names';
 import { type Rng, derive, hashString, pick, randLogNormal, randNormal, rand } from './rng';
-import { type Bank, type CountyState, type MetroState, type World, createBank, nextId } from './state';
+import { type Bank, type CountyState, type MetroState, type World, branchFixedCost, createBank, nextId } from './state';
 import { defaultSalary } from './wealth';
 import { money } from './format';
 import { makeOfficer } from './officers';
@@ -16,7 +16,7 @@ import { generateApplication, ccoReview } from './borrowers';
 import { inheritBook } from './loans';
 import { totalAssets } from './ledger';
 import { populateRivals } from './rivals';
-import { repriceToPeg } from './deposits';
+import { km, repriceToPeg } from './deposits';
 
 export function startableMetros(world: World): MetroState[] {
   return Object.values(world.geo.metros)
@@ -78,6 +78,7 @@ export interface TakeoverCandidate {
   price: number; // dollars for the stake
   premiumToBook: number;
   seed: number;
+  offices: number; // the bank's real office count from the FDIC list (D70)
 }
 
 const CONTROL_STAKE = 0.3;
@@ -102,24 +103,41 @@ export function takeoverCandidates(world: World, metro: MetroState, seeds: BankS
   const r = derive(world.seed, hashString(`takeover:${metro.cbsa}`));
   const county = principalCounty(world, metro);
   if (!county) return [];
-  const inMetro = seeds.filter((s) => s.county && metro.counties.includes(s.county) && s.assets > 20_000_000);
-  const pool = inMetro.length >= 3 ? inMetro : seeds.filter((s) => s.assets > 20_000_000);
+  // Deposit banks only: a trust company or card bank on the FDIC list holds
+  // little in deposits and is nobody's community bank to take over (D70).
+  const banks = seeds.filter((s) => s.assets > 20_000_000 && s.deposits >= 0.5 * s.assets);
   const cash = world.player.cash;
+  // Near the city: in the metro, else a main office within 150 km of its
+  // principal county (the same market); the bank keeps its real home.
+  const distance = (s: BankSeed) => {
+    const c = s.county ? world.geo.counties[s.county] : undefined;
+    return c ? km(c.centroid, county.centroid) : Infinity;
+  };
+  const inMetro = banks.filter((s) => s.county && metro.counties.includes(s.county));
+  const near = banks.filter((s) => !(s.county && metro.counties.includes(s.county)) && distance(s) <= 150);
+  // What the player can plausibly afford: a control stake at a premium to
+  // book, at most about 1.25 times the founder's cash for a stretch.
+  const affordable = (s: BankSeed) => s.assets * 0.09 * CONTROL_STAKE * 1.3 <= cash * 1.25;
+  const draw = (from: BankSeed[], n: number, into: BankSeed[]) => {
+    const pool = from.filter((s) => !into.includes(s));
+    while (n > 0 && pool.length > 0) {
+      const i = Math.floor(rand(r) * pool.length);
+      into.push(pool.splice(i, 1)[0] as BankSeed);
+      n--;
+    }
+  };
+  const picks: BankSeed[] = [];
+  draw(inMetro.filter(affordable), 3, picks);
+  draw(near.filter(affordable), 3 - picks.length, picks);
+  // Nothing within reach nearby: the smallest banks in the market, priced
+  // honestly, so the player sees what a takeover here would cost.
+  if (picks.length < 3) {
+    const rest = [...inMetro, ...near].filter((s) => !picks.includes(s)).sort((a, b) => a.assets - b.assets);
+    picks.push(...rest.slice(0, 3 - picks.length));
+  }
+  if (picks.length === 0) return [];
   const out: TakeoverCandidate[] = [];
   const taken = new Set<string>();
-  const sorted = [...pool].sort((a, b) => a.assets - b.assets);
-  // Candidates the player can plausibly afford: a control stake at a premium
-  // to book, at most about 1.2 times the founder's cash for a stretch.
-  const affordable = sorted.filter((s) => s.assets * 0.09 * CONTROL_STAKE * 1.3 <= cash * 1.25);
-  const source = affordable.length >= 3 ? affordable : sorted.slice(0, Math.max(3, Math.min(sorted.length, 6)));
-  const picks: BankSeed[] = [];
-  const idxs = new Set<number>();
-  while (picks.length < Math.min(3, source.length)) {
-    const i = Math.floor(rand(r) * source.length);
-    if (idxs.has(i)) continue;
-    idxs.add(i);
-    picks.push(source[i] as BankSeed);
-  }
   for (const s of picks) {
     const assets = Math.round(s.assets * Math.exp(randNormal(r, 0, 0.1)));
     const quality = rand(r); // 0 bad, 1 clean
@@ -153,6 +171,7 @@ export function takeoverCandidates(world: World, metro: MetroState, seeds: BankS
       price,
       premiumToBook: premium,
       seed: seedSalt,
+      offices: Math.max(1, Math.min(9, Math.round(s.offices ?? 1))),
     });
   }
   return out;
@@ -233,6 +252,7 @@ export function startTakeover(ctx: Ctx, opts: StartTakeover): Bank {
     shares: Math.round(c.equity / 10),
     criticized: c.criticizedShare,
   });
+  placeOffices(world, bank, metro, c.offices ?? 1);
   bank.charteredDay = world.day - c.yearsOld * 365;
   bank.franchise.openedDay = bank.charteredDay;
   for (const br of bank.branches) br.openedDay = bank.charteredDay;
@@ -265,6 +285,43 @@ export function startTakeover(ctx: Ctx, opts: StartTakeover): Bank {
   return bank;
 }
 
+// A takeover comes with its offices (D70): the FDIC office count beyond the
+// main office becomes branches in the metro's counties with the largest
+// deposit pools, then the nearest counties within 150 km, one per county.
+// The deposits split as the Summary of Deposits says they do: the main
+// office holds mainOfficeMultiple times a branch.
+function placeOffices(world: World, bank: Bank, metro: MetroState, offices: number): void {
+  const home = bank.branches[0];
+  const homeCounty = home ? world.geo.counties[home.county] : undefined;
+  const extra = Math.max(0, offices - 1);
+  if (!home || !homeCounty || extra === 0) return;
+  const inMetro = metro.counties
+    .filter((f) => f !== home.county)
+    .map((f) => world.geo.counties[f])
+    .filter((x): x is CountyState => !!x && x.depositPool > 0)
+    .sort((a, b) => b.depositPool - a.depositPool);
+  const nearby = Object.values(world.geo.counties)
+    .filter((x) => x.depositPool > 0 && x.fips !== home.county && !metro.counties.includes(x.fips))
+    .map((x) => ({ x, d: km(homeCounty.centroid, x.centroid) }))
+    .filter((q) => q.d <= 150)
+    .sort((a, b) => a.d - b.d)
+    .map((q) => q.x);
+  const places = [...inMetro, ...nearby].slice(0, extra);
+  if (places.length === 0) return;
+  const core = home.deposits;
+  const each = Math.round(core / (calibration.mainOfficeMultiple.typical + places.length));
+  for (const county of places) {
+    bank.branches.push({ id: nextId(world, 'br'), county: county.fips, openedDay: home.openedDay, deposits: each, fixedCost: branchFixedCost(county), distanceKm: Math.round(km(homeCounty.centroid, county.centroid)), competitiveTarget: null });
+  }
+  home.deposits = core - each * places.length;
+  // The home franchise is what the main office holds.
+  const pool = Math.max(homeCounty.depositPool, bank.franchise.pool);
+  if (pool > 0) {
+    bank.franchise.baseShare = home.deposits / pool;
+    bank.franchise.targetShare = bank.franchise.baseShare;
+  }
+}
+
 function attachPlayer(ctx: Ctx, bank: Bank, shares: number, paid: number): void {
   const { world } = ctx;
   const p = world.player;
@@ -287,7 +344,7 @@ export function newPlayer(world: World): void {
 // Used by the desk to preview a takeover book before choosing.
 export function describeCandidate(c: TakeoverCandidate): string[] {
   return [
-    `${c.name}, ${c.yearsOld} years old`,
+    `${c.name}, ${c.yearsOld} years old, ${c.offices ?? 1} ${(c.offices ?? 1) === 1 ? 'office' : 'offices'}`,
     `Assets ${money(c.assets)}  Deposits ${money(c.deposits)}  Loans ${money(c.loans)}`,
     `Equity ${money(c.equity)}  Leverage ${(c.leverage * 100).toFixed(1)}%  Criticized loans ${(c.criticizedShare * 100).toFixed(1)}%`,
     `${(c.stake * 100).toFixed(0)}% control stake for ${money(c.price)} (${(c.premiumToBook * 100).toFixed(0)}% of book)`,
