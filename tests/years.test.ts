@@ -6,7 +6,7 @@ import { canTakeLargeDeposit } from '../engine/depositors';
 import { localRaceMonthly, localStanding, nextThreshold, thresholdsMonthly } from '../engine/ladder';
 import { totalAssets } from '../engine/ledger';
 import { createWorld } from '../engine/state';
-import { newPlayer, startCharter, startTakeover, startableMetros } from '../engine/start';
+import { metroProfile, newPlayer, startCharter, startTakeover, startableMetros } from '../engine/start';
 import { applyDecisions, tick } from '../engine/tick';
 import { generateApplication } from '../engine/borrowers';
 import { makeRng } from '../engine/rng';
@@ -143,5 +143,20 @@ describe.skipIf(!hasFixtures())(`size thresholds (D74, ${hasFixtures() ? 'fixtur
     expect(past.length).toBe(1);
     expect(past[0]!.text).toMatch(/IPO/);
     expect(nextThreshold(totalAssets(bank.acct))!.assets).toBe(10e9);
+  });
+});
+
+describe.skipIf(!hasFixtures())(`a metro as a place to start (D75, ${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
+  it('profiles each fixture metro from its counties, with what it rides on above the national share', () => {
+    const world = createWorld(76, loadFixtures());
+    for (const m of startableMetros(world)) {
+      const p = metroProfile(world, m);
+      expect(p.income).toBeGreaterThan(20_000);
+      expect(p.depositPool).toBeGreaterThan(0);
+      for (const l of p.leaning) {
+        expect(l.times).toBeGreaterThanOrEqual(1.2);
+        expect(l.excess).toBeGreaterThanOrEqual(0.01);
+      }
+    }
   });
 });

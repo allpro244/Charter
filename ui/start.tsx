@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react';
 import type { WorldData } from '../data/types';
 import type { World } from '../engine/state';
-import { charterTerms, describeCandidate, seedsForMetro, startableMetros, takeoverCandidates, type TakeoverCandidate } from '../engine/start';
-import { num, short } from './format';
+import { charterTerms, metroProfile, describeCandidate, seedsForMetro, startableMetros, takeoverCandidates, type TakeoverCandidate } from '../engine/start';
+import { num, pct, short, usd } from './format';
 
 interface Props {
   world: World;
@@ -29,6 +29,9 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
     [world, metro, data],
   );
   const cash = world.player.cash;
+  // Profiles for the rows shown and the metro picked (D75).
+  const profiles = useMemo(() => new Map(shown.map((m) => [m.cbsa, metroProfile(world, m)])), [world, filter]);
+  const profile = useMemo(() => (metro ? metroProfile(world, metro) : null), [world, metro]);
   return (
     <div className="start">
       {!metro && (
@@ -43,18 +46,26 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
                 <th>rank</th>
                 <th>metro</th>
                 <th className="num">population</th>
+                <th className="num">median income</th>
+                <th>rides on</th>
                 <th className="num">charter raise</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((m) => (
-                <tr key={m.cbsa} className="row" onClick={() => onSelectMetro(m.cbsa)}>
-                  <td className="num">{m.rank}</td>
-                  <td>{m.name}</td>
-                  <td className="num">{num(m.population)}</td>
-                  <td className="num">{short(charterTerms(world, m).raise)}</td>
-                </tr>
-              ))}
+              {shown.map((m) => {
+                const pr = profiles.get(m.cbsa);
+                const top = pr?.leaning[0];
+                return (
+                  <tr key={m.cbsa} className="row" onClick={() => onSelectMetro(m.cbsa)}>
+                    <td className="num">{m.rank}</td>
+                    <td>{m.name}</td>
+                    <td className="num">{num(m.population)}</td>
+                    <td className="num">{pr ? usd(pr.income) : ''}</td>
+                    <td className="dim">{top ? `${top.sector}, ${pct(top.share, 0)} of jobs` : 'a mixed economy'}</td>
+                    <td className="num">{usd(charterTerms(world, m).raise)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -68,6 +79,58 @@ export function StartPanel({ world, data, selectedMetro, onSelectMetro, onCharte
               Change metro
             </button>
           </p>
+          {profile && (
+            <table className="wrap">
+              <thead>
+                <tr>
+                  <th>{metro.principalCity} as a place to start a bank</th>
+                  <th className="num"></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Median household income</td>
+                  <td className="num">{usd(profile.income)}</td>
+                  <td className="dim">average weekly wage {usd(profile.wage)}; your branches' running cost follows it</td>
+                </tr>
+                <tr>
+                  <td>Median home value</td>
+                  <td className="num">{profile.homeValue ? usd(profile.homeValue) : 'n/a'}</td>
+                  <td className="dim">sets mortgage sizes and the collateral behind them</td>
+                </tr>
+                <tr>
+                  <td>Unemployment</td>
+                  <td className="num">{profile.unemployment !== null ? pct(profile.unemployment, 1) : 'n/a'}</td>
+                  <td className="dim">consumer and household loans follow it</td>
+                </tr>
+                {profile.leaning.length === 0 && (
+                  <tr>
+                    <td>Rides on</td>
+                    <td className="num">a mixed economy</td>
+                    <td className="dim">no industry holds much more of the jobs here than of the nation's: no single shock hits the whole book</td>
+                  </tr>
+                )}
+                {profile.leaning.map((l) => (
+                  <tr key={l.sector}>
+                    <td>Rides on {l.sector}</td>
+                    <td className="num">{pct(l.share, 0)} of jobs</td>
+                    <td className="dim">{`${l.times.toFixed(1)} times the nation's share: when ${l.sector} turns, your borrowers turn with it`}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td>Deposits in the market</td>
+                  <td className="num">{usd(profile.depositPool)}</td>
+                  <td className="dim">what the metro's bank offices gathered locally</td>
+                </tr>
+                <tr>
+                  <td>Banks based here</td>
+                  <td className="num">{num(profile.banks)}</td>
+                  <td className="dim">{profile.smallest !== null ? `the smallest has ${usd(profile.smallest)} of assets` : 'none; the market is served from elsewhere'}</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
           <table>
             <thead>
               <tr>

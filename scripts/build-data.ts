@@ -373,7 +373,7 @@ function loadLaus(path: string): Map<string, LausRow> {
     for (const row of rows.slice(0, 12)) {
       row.forEach((cell, i) => {
         const t = String(cell ?? '').trim();
-        if (i < 4 || t.length > 20) return; // title rows sit in column A
+        if (i < 4 || t.length > 40) return; // title rows sit in column A; the rate header runs 21 characters
         if (/labor/i.test(t)) lfCol = i;
         if (/rate/i.test(t)) rateCol = i;
       });

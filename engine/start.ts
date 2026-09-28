@@ -362,3 +362,63 @@ export function pickRng(world: World, label: string): Rng {
 }
 
 export { pick, randLogNormal, nextId };
+
+// A metro as a place to start a bank (D75): the numbers that make a New
+// York start a different game from a Lubbock start, all from the county
+// data. Sectors are ranked by how much more of the local jobs they hold
+// than of the nation's: what the local economy rides on.
+export interface MetroProfile {
+  population: number;
+  income: number; // population weighted median household income
+  wage: number; // weekly
+  unemployment: number | null;
+  homeValue: number | null;
+  depositPool: number;
+  leaning: { sector: string; share: number; times: number; excess: number }[];
+  banks: number; // banks with their main office in the metro
+  smallest: number | null; // assets of the smallest of them
+}
+
+export function metroProfile(world: World, metro: MetroState): MetroProfile {
+  const counties = metro.counties.map((f) => world.geo.counties[f]).filter((c): c is CountyState => !!c);
+  const pop = counties.reduce((s, c) => s + c.population, 0) || 1;
+  const w = (get: (c: CountyState) => number | null) => {
+    let x = 0;
+    let n = 0;
+    for (const c of counties) {
+      const v = get(c);
+      if (v !== null && Number.isFinite(v)) {
+        x += v * c.population;
+        n += c.population;
+      }
+    }
+    return n > 0 ? x / n : null;
+  };
+  const emp = counties.reduce((s, c) => s + c.employment, 0) || 1;
+  const national = world.geo.nationalShares;
+  const shares: Record<string, number> = {};
+  for (const c of counties) for (const [k, v] of Object.entries(c.sectors)) shares[k] = (shares[k] ?? 0) + (v * c.employment) / emp;
+  const leaning = Object.entries(shares)
+    .filter(([k]) => k !== 'other' && k !== 'government')
+    .map(([sector, share]) => {
+      const nat = national ? national[sector as keyof typeof national] : 0;
+      return { sector, share, times: nat > 0 ? share / nat : 1, excess: share - nat };
+    })
+    // What a city rides on is the share of its jobs above the nation's, not
+    // the ratio: a tenth of a point of oil jobs is not Dallas.
+    .filter((x) => x.excess >= 0.01 && x.times >= 1.2)
+    .sort((a, b) => b.excess - a.excess)
+    .slice(0, 2);
+  const inMetro = seedsForMetro(world, metro).filter((s) => s.county && metro.counties.includes(s.county));
+  return {
+    population: pop,
+    income: Math.round(w((c) => c.income) ?? 0),
+    wage: Math.round(w((c) => c.wage) ?? 0),
+    unemployment: w((c) => c.unemployment),
+    homeValue: w((c) => c.homeValue),
+    depositPool: counties.reduce((s, c) => s + c.depositPool, 0),
+    leaning,
+    banks: inMetro.length,
+    smallest: inMetro.length > 0 ? Math.min(...inMetro.map((s) => s.assets)) : null,
+  };
+}
