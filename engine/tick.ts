@@ -9,7 +9,7 @@ import { calibration } from '../data/calibration';
 import { businessBalances, originateToTarget, poolsMonthly, refreshLoanYield, reserveQuarterly } from './credit';
 import { type Ctx, emit, milestone } from './ctx';
 import { decideRatePrompt, depositsDaily, depositsMonthly } from './deposits';
-import { markSecurities, securitiesRunoff, investPolicyMonthly } from './funding';
+import { markSecurities, securitiesRunoff, investPolicyMonthly, paydownMonthly } from './funding';
 import { economyMonthly } from './economy';
 import { failuresDaily } from './failure';
 import { decideWorkout, loansDaily, loansMonthly } from './loans';
@@ -280,7 +280,10 @@ function monthlyClose(ctx: Ctx): void {
     // written policy, toward the loans to deposits target (D50); the desk
     // sees the large credits on top of that.
     if (!growthRestricted(b)) originateToTarget(ctx, b);
-    if (b.id === world.playerBankId) investPolicyMonthly(ctx, b);
+    if (b.id === world.playerBankId) {
+      paydownMonthly(ctx, b);
+      investPolicyMonthly(ctx, b);
+    }
     refreshLoanYield(b);
     if (b.id === world.playerBankId) dialMonthly(ctx, b);
   }

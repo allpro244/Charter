@@ -127,6 +127,7 @@ export interface Bank {
   fhlbCapacityUsed: number; // informational, advances are acct.fhlb
   liquidityStress: number; // 0 to 1, rises when withdrawals exceed cash
   officerCandidates: Officer[]; // available hires this month
+  vacantSince?: Partial<Record<OfficerRole, number>>; // the day each empty seat opened; the board's search fills it after officerSearchDays (D63)
   takeover: { criticizedShare: number; seed: number } | null; // inherited book condition, used by credit
   pools: Pool[];
   loans: Loan[]; // relationship book, player's bank only (D29)

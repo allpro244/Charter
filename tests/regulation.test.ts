@@ -184,4 +184,20 @@ describe('regulation', () => {
     expect(b.acct.aoci).toBeGreaterThan(b.acct.afsValuation);
     balanced(world);
   });
+
+  it('an empty officer seat is filled by the board search, so a sound bank does not drift into an order (D63)', () => {
+    const world = createWorld(63);
+    const b = player(world, 200_000_000, 0.14);
+    b.officers = b.officers.filter((o) => o.role !== 'cfo');
+    for (let d = 0; d < 365 * 3; d++) {
+      tick(world);
+      for (const p of [...world.pending]) if (p.blocking) world.pending.splice(world.pending.indexOf(p), 1);
+      // A careless CEO: every seat that opens stays open unless the search fills it.
+      if (d === 400) b.officers = b.officers.filter((o) => o.role !== 'cco');
+    }
+    expect(b.officers.map((o) => o.role).sort()).toEqual(['cco', 'cfo', 'clo']);
+    expect(['none', 'mou']).toContain(b.enforcement);
+    expect(world.feed.some((f) => f.text.includes("board's search filled"))).toBe(true);
+    balanced(world);
+  });
 });

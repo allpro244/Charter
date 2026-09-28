@@ -58,3 +58,12 @@ export function isWeekend(day: number): boolean {
   const dow = dateOf(day).dow;
   return dow === 0 || dow === 6;
 }
+
+// The next month, quarter or year end strictly after this day: where the
+// desk's skip ahead stops (D64).
+export function nextClose(day: number, span: 'month' | 'quarter' | 'year'): number {
+  const test = span === 'month' ? isMonthEnd : span === 'quarter' ? isQuarterEnd : isYearEnd;
+  let d = day + 1;
+  while (!test(d)) d++;
+  return d;
+}

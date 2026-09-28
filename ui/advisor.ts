@@ -3,7 +3,7 @@
 // on the desk and what to do about it.
 
 import { fhlbCapacity, unrealizedToCapital } from '../engine/funding';
-import { bankDepositRate, marketDepositRate } from '../engine/deposits';
+import { marketDepositRate, sheetRate } from '../engine/deposits';
 import { leverageRatio, totalAssets, totalDeposits } from '../engine/ledger';
 import { capitalStack, creConcentration } from '../engine/regulation';
 import { dealCapacity, reservationPriceToBook } from '../engine/deals';
@@ -34,15 +34,15 @@ export function adviceFor(world: World): Card[] {
   const last = b.reports[b.reports.length - 1];
   const prior = b.reports[b.reports.length - 2];
   if (last && prior && prior.deposits > 0 && last.deposits < prior.deposits * 0.95 && totalDeposits(a) < last.deposits) out.push({ key: 'runoff', text: `Deposits fell ${pct(1 - last.deposits / prior.deposits, 1)} last quarter and are still falling. Depositors leave for rate, for confidence, or for a rival's branch; the Money tab shows which.` });
-  const gap = marketDepositRate(world) - bankDepositRate(b);
-  if (gap > 0.0075) out.push({ key: 'rates', text: `You pay ${pct(bankDepositRate(b))} against a market at ${pct(marketDepositRate(world))}. Money market and CD money leaves first. The Money tab has the sheet.` });
+  const gap = marketDepositRate(world) - sheetRate(b);
+  if (gap > 0.0075) out.push({ key: 'rates', text: `Your rate sheet pays ${pct(sheetRate(b))} against a market at ${pct(marketDepositRate(world))}. Money market and CD money leaves first. The Money tab has the sheet.` });
   if (b.confidence < 0.85) out.push({ key: 'conf', text: `Depositor confidence ${pct(b.confidence, 0)}. Uninsured balances (${pct(b.uninsuredShare, 0)} of deposits) move first. Capital and cash calm it; nothing else does.` });
   const u = unrealizedToCapital(b);
   if (u > 0.3) out.push({ key: 'aoci', text: `Unrealized securities losses are ${pct(u, 0)} of tier 1. Examiners rate it; depositors read it. Shorten the book, or hedge with a swap if you are past ${usd(1e9)}.` });
   const conc = creConcentration(b);
   if (conc.construction > 1 || conc.cre > 3) out.push({ key: 'cre', text: `CRE concentration: construction ${pct(conc.construction, 0)} and investor CRE ${pct(conc.cre, 0)} of capital. Above 100% and 300% the exam finding is automatic.` });
   const vacancies = ['cco', 'cfo', 'clo'].filter((r) => !b.officers.some((o) => o.role === r));
-  if (vacancies.length > 0) out.push({ key: 'off', text: `${vacancies.length} officer ${vacancies.length === 1 ? 'seat is' : 'seats are'} vacant (${vacancies.join(', ').toUpperCase()}). A vacant desk runs at a low default skill. The People tab has candidates.` });
+  if (vacancies.length > 0) out.push({ key: 'off', text: `${vacancies.length} officer ${vacancies.length === 1 ? 'seat is' : 'seats are'} vacant (${vacancies.join(', ').toUpperCase()}). A vacant desk runs at a low default skill and the examiners count it. The board's search fills a seat in about three months; to choose who, hire from Your team on the You tab.` });
   const monthsThisYear = Math.max(1, dateOf(world.day).m - 1 + dateOf(world.day).d / 30);
   const deskPerMonth = (b.applications.toDeskYtd ?? 0) / monthsThisYear;
   if (deskPerMonth > 20 && monthsThisYear >= 2) out.push({ key: 'desk', text: `About ${Math.round(deskPerMonth)} loans a month reach your desk. Raise the size line on the Lending tab (policy and dial) so only the credits that matter at ${usd(assets)} stop the clock; the rest are decided under your written policy.` });
@@ -66,6 +66,9 @@ export function adviceFor(world: World): Card[] {
     if (price <= cap.cash) out.push({ key: 'buy', text: `${target.name} (${usd(totalAssets(target.acct))} of assets) is for sale nearby for about ${usd(price)}, and you can pay it. Buying a bank is the fastest way up the ladder: World tab, the other banks, open it and make an offer.` });
   }
   if (ageYears >= 3 && strong && b.dividendPayout === 0 && b.reports.slice(-4).every((r) => r.netIncome > 0) && b.reports.length >= 4) out.push({ key: 'div', text: `Three years in, profitable and well capitalized: the bank can start paying a dividend. You own ${pct(world.player.shares / Math.max(1, b.shares), 0)} of it, so a payout is your money too. You tab, dividend payout.` });
+  // Capital far above what the bank uses earns nothing for its owners:
+  // put it to work or pay it out, as every board asks.
+  if (ageYears >= 4 && lev >= 0.15 && b.enforcement === 'none') out.push({ key: 'excess', text: `Capital is ${pct(lev, 1)} of assets, well over the 9% a strong bank holds. Idle capital lowers your return on equity. Put it to work (a branch on the Map, a bank for sale on World, a higher loans to deposits target on Loans) or pay it out (dividend payout on the You tab; you own ${pct(world.player.shares / Math.max(1, b.shares), 0)}, so most of it comes to you).` });
   const share = ownership(world, b).player;
   if (share < 0.5 && ageYears >= 2.5) {
     let losing = 0;

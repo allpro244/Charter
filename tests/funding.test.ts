@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { calibration } from '../data/calibration';
-import { closeBranch, coreDeposits, setRate } from '../engine/deposits';
+import { bankDepositRate, closeBranch, coreDeposits, marketDepositRate, marketRate, setRate, sheetRate } from '../engine/deposits';
 import { buySecurities, fhlbCapacity, borrowFhlb, raiseBrokered, repayFhlb, sellSecurities, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
 import { DEPOSIT_TYPES, totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../engine/ledger';
 import { fire, hire, refreshCandidates } from '../engine/officers';
@@ -204,5 +204,31 @@ describe('deposits and funding', () => {
     const { world, bank } = playerBankWorld(38, { capital: 20_000_000, deposits: 200_000_000, loans: 120_000_000, afs: 20_000_000, htm: 0, pool: 200_000_000 / 0.02 });
     expect(bank.branches.length).toBe(0); // no geography, no branches
     expect(closeBranch({ world, events: [] }, 'nope')).toBe(false);
+  });
+
+  it('spare cash repays Home Loan Bank advances before the CFO buys bonds (D63)', () => {
+    const { world, bank } = playerBankWorld(64, { capital: 20_000_000, deposits: 180_000_000, loans: 130_000_000, afs: 30_000_000, htm: 20_000_000, pool: 180_000_000 / 0.02 });
+    bank.investPolicy = { cashTarget: 0.08, product: 'agency', duration: 3, kind: 'afs' };
+    const drawn = borrowFhlb({ world, events: [] }, bank, 15_000_000, true);
+    expect(drawn).toBe(15_000_000);
+    const afsBefore = bank.acct.securitiesAFS;
+    for (let d = 0; d < 400 && !isMonthEnd(world.day); d++) tick(world);
+    tick(world);
+    for (let d = 0; d < 40 && !isMonthEnd(world.day); d++) tick(world);
+    // The advance is paid down first; bonds are bought only once it is gone.
+    expect(bank.acct.fhlb).toBeLessThan(15_000_000);
+    if (bank.acct.fhlb > 0) expect(bank.acct.securitiesAFS).toBeLessThanOrEqual(afsBefore);
+    expect(totalAssets(bank.acct) - totalLiabilities(bank.acct) - totalEquity(bank.acct)).toBe(0);
+  });
+
+  it('the market compares rate sheets, not a bank\'s blended cost (D63)', () => {
+    const { world, bank } = playerBankWorld(65, { capital: 20_000_000, deposits: 180_000_000, loans: 130_000_000, afs: 30_000_000, htm: 20_000_000, pool: 180_000_000 / 0.02 });
+    for (const t of DEPOSIT_TYPES) setRate(world, t, marketRate(world, t));
+    // A bank left with mostly checking still prices at the market.
+    bank.acct.checking += bank.acct.mmda + bank.acct.cd;
+    bank.acct.mmda = 0;
+    bank.acct.cd = 0;
+    expect(bankDepositRate(bank)).toBeLessThan(marketDepositRate(world));
+    expect(Math.abs(sheetRate(bank) - marketDepositRate(world))).toBeLessThan(0.0001);
   });
 });

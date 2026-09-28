@@ -9,6 +9,7 @@ import { post, totalAssets } from './ledger';
 import { type Rng, chance, pick, randNormal } from './rng';
 import { type Bank, type Decision, type Officer, type OfficerRole, type Pending, type World, nextId, playerBank } from './state';
 import { money } from './format';
+import { calibration } from '../data/calibration';
 
 const FIRST = ['Ana', 'Marcus', 'Priya', 'Tom', 'Elena', 'Devon', 'Grace', 'Luis', 'Nadia', 'Frank', 'Mei', 'Owen', 'Rosa', 'Jamal', 'Karen', 'Victor', 'Sofia', 'Walt', 'Ingrid', 'Ray'];
 const LAST = ['Delgado', 'Whitfield', 'Okafor', 'Brennan', 'Tanaka', 'Sorensen', 'Mahoney', 'Patel', 'Kowalski', 'Ruiz', 'Chen', 'Abernathy', 'Novak', 'Fischer', 'Hale', 'Moreau', 'Singh', 'Larsen', 'Baptiste', 'Gutierrez'];
@@ -123,6 +124,7 @@ export function officersMonthly(ctx: Ctx): void {
   if (!b || b.status !== 'open') return;
   const r = world.rng;
   refreshCandidates(world, b, r);
+  searchVacancies(ctx, b);
   if (world.pending.some((p) => p.kind === 'officer_event')) return;
   for (const o of b.officers) {
     const tenureYears = (world.day - o.hiredDay) / 365;
@@ -149,6 +151,34 @@ export function officersMonthly(ctx: Ctx): void {
       return;
     }
     o.loyalty = Math.min(1, o.loyalty + 0.005);
+  }
+}
+
+// No bank leaves a senior seat empty for years. When one opens the board
+// starts a search; unless the CEO hires first from the candidates, the
+// search seats the middle candidate after officerSearchDays (D63).
+function searchVacancies(ctx: Ctx, b: Bank): void {
+  const { world } = ctx;
+  const since = (b.vacantSince ??= {});
+  const wait = calibration.officerSearchDays.typical;
+  for (const role of ROLES) {
+    if (officer(b, role)) {
+      delete since[role];
+      continue;
+    }
+    const opened = since[role];
+    if (opened === undefined) {
+      since[role] = world.day;
+      emit(ctx, 'officer', `The ${ROLE_LABEL[role]} seat is empty. The board has started a search and will fill it in about ${Math.round(wait / 30)} months unless you hire first (You, Your team)`, { severity: 'alert', bankId: b.id });
+      continue;
+    }
+    if (world.day - opened < wait) continue;
+    const pool = b.officerCandidates.filter((c) => c.role === role);
+    const pickc = pool[1] ?? pool[0];
+    if (pickc && hire(ctx, b, pickc.id)) {
+      delete since[role];
+      emit(ctx, 'officer', `The board's search filled the ${ROLE_LABEL[role]} seat`, { bankId: b.id });
+    }
   }
 }
 

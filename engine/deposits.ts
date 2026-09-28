@@ -39,6 +39,17 @@ export function marketDepositRate(world: World): number {
   return r;
 }
 
+// The rate sheet priced at the market's standard mix: what a depositor
+// shopping the sheet compares, and the only fair comparison with
+// marketDepositRate. A bank's own blended cost (bankDepositRate) falls
+// when its rate shoppers leave, and comparing that with the market read
+// a bank matching every rate as a cheap one and chased more money out.
+export function sheetRate(b: Bank): number {
+  let r = 0;
+  for (const t of DEPOSIT_TYPES) r += DEFAULT_MIX[t] * b.rates[t];
+  return r;
+}
+
 export function bankDepositRate(b: Bank): number {
   const core = coreDeposits(b);
   let r = 0;
@@ -109,6 +120,35 @@ export function attractiveness(rateGap: number, years: number, assets: number, c
 
 // Splits a county's simulated share of deposits among the branches there
 // by attractiveness. Returns a target per branch. Pure.
+// With caps, a branch that hits its cap gives the rest back to the others
+// by the same weights (water filling), so no dollar of the contest is lost:
+// a new rival branch capped at what it can gather must not drag a
+// neighbour's target down with money nobody holds.
+export function splitCapped(pot: number, branches: { attract: number; cap: number }[]): number[] {
+  const out = branches.map(() => 0);
+  let open = branches.map((_, i) => i);
+  let left = pot;
+  for (let round = 0; round < branches.length && left > 0 && open.length > 0; round++) {
+    let sum = 0;
+    for (const i of open) sum += (branches[i] as { attract: number }).attract;
+    if (sum <= 0) break;
+    const next: number[] = [];
+    let used = 0;
+    for (const i of open) {
+      const br = branches[i] as { attract: number; cap: number };
+      const want = (left * br.attract) / sum;
+      const give = Math.min(want, br.cap - (out[i] as number));
+      out[i] = (out[i] as number) + give;
+      used += give;
+      if (give >= want) next.push(i);
+    }
+    left -= used;
+    if (next.length === open.length) break;
+    open = next;
+  }
+  return out.map((x) => Math.round(x));
+}
+
 export function splitCounty(pool: number, simulatedShare: number, branches: { attract: number }[]): number[] {
   let sum = 0;
   for (const b of branches) sum += b.attract;
@@ -143,17 +183,19 @@ export function competeCounties(world: World): void {
       own.push(mine);
       natural += mine;
       const years = (world.day - br.openedDay) / 365;
-      return { attract: attractiveness(bankDepositRate(bank) - marketDepositRate(world), years, totalAssets(bank.acct), bank.confidence) };
+      return { attract: attractiveness(sheetRate(bank) - marketDepositRate(world), years, totalAssets(bank.acct), bank.confidence) };
     });
     // The contested pot: what the branches would hold on their own, capped
     // by the county pool. Winners take from losers inside it, but no branch
     // wins more than a quarter over what it could gather on its own: a new
     // branch does not inherit a giant's customers by pricing well.
     const pot = Math.min(county.depositPool, Math.max(held, natural));
-    const targets = splitCounty(pot, 1, attract);
+    const targets = splitCapped(
+      pot,
+      list.map((x, i) => ({ attract: (attract[i] as { attract: number }).attract, cap: Math.max(Math.round((own[i] ?? 0) * 1.25), x.br.deposits) })),
+    );
     list.forEach((x, i) => {
-      const t = targets[i] ?? 0;
-      x.br.competitiveTarget = Math.min(t, Math.max(Math.round((own[i] ?? 0) * 1.25), x.br.deposits));
+      x.br.competitiveTarget = targets[i] ?? 0;
     });
   }
 }
@@ -381,14 +423,14 @@ function ratePrompt(ctx: Ctx): void {
   const b = playerBank(world);
   if (!b || b.status !== 'open' || b.ratePeg) return;
   if (world.pending.some((p) => p.kind === 'rate_prompt')) return;
-  const gap = marketDepositRate(world) - bankDepositRate(b);
+  const gap = marketDepositRate(world) - sheetRate(b);
   if (Math.abs(gap) > 0.0075 && chance(world.rng, 0.2)) {
     addPending(ctx, {
       kind: 'rate_prompt',
       bankId: b.id,
       title: gap > 0 ? 'Depositors are asking about your rates' : 'Your CFO says the sheet is above the market',
       lines: [
-        `The market pays ${pct(marketDepositRate(world))} on an average dollar of deposits. You pay ${pct(bankDepositRate(b))}.`,
+        `On an ordinary mix of accounts the market's rate sheet pays ${pct(marketDepositRate(world))}. Yours pays ${pct(sheetRate(b))}.`,
         gap > 0 ? `Money market and CD customers move first. Match the market, or hold and keep the margin.` : `Every basis point over the market is margin given away. Match the market, or hold and keep gathering.`,
       ],
       options: [
@@ -499,9 +541,9 @@ export function branchCase(world: World, b: Bank, county: CountyState, rivals: B
     for (const { bank, br } of there) {
       held += br.deposits;
       natural += branchTarget(world, bank, br);
-      attract.push({ attract: attractiveness(bankDepositRate(bank) - marketDepositRate(world), (world.day - br.openedDay) / 365, totalAssets(bank.acct), bank.confidence) });
+      attract.push({ attract: attractiveness(sheetRate(bank) - marketDepositRate(world), (world.day - br.openedDay) / 365, totalAssets(bank.acct), bank.confidence) });
     }
-    attract.push({ attract: attractiveness(bankDepositRate(b) - marketDepositRate(world), 6, totalAssets(b.acct), b.confidence) });
+    attract.push({ attract: attractiveness(sheetRate(b) - marketDepositRate(world), 6, totalAssets(b.acct), b.confidence) });
     const pot = Math.min(county.depositPool, Math.max(held, natural + mature));
     const split = splitCounty(pot, 1, attract);
     contested = Math.min(mature, split[split.length - 1] ?? 0);

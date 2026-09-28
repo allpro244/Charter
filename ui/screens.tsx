@@ -23,14 +23,18 @@ import { counterTerms, fundable, policyCheck, termsFrom } from '../engine/underw
 import { lendingLimit } from '../engine/regulation';
 import { ladder } from '../engine/ladder';
 
-// Days per real second by speed. Speed 4 is D3's top speed: a year in
-// two minutes. Speed 5 is for skipping ahead.
-export const SPEEDS = [0, 0.5, 1, 2, 3, 6];
+// Days per real second by speed. Normal reads the feed as it happens;
+// Max runs a year in about six seconds for the long waits between the
+// things that matter (D64). Skipping ahead runs at SKIP_SPEED until the
+// chosen close or the first decision.
+export const SPEEDS = [0, 0.5, 1.5, 6, 20, 60];
+export const SKIP_SPEED = 120;
 const SPEED_LABELS = ['', 'Slow', 'Normal', 'Fast', 'Faster', 'Max'];
 // Three buttons; keys 1 to 5 still reach every speed.
 const SPEED_BUTTONS = [2, 3, 5];
+export type Skip = 'month' | 'quarter' | 'year';
 
-export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp, alerts = 0, onAlerts }: { world: World; speed: number; onSpeed: (n: number) => void; onToggle: () => void; onSave: () => void; saved: boolean; onHelp: () => void; alerts?: number; onAlerts?: () => void }) {
+export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp, alerts = 0, onAlerts, until = null, onSkip }: { world: World; speed: number; onSpeed: (n: number) => void; onToggle: () => void; onSave: () => void; saved: boolean; onHelp: () => void; alerts?: number; onAlerts?: () => void; until?: number | null; onSkip?: (s: Skip) => void }) {
   const bank = world.playerBankId ? world.banks[world.playerBankId] : null;
   const rank = world.ladder?.rank ?? 0;
   const assets = bank ? totalAssets(bank.acct) : 0;
@@ -51,11 +55,24 @@ export function TopBar({ world, speed, onSpeed, onToggle, onSave, saved, onHelp,
         </button>
         <div className="seg" role="group" aria-label="Speed">
           {SPEED_BUTTONS.map((n) => (
-            <button key={n} className={speed === n || (speed > 0 && !SPEED_BUTTONS.includes(speed) && n === SPEED_BUTTONS.find((x) => x >= speed)) ? 'on' : ''} title={`${SPEEDS[n]} days per second (key ${n})`} onClick={() => onSpeed(n)}>
+            <button key={n} className={speed === n || (speed > 0 && !SPEED_BUTTONS.includes(speed) && n === SPEED_BUTTONS.find((x) => x >= speed)) ? 'on' : ''} title={`${SPEEDS[n]} days a second (key ${n})`} onClick={() => onSpeed(n)}>
               {SPEED_LABELS[n]}
             </button>
           ))}
         </div>
+        {onSkip && (
+          <>
+          <span className="seg-label" style={{ marginLeft: 6 }}>Skip to</span>
+          <div className="seg" role="group" aria-label="Skip ahead" title="Run fast to the end of the month, quarter or year. Any decision stops it.">
+            {(['month', 'quarter', 'year'] as Skip[]).map((s) => (
+              <button key={s} onClick={() => onSkip(s)}>
+                {s === 'month' ? 'Month end' : s === 'quarter' ? 'Quarter end' : 'Year end'}
+              </button>
+            ))}
+          </div>
+          </>
+        )}
+        {until !== null && <span className="dim small">running to {formatDate(until)}</span>}
       </div>
       {bank && (
         <div className="topstats">
@@ -1006,7 +1023,8 @@ export function HelpModal({ onClose, onNewWorld, onDebug }: { onClose: () => voi
     ['Market', 'every other bank, offers to buy them, business lines, and the world abroad'],
     ['Map', 'real counties; hover for numbers, open branches'],
     ['You', 'salary, dividends, your stake, your record'],
-    ['Play and Pause, or space', 'start and stop the clock; Slow to Max, or keys 1 to 5, set the speed'],
+    ['Play and Pause, or space', 'start and stop the clock; Slow to Max, or keys 1 to 5, set the speed (Max runs a year in about six seconds)'],
+    ['Skip to month, quarter or year end', 'runs fast to that close and stops; any decision stops it first, and answering carries on to the close'],
     ['Decision buttons, or the key shown on them', 'answer a loan, an exam, an offer. Every decision says what it means first'],
     ['Underlined words', 'hover for a plain explanation'],
     ['Save, or s', 'save in this browser; the game also saves every year end'],

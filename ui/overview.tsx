@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import type React from 'react';
 import { calibration } from '../data/calibration';
 import { bookByType } from '../engine/credit';
-import { bankDepositRate, marketDepositRate } from '../engine/deposits';
+import { marketDepositRate, sheetRate } from '../engine/deposits';
 import { fhlbCapacity } from '../engine/funding';
 import { type IncomeStatement, interestExpense, interestIncome, leverageRatio, netIncome, noninterestExpense, tier1Capital, totalAssets, totalDeposits } from '../engine/ledger';
 import { PEER_METRICS, levers, peerGroup } from '../engine/peers';
@@ -97,7 +97,7 @@ function gauges(world: World, b: Bank): Gauge[] {
   const ago = b.reports.length >= 5 ? b.reports[b.reports.length - 5] : undefined;
   const growth = ago && ago.assets > 0 ? assets / ago.assets - 1 : null;
   const depGrowth = ago && ago.deposits > 0 ? deposits / ago.deposits - 1 : null;
-  const gap = marketDepositRate(world) - bankDepositRate(b);
+  const gap = marketDepositRate(world) - sheetRate(b);
   out.push({
     key: 'growth',
     label: 'Growth',
@@ -107,7 +107,7 @@ function gauges(world: World, b: Bank): Gauge[] {
     meaning:
       growth === null
         ? 'A year of call reports is needed to measure it.'
-        : `Assets over the last year. Deposits ${depGrowth !== null && depGrowth >= 0 ? 'up' : 'down'} ${pct(Math.abs(depGrowth ?? 0), 1)}; you pay ${pct(bankDepositRate(b))} against a market at ${pct(marketDepositRate(world))}${gap > 0.005 ? ', which costs you balances' : ''}.`,
+        : `Assets over the last year. Deposits ${depGrowth !== null && depGrowth >= 0 ? 'up' : 'down'} ${pct(Math.abs(depGrowth ?? 0), 1)}; your rate sheet pays ${pct(sheetRate(b))} against a market at ${pct(marketDepositRate(world))}${gap > 0.005 ? ', which costs you balances' : ''}.`,
     go: 'MONEY',
     goLabel: 'Money',
   });

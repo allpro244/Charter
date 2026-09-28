@@ -184,6 +184,26 @@ export function sellSecurities(ctx: Ctx, b: Bank, lotId: string, amount: number,
 // The CFO's standing order (D50): cash above the target share of assets,
 // with a point of slack, goes into the policy's product and duration in
 // lots of at least one percent of assets. Sales are never automatic.
+// The treasury's first use of spare cash: pay back what was borrowed to
+// cover withdrawals (overnight, then Home Loan Bank advances) before a
+// dollar goes into bonds. Cash above the policy's target plus a point is
+// spare. Without this a bank drew on the line in every outflow and never
+// paid it back, and carried a third of its assets in borrowed money (D63).
+export function paydownMonthly(ctx: Ctx, b: Bank): void {
+  if (b.status !== 'open') return;
+  const a = b.acct;
+  if (a.fhlb <= 0 && a.fedFundsPurchased <= 0) return;
+  const assets = totalAssets(a);
+  let room = a.cash - Math.round(assets * ((b.investPolicy?.cashTarget ?? 0.08) + 0.01));
+  if (room <= 0) return;
+  const ff = Math.min(room, a.fedFundsPurchased);
+  if (ff > 0) {
+    post(a, { cash: -ff, fedFundsPurchased: -ff });
+    room -= ff;
+  }
+  if (room > 0 && a.fhlb > 0) repayFhlb(ctx, b, Math.min(room, a.fhlb), true);
+}
+
 export function investPolicyMonthly(ctx: Ctx, b: Bank): void {
   const p = b.investPolicy;
   if (!p || b.status !== 'open') return;
@@ -230,11 +250,11 @@ export function borrowFhlb(ctx: Ctx, b: Bank, amount: number, quiet = false): nu
   return amount;
 }
 
-export function repayFhlb(ctx: Ctx, b: Bank, amount: number): number {
+export function repayFhlb(ctx: Ctx, b: Bank, amount: number, quiet = false): number {
   amount = Math.min(Math.round(amount), b.acct.fhlb, b.acct.cash);
   if (amount <= 0) return 0;
   post(b.acct, { cash: -amount, fhlb: -amount });
-  emit(ctx, 'system', `Repaid ${money(amount)} of FHLB advances`, { bankId: b.id });
+  if (!quiet || amount > 0.01 * totalAssets(b.acct)) emit(ctx, 'system', `${quiet ? 'CFO repaid' : 'Repaid'} ${money(amount)} of FHLB advances${quiet ? ' from spare cash' : ''}`, { bankId: b.id });
   return amount;
 }
 

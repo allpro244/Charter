@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { calibration } from '../data/calibration';
-import { attractiveness, bankDepositRate, coreDeposits, splitCounty } from '../engine/deposits';
+import { attractiveness, bankDepositRate, coreDeposits, splitCapped, splitCounty } from '../engine/deposits';
 import { totalAssets, totalDeposits, totalEquity, totalLiabilities } from '../engine/ledger';
 import { adoptPolicy, expandState, randomPolicy } from '../engine/rivals';
 import { makeRng } from '../engine/rng';
@@ -65,6 +65,17 @@ describe('rivals', () => {
     const targets = splitCounty(1_000_000_000, 0.3, [{ attract: 2 }, { attract: 1 }]);
     expect(targets[0]! + targets[1]!).toBeCloseTo(300_000_000, -2);
     expect(targets[0]!).toBe(2 * targets[1]!);
+  });
+
+  it('a capped branch gives its surplus back to the others, so the county pot is conserved (D63)', () => {
+    // A new rival branch with a huge rate is capped at what it can gather;
+    // the rest of the pot goes to the neighbours, not nowhere.
+    const t = splitCapped(300, [{ attract: 10, cap: 20 }, { attract: 1, cap: 400 }, { attract: 1, cap: 400 }]);
+    expect(t[0]).toBe(20);
+    expect(t[1]! + t[2]!).toBe(280);
+    expect(t[1]).toBe(t[2]);
+    const loose = splitCapped(300, [{ attract: 2, cap: 1000 }, { attract: 1, cap: 1000 }]);
+    expect(loose).toEqual([200, 100]);
   });
 });
 

@@ -220,7 +220,10 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   // Management: vacancies, weak officers, policy exceptions, unresolved findings.
   const vacancies = ['cco', 'cfo', 'clo'].filter((r) => !b.officers.some((o) => o.role === r)).length;
   const weak = b.officers.filter((o) => o.skill < 40).length;
-  const exceptions = b.applications.autoApproved > 0 ? b.loans.filter((l) => l.decision.note.includes('exception')).length / Math.max(1, b.loans.length) : 0;
+  // Examiners sample the last two years of originations, not the whole
+  // history: a policy followed since the last exam clears the finding (D63).
+  const recent = b.loans.filter((l) => l.decision.by !== 'inherited' && world.day - l.originated <= 730);
+  const exceptions = recent.length >= 5 ? recent.filter((l) => l.decision.note.includes('exception')).length / recent.length : 0;
   const unresolved = c.findings.filter((f) => !f.resolved && world.day - f.day > 365).length;
   // A finding ignored through two cycles is a management weakness of its own.
   const ignoredTwice = c.findings.filter((f) => !f.resolved && world.day - f.day > 730).length;

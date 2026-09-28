@@ -8,12 +8,12 @@ import { totalAssets } from '../engine/ledger';
 import { type Decision, type Pending, type World, createWorld } from '../engine/state';
 import { newPlayer, startCharter, startTakeover, type TakeoverCandidate } from '../engine/start';
 import { applyDecisions, tick } from '../engine/tick';
-import { isQuarterEnd } from '../engine/time';
+import { isQuarterEnd, nextClose } from '../engine/time';
 import { setDividendPayout, setSalary } from '../engine/wealth';
 import { type Loaded, loadData } from './data';
 import { type Unit, short, unitFor } from './format';
 import { MapView, type Shade } from './map';
-import { DebugScreen, DecisionDock, HelpModal, MeScreen, SPEEDS, TopBar } from './screens';
+import { DebugScreen, DecisionDock, HelpModal, MeScreen, SKIP_SPEED, SPEEDS, type Skip, TopBar } from './screens';
 import { adviceFor } from './advisor';
 import { StartPanel } from './start';
 import { LoansScreen } from './loans';
@@ -92,6 +92,9 @@ export function App() {
   }, []);
   const [speed, setSpeedState] = useState(0);
   const speedRef = useRef(0);
+  // Skip ahead (D64): the day the clock runs to at SKIP_SPEED, or null.
+  const untilRef = useRef<number | null>(null);
+  const [until, setUntil] = useState<number | null>(null);
   const resumeRef = useRef(2);
   const [version, setVersion] = useState(0);
   const [tickMs, setTickMs] = useState(0);
@@ -134,6 +137,8 @@ export function App() {
       worldRef.current = w;
       setPhase(w.playerBankId || !loadedRef.current ? 'play' : 'start');
       setSpeedState(0);
+      untilRef.current = null;
+      setUntil(null);
       speedRef.current = 0;
       setVersion((v) => v + 1);
       return true;
@@ -169,7 +174,30 @@ export function App() {
     if (s > 0) resumeRef.current = s;
     setSpeedState(s);
   }, []);
-  const togglePlay = useCallback(() => setSpeed(speedRef.current === 0 ? resumeRef.current : 0), [setSpeed]);
+  const stopSkip = useCallback(() => {
+    untilRef.current = null;
+    setUntil(null);
+  }, []);
+  // The player's own clock choices end a skip; a decision only interrupts it.
+  const chooseSpeed = useCallback(
+    (s: number) => {
+      stopSkip();
+      setSpeed(s);
+    },
+    [setSpeed, stopSkip],
+  );
+  const togglePlay = useCallback(() => chooseSpeed(speedRef.current === 0 ? resumeRef.current : 0), [chooseSpeed]);
+  const skip = useCallback(
+    (span: Skip) => {
+      const world = worldRef.current;
+      if (!world) return;
+      const target = nextClose(world.day, span);
+      untilRef.current = target;
+      setUntil(target);
+      if (!world.pending.some((p) => p.blocking)) setSpeed(speedRef.current || resumeRef.current);
+    },
+    [setSpeed],
+  );
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -215,19 +243,27 @@ export function App() {
       last = now;
       const world = worldRef.current;
       if (!world || speedRef.current === 0) return;
-      acc += dt * (SPEEDS[speedRef.current] ?? 0);
+      acc += dt * (untilRef.current !== null ? SKIP_SPEED : (SPEEDS[speedRef.current] ?? 0));
+      // A slow frame never makes up more than a moment of lost time.
+      acc = Math.min(acc, 30);
       let n = Math.floor(acc);
       if (n === 0) return;
       acc -= n;
+      let arrived = false;
       const t0 = performance.now();
       let paused = false;
       while (n-- > 0) {
         const r = tick(world);
         if (isQuarterEnd(world.day)) writeSave(world);
-        if (r.pending.some((p) => p.blocking) || world.playerBankId === null) {
+        if (untilRef.current !== null && world.day >= untilRef.current) arrived = true;
+        if (arrived || r.pending.some((p) => p.blocking) || world.playerBankId === null) {
           paused = true;
           break;
         }
+      }
+      if (arrived || world.playerBankId === null) {
+        untilRef.current = null;
+        setUntil(null);
       }
       setTickMs(performance.now() - t0);
       if (paused) setSpeed(0);
@@ -346,7 +382,7 @@ export function App() {
           return;
         }
         if (/^[0-5]$/.test(k)) {
-          setSpeed(Number(k));
+          chooseSpeed(Number(k));
           return;
         }
         if (SCREEN_KEYS[k]) {
@@ -378,7 +414,7 @@ export function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [phase, decide, setSpeed, togglePlay, saveNow]);
+  }, [phase, decide, chooseSpeed, togglePlay, saveNow]);
 
   if (phase === 'loading') {
     return (
@@ -476,7 +512,7 @@ export function App() {
   return (
     <div className="desk">
       <div className="chrome">
-        <TopBar world={world} speed={speed} onSpeed={setSpeed} onToggle={togglePlay} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} alerts={cards.length} onAlerts={() => goTo('OVERVIEW')} />
+        <TopBar world={world} speed={speed} onSpeed={chooseSpeed} onToggle={togglePlay} until={until} onSkip={skip} onSave={saveNow} saved={savedFlash} onHelp={() => setShowKeys((v) => !v)} alerts={cards.length} onAlerts={() => goTo('OVERVIEW')} />
         <nav className={'tabs' + (showKeys ? ' keys' : '')} aria-label="Screens">
           {SCREENS.map((s) => (
             <button key={s.id} className={'tab' + (screen === s.id ? ' on' : '')} onClick={() => setScreen(s.id)}>
