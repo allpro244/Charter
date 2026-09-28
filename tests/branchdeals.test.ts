@@ -3,8 +3,8 @@
 // the capital cannot carry, and offers arrive within the player's reach.
 
 import { describe, expect, it } from 'vitest';
-import { branchOffersMonthly, branchPurchaseCheck, buyBranch, offerFrom } from '../engine/branchdeals';
-import { coreDeposits } from '../engine/deposits';
+import { branchOffersMonthly, branchPurchaseCheck, branchSaleQuote, buyBranch, offerFrom, sellBranch } from '../engine/branchdeals';
+import { branchCandidates, coreDeposits, openBranch } from '../engine/deposits';
 import { imbalance, totalDeposits } from '../engine/ledger';
 import { newPlayer, startCharter, startableMetros } from '../engine/start';
 import { type Bank, createWorld } from '../engine/state';
@@ -95,5 +95,36 @@ describe('branch purchases (D59)', () => {
     expect(world.pending.filter((p) => p.kind === 'branch_offer').length).toBeLessThanOrEqual(1);
     void branchOffersMonthly;
     void ctx;
+  });
+
+  it('sells a branch: a nearby rival assumes the deposits and premises, the premium is a gain, both ledgers balance (D69)', () => {
+    const { world, ctx, bank } = charter(69);
+    const cand = branchCandidates(world, bank, 1)[0]!;
+    bank.acct.cash += 5_000_000;
+    bank.acct.commonStock += 5_000_000;
+    const br = openBranch(ctx, world.geo.counties[cand.fips]!)!;
+    for (let d = 0; d < 730; d++) {
+      tick(world);
+      world.pending = world.pending.filter((p) => !p.blocking);
+    }
+    expect(br.deposits).toBeGreaterThan(0);
+    expect(branchSaleQuote(world, bank, bank.branches[0]!.id).ok).toBe(false);
+    bank.acct.cash += br.deposits;
+    bank.acct.commonStock += br.deposits;
+    const q = branchSaleQuote(world, bank, br.id);
+    expect(q.ok).toBe(true);
+    const buyer = q.buyer!;
+    const depBefore = totalDeposits(bank.acct);
+    const buyerDep = totalDeposits(buyer.acct);
+    const fee = bank.is.month.feeIncome;
+    expect(sellBranch(ctx, br.id)).toBe(true);
+    expect(bank.branches.some((x) => x.id === br.id)).toBe(false);
+    expect(buyer.branches.some((x) => x.county === cand.fips)).toBe(true);
+    expect(depBefore - totalDeposits(bank.acct)).toBe(q.deposits);
+    expect(totalDeposits(buyer.acct) - buyerDep).toBe(q.deposits);
+    expect(bank.is.month.feeIncome - fee).toBe(q.premium);
+    expect(imbalance(bank.acct)).toBe(0);
+    expect(imbalance(buyer.acct)).toBe(0);
+    for (let d = 0; d < 60; d++) tick(world);
   });
 });

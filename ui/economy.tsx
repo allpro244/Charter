@@ -59,7 +59,7 @@ const READ: Record<LoanType, string> = {
   consumer: 'Auto and personal loans. Follows unemployment; high rate, high loss when it defaults.',
   ag: 'Follows crop and land prices, not the national cycle. Only where farming is.',
   energy: 'Follows oil. Booms and busts on its own clock. Only where the oil is.',
-  cards: 'Never walks in; comes from the card line on the Market tab. The highest rate and the highest loss.',
+  cards: 'Never walks in; comes from the card line on World, the other banks, business lines. The highest rate and the highest loss.',
 };
 
 function WhereToLend({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: string) => void }) {
@@ -196,7 +196,7 @@ function WhereToLend({ world, bank, onGo }: { world: World; bank: Bank; onGo: (t
               <td>
                 Rates, loan to value and coverage are set on the{' '}
                 <button className="btn small" onClick={() => onGo('LENDING')}>
-                  Lending tab
+                  Loans tab
                 </button>{' '}
                 under Policy and dial and the rate sheet.
               </td>

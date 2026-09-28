@@ -77,7 +77,7 @@ function gauges(world: World, b: Bank): Gauge[] {
     status: critShare < 0.03 ? 'Healthy' : critShare < 0.08 ? 'Watch' : 'Trouble',
     meaning: `${usd(crit < 1000 ? 0 : crit)} of loans are graded weak and ${usd(non < 1000 ? 0 : non)} have stopped paying. The allowance holds ${usd(a.allowance)} against them.`,
     go: 'LENDING',
-    goLabel: 'Lending',
+    goLabel: 'Loans',
   });
 
   const last = b.reports[b.reports.length - 1];
@@ -92,7 +92,7 @@ function gauges(world: World, b: Bank): Gauge[] {
     status: !last ? 'First quarter' : roa >= 0.008 ? 'Earning' : roa >= 0 ? 'Thin' : 'Losing money',
     meaning: last ? `Last quarter. Return on assets ${pct(roa)}; a typical bank this size earns about ${band.typical}%. So far this quarter: ${usd(qtd)}.` : `So far this quarter. The first call report closes at the end of the quarter.`,
     go: 'EARNINGS',
-    goLabel: 'Earnings',
+    goLabel: 'Results',
   });
 
   const ago = b.reports.length >= 5 ? b.reports[b.reports.length - 5] : undefined;
@@ -268,7 +268,7 @@ export function OverviewScreen({
                 <td className={'num' + (desk.lost > 0 ? ' alert' : '')}>{usd(desk.lost)}</td>
               </tr>
               <tr className="memo-row">
-                <td colSpan={2}>{desk.approved === 0 ? 'Nothing decided yet. Loans above the size line on the Lending tab come to you.' : desk.lost === 0 ? 'Not a dollar lost yet on your own calls.' : `${pct(desk.approvedAmount > 0 ? desk.lost / desk.approvedAmount : 0, 1)} of what you approved has been written off.`}</td>
+                <td colSpan={2}>{desk.approved === 0 ? 'Nothing decided yet. Loans above the size line on the Loans tab come to you.' : desk.lost === 0 ? 'Not a dollar lost yet on your own calls.' : `${pct(desk.approvedAmount > 0 ? desk.lost / desk.approvedAmount : 0, 1)} of what you approved has been written off.`}</td>
               </tr>
             </tbody>
           </table>
@@ -409,7 +409,7 @@ function Levers({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: s
             <td>{l.label}</td>
             <td>{l.today}</td>
             <td>{l.step}</td>
-            <td className={'num' + (l.effect > 0 ? ' positive' : l.effect < 0 ? ' alert' : '')}>{l.effect === 0 ? '' : (l.effect > 0 ? '+' : '-') + usd(Math.abs(l.effect))}</td>
+            <td className={'num' + (l.effect > 0 ? ' positive' : l.effect < 0 ? ' alert' : '')}>{l.effect === 0 ? <span className="dim" title="This lever works on balances the bank does not have yet: deposits, a loan book or a year of new loans.">not yet</span> : (l.effect > 0 ? '+' : '-') + usd(Math.abs(l.effect))}</td>
           </tr>
         ))}
         <tr className="memo-row">

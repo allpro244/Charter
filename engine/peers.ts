@@ -148,7 +148,7 @@ export function levers(world: World, b: Bank): Lever[] {
     today: `${Math.round(avgOffset * 10_000)} basis points against the market on average`,
     step: 'a quarter point more on new loans',
     effect: Math.round(0.0025 * originations),
-    note: `on about ${money(originations)} of new loans a year at this pace. Above the market, fewer borrowers come, at the elasticity band.`,
+    note: originations > 0 ? `on about ${money(originations)} of new loans a year at this pace. Above the market, fewer borrowers come, at the elasticity band.` : 'no new loans yet this year to price; the number starts with the first ones.',
     tab: 'LENDING',
   });
   // A branch: the best opening on the map.

@@ -500,6 +500,7 @@ export interface DepositRelationship {
   premium: number; // annual, over the market rate for the type
   since: number;
   until: number;
+  renewAsked?: boolean; // the renewal is on the desk (D69)
 }
 
 export interface Branch {

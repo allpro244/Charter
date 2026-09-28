@@ -232,7 +232,7 @@ function WhereToOpen({ world, bank, picked, onPick, onOpenBranch }: { world: Wor
       picked={picked}
       onPick={onPick}
       onOpenBranch={onOpenBranch}
-      footer={`Ranked by a mature year's earnings against the banks already there: what a dollar of deposits earns you once lent (${pct(cands[0]?.margin ?? 0, 1)}: your margin less the cost of running those loans and a year of losses) on the deposits the branch would hold, less the branch's running cost. Pays for itself is the year its earnings to date cover the premises paid on day one. Alone is what one branch could gather with nobody contesting the county; against them is its share of the county contest after six years. Click a row to see the county on the map.`}
+      footer={`Ranked by a mature year's earnings against the banks already there: what a dollar of deposits earns you once lent (${pct(cands[0]?.margin ?? 0, 1)}: your margin less the cost of running those loans and a year of losses) on the deposits the branch would hold, less the branch's running cost. Pays for itself is the year its earnings to date cover the premises paid on day one. Deposits when mature are what the branch holds after six years against the banks already there; where they cut into it the row says contested and what it would hold alone. Click a row to see the county on the map.`}
     />
   );
 }
@@ -277,8 +277,7 @@ function CandidateTable({ world, title, cands, picked, onPick, onOpenBranch, foo
           <th className="num">km from home</th>
           <th className="num">deposit pool</th>
           <th className="num">other banks' branches</th>
-          <th className="num">when mature, alone</th>
-          <th className="num">against them</th>
+          <th className="num">deposits when mature</th>
           <th className="num">cost a year</th>
           <th>pays for itself</th>
           <th></th>
@@ -296,8 +295,10 @@ function CandidateTable({ world, title, cands, picked, onPick, onOpenBranch, foo
               <td className="num">{num(k.distanceKm)}</td>
               <td className="num">{short(k.pool)}</td>
               <td className="num">{num(k.rivalBranches)}</td>
-              <td className="num">{short(k.mature)}</td>
-              <td className="num">{short(k.contested)}</td>
+              <td className="num" title={k.contested < k.mature ? `${short(k.mature)} with nobody contesting the county` : 'The county is big enough that the banks there do not cut into what one branch can hold'}>
+                {short(k.contested)}
+                {k.contested < k.mature ? <span className="dim"> (contested, {short(k.mature)} alone)</span> : ''}
+              </td>
               <td className="num">{short(k.fixedCost)}</td>
               <td>{payback(k)}</td>
               <td>
@@ -318,7 +319,7 @@ function CandidateTable({ world, title, cands, picked, onPick, onOpenBranch, foo
           );
         })}
         <tr>
-          <td colSpan={9} className="dim">
+          <td colSpan={8} className="dim">
             {footer}
           </td>
         </tr>

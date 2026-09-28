@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { calibration } from '../data/calibration';
 import type { Ctx } from '../engine/ctx';
+import { branchSaleQuote, sellBranch } from '../engine/branchdeals';
 import { DEFAULT_MIX, UNINSURED, bankDepositRate, closeBranch, coreDeposits, marketDepositRate, marketRate, setPegMode, setRate, setRatePeg } from '../engine/deposits';
 import { PRODUCT_LABEL, PRODUCT_SPREAD, buySecurities, canRaiseBrokered, executionCost, fhlbCapacity, borrowFhlb, marketYield, raiseBrokered, repayBrokered, repayFhlb, sellSecurities, setInvestPolicy, unrealizedLoss, unrealizedToCapital } from '../engine/funding';
 import { DEPOSIT_TYPES, type DepositType, totalAssets, totalDeposits } from '../engine/ledger';
@@ -272,11 +273,26 @@ function Deposits({ world, bank, unit, act }: Props) {
                 <td className="num">{num(br.distanceKm)}</td>
                 <td className="num">{formatDate(br.openedDay)}</td>
                 <td>
-                  {br.county !== bank.homeCounty && (
-                    <button className="btn small danger" onClick={() => act((ctx) => closeBranch(ctx, br.id))}>
-                      Close
-                    </button>
-                  )}
+                  {br.county !== bank.homeCounty && (() => {
+                    const q = branchSaleQuote(world, bank, br.id);
+                    return (
+                      <>
+                        <button
+                          className="btn small"
+                          disabled={!q.ok}
+                          title={q.ok ? `${q.buyer?.name} takes ${usd(q.deposits)} of deposits and the premises, you hand over ${usd(q.cashOut)} of cash and book a ${usd(q.premium)} gain` : (q.reason ?? '')}
+                          onClick={() => {
+                            if (confirm(`Sell the branch to ${q.buyer?.name}? ${usd(q.deposits)} of deposits and the premises go with it; you hand over ${usd(q.cashOut)} of cash and book a ${usd(q.premium)} gain.`)) act((ctx) => sellBranch(ctx, br.id));
+                          }}
+                        >
+                          {q.ok ? `Sell for a ${usd(q.premium)} premium` : 'Sell'}
+                        </button>{' '}
+                        <button className="btn small danger" title="Close it: the premises are written off and the deposits drift away" onClick={() => act((ctx) => closeBranch(ctx, br.id))}>
+                          Close
+                        </button>
+                      </>
+                    );
+                  })()}
                 </td>
               </tr>
             );

@@ -203,3 +203,82 @@ export function decideBranchOffer(ctx: Ctx, pending: Pending, d: Decision | null
   }
   buyBranch(ctx, buyer, seller, pending.data.offer as BranchOffer);
 }
+
+// Selling a branch (D69): the other side of D59. A rival nearby with the
+// capital and cash for it assumes the branch's deposits and takes its
+// premises at book, paying the branch deposit premium; the seller hands
+// over cash for the deposits less the premium and the premises, and books
+// the premium as a gain. The home branch is never for sale.
+export interface BranchSale {
+  ok: boolean;
+  reason: string | null;
+  buyer: Bank | null;
+  deposits: number;
+  premium: number;
+  premises: number;
+  cashOut: number; // cash the seller hands over
+}
+
+export function branchSaleQuote(world: World, b: Bank, branchId: string): BranchSale {
+  const br = b.branches.find((x) => x.id === branchId);
+  const none = (reason: string): BranchSale => ({ ok: false, reason, buyer: null, deposits: br?.deposits ?? 0, premium: 0, premises: 0, cashOut: 0 });
+  if (!br) return none('no such branch');
+  if (br.county === b.homeCounty) return none('the home branch is the bank itself');
+  const d = Math.min(br.deposits, coreDeposits(b));
+  if (d <= 0) return none('the branch holds no deposits yet; close it instead');
+  const premium = branchPremium(d);
+  const premises = Math.min(b.acct.premises, br.fixedCost);
+  const cashOut = d - premium - premises;
+  const county = world.geo.counties[br.county];
+  const near = new Set([b.state, ...(world.geo.states[b.state]?.neighbors ?? [])]);
+  // The buyer: the largest bank nearby without a branch in the county that
+  // stays well capitalized after the goodwill and can fund the premises.
+  let buyer: Bank | null = null;
+  for (const id of world.bankOrder) {
+    const x = world.banks[id] as Bank;
+    if (x.id === b.id || x.kind !== 'rival' || x.status !== 'open' || !near.has(x.state)) continue;
+    if (x.branches.some((q) => q.county === br.county) || growthRestricted(x)) continue;
+    if ((tier1Capital(x.acct) - premium) / Math.max(1, totalAssets(x.acct) + d) < PCA_WELL) continue;
+    if (x.acct.cash + d - premium < premises) continue;
+    if (!buyer || totalAssets(x.acct) > totalAssets(buyer.acct)) buyer = x;
+  }
+  if (!buyer) return { ...none(`no bank near ${county ? county.name : br.county} can take it today`), deposits: d, premium, premises, cashOut };
+  if (b.acct.cash < cashOut) return { ok: false, reason: `the buyer takes ${money(d)} of deposits and the bank must hand over ${money(cashOut)} of cash with them; it has ${money(b.acct.cash)} (sell bonds or draw on the Home Loan Bank first)`, buyer, deposits: d, premium, premises, cashOut };
+  return { ok: true, reason: null, buyer, deposits: d, premium, premises, cashOut };
+}
+
+export function sellBranch(ctx: Ctx, branchId: string): boolean {
+  const { world } = ctx;
+  const b = playerBank(world);
+  if (!b) return false;
+  const q = branchSaleQuote(world, b, branchId);
+  const br = b.branches.find((x) => x.id === branchId);
+  const county = br ? world.geo.counties[br.county] : undefined;
+  const label = county ? `${county.name}, ${county.state}` : (br?.county ?? '');
+  if (!q.ok || !q.buyer || !br) {
+    emit(ctx, 'system', `The ${label} branch did not sell: ${q.reason}.`, { severity: 'alert', bankId: b.id });
+    return false;
+  }
+  const buyer = q.buyer;
+  const core = Math.max(1, coreDeposits(b));
+  const out: Partial<Record<DepositType | 'cash' | 'retainedEarnings' | 'goodwill' | 'premises', number>> = {};
+  const inn: Partial<Record<DepositType | 'cash' | 'retainedEarnings' | 'goodwill' | 'premises', number>> = {};
+  let moved = 0;
+  DEPOSIT_TYPES.forEach((t, i) => {
+    const x = i === DEPOSIT_TYPES.length - 1 ? q.deposits - moved : Math.round((q.deposits * b.acct[t]) / core);
+    moved += x;
+    out[t] = -x;
+    inn[t] = x;
+  });
+  post(b.acct, { ...out, premises: -q.premises, cash: -q.cashOut, retainedEarnings: q.premium });
+  b.is.month.feeIncome += q.premium;
+  post(buyer.acct, { ...inn, premises: q.premises, cash: q.cashOut, goodwill: q.premium });
+  b.branches = b.branches.filter((x) => x.id !== br.id);
+  const buyerHome = buyer.homeCounty ? world.geo.counties[buyer.homeCounty] : undefined;
+  const distanceKm = buyerHome && county ? Math.round(km(buyerHome.centroid, county.centroid)) : 0;
+  buyer.branches.push({ id: nextId(world, 'br'), county: br.county, openedDay: br.openedDay, deposits: q.deposits, fixedCost: br.fixedCost, distanceKm, competitiveTarget: null });
+  world.deals.push({ day: world.day, kind: 'branch', buyer: buyer.name, target: `${b.name}, ${label} branch`, assets: q.deposits, price: q.premium, priceToBook: 0, regime: world.economy.regime });
+  milestone(ctx, `Sold the ${label} branch to ${buyer.name}: ${money(q.deposits)} of deposits for a ${money(q.premium)} premium`);
+  emit(ctx, 'system', `Sold the ${label} branch to ${buyer.name}: ${money(q.deposits)} of deposits and the premises went with it, ${money(q.cashOut)} of cash handed over, ${money(q.premium)} of premium booked as a gain, and ${money(br.fixedCost)} a year of running cost gone.`, { severity: 'good', bankId: b.id });
+  return true;
+}

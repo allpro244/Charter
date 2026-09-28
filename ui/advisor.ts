@@ -26,11 +26,11 @@ export function adviceFor(world: World): Card[] {
   const assets = totalAssets(a);
   const lev = leverageRatio(a);
   const stack = capitalStack(b);
-  if (lev < 0.06) out.push({ key: 'lev', text: `Leverage ${pct(lev, 1)}: below 5% dividends stop and the examiner arrives. Raise capital on the You tab or slow lending on the Lending tab.` });
+  if (lev < 0.06) out.push({ key: 'lev', text: `Leverage ${pct(lev, 1)}: below 5% dividends stop and the examiner arrives. Raise capital on the You tab or slow lending on the Loans tab.` });
   if (stack.bufferShortfall > 0 && lev >= 0.06) out.push({ key: 'buffer', text: `CET1 buffer short by ${pct(stack.bufferShortfall, 1)}: payouts capped at ${pct(stack.maxPayout, 0)} of earnings.` });
   if (a.cash / Math.max(1, assets) < 0.03) out.push({ key: 'cash', text: `Cash is ${pct(a.cash / Math.max(1, assets), 1)} of assets. Below 3% a bad week means borrowing or selling bonds at a loss. See the Money tab.` });
   const line = a.fhlb + fhlbCapacity(b);
-  if (line > 0 && a.fhlb / line > 0.5) out.push({ key: 'fhlb', text: `Home Loan Bank line ${pct(a.fhlb / line, 0)} used (${usd(a.fhlb)} of ${usd(line)}). What is left is what covers a bad week of withdrawals. Gather deposits on the Money tab or slow lending on the Lending tab.` });
+  if (line > 0 && a.fhlb / line > 0.5) out.push({ key: 'fhlb', text: `Home Loan Bank line ${pct(a.fhlb / line, 0)} used (${usd(a.fhlb)} of ${usd(line)}). What is left is what covers a bad week of withdrawals. Gather deposits on the Money tab or slow lending on the Loans tab.` });
   const last = b.reports[b.reports.length - 1];
   const prior = b.reports[b.reports.length - 2];
   if (last && prior && prior.deposits > 0 && last.deposits < prior.deposits * 0.95 && totalDeposits(a) < last.deposits) out.push({ key: 'runoff', text: `Deposits fell ${pct(1 - last.deposits / prior.deposits, 1)} last quarter and are still falling. Depositors leave for rate, for confidence, or for a rival's branch; the Money tab shows which.` });
@@ -47,8 +47,8 @@ export function adviceFor(world: World): Card[] {
   const deskPerMonth = (b.applications.toDeskYtd ?? 0) / monthsThisYear;
   if (deskPerMonth > 8 && monthsThisYear >= 2) out.push({ key: 'desk', text: `About ${Math.round(deskPerMonth)} loans a month stop your clock. Raise the size line, or hand the committee everything but the biggest (Only the biggest on any loan card, or Loans, policy and dial); the rest are decided under your written policy.` });
   const cashShare = assets > 0 ? a.cash / assets : 0;
-  if (cashShare > 0.25 && assets > 30_000_000) out.push({ key: 'idle', text: `Cash is ${pct(cashShare, 0)} of assets, earning the Fed rate and nothing more. Lend it (Lending tab, loans to deposits target) or let the CFO buy bonds with it (Money tab, investment policy).` });
-  if (b.dial.maxAuto === 0 && b.applications.received > 50) out.push({ key: 'dial', text: `The dial is at zero: every loan crosses your desk. Fine at ${usd(assets)}; it will not scale. Lending tab, policy and dial.` });
+  if (cashShare > 0.25 && assets > 30_000_000) out.push({ key: 'idle', text: `Cash is ${pct(cashShare, 0)} of assets, earning the Fed rate and nothing more. Lend it (Loans tab, policy and dial, loans to deposits target) or let the CFO buy bonds with it (Money tab, investment policy).` });
+  if (b.dial.maxAuto === 0 && b.applications.received > 50) out.push({ key: 'dial', text: `The dial is at zero: every loan crosses your desk. Fine at ${usd(assets)}; it will not scale. Loans tab, policy and dial.` });
   if (b.enforcement !== 'none') {
     const open = b.camels.findings.filter((f) => !f.resolved);
     const where = open.map((f) => (f.component === 'A' ? 'the troubled loans (Loans tab: sell the notes or wait out the workouts, and tighten the policy)' : f.component === 'M' ? (/exception/.test(f.text) ? 'policy exceptions (approve inside the written policy, or change the policy)' : 'the empty officer seats (You tab, your team)') : f.component === 'C' ? 'capital (Money tab, balance sheet and capital: raise it, or shrink)' : f.component === 'E' ? 'earnings (Home, results: the margin and the costs)' : f.component === 'L' ? 'cash (Money tab: hold more, borrow less)' : 'the bond book (Money tab, bonds: shorter)'));
@@ -79,7 +79,7 @@ export function adviceFor(world: World): Card[] {
   if (world.player.salary < boardPay * 0.5 && assets > 50_000_000 && strong) out.push({ key: 'pay', text: `A CEO of a ${usd(assets)} bank is usually paid about ${usd(boardPay)}; you take ${usd(world.player.salary)}. The You tab sets your salary. Too much and the board notices; the advisor says so at 1% of assets.` });
   if (b.forSale === false && b.reviews.length >= 4) {
     const last = b.reviews[b.reviews.length - 1];
-    if (last && last.netIncome < 0) out.push({ key: 'loss', text: `Last quarter lost ${usd(-last.netIncome)}. The Earnings tab, where it came from, attributes every dollar; the losses table names the calls that made them.` });
+    if (last && last.netIncome < 0) out.push({ key: 'loss', text: `Last quarter lost ${usd(-last.netIncome)}. Home, Results, where it came from, attributes every dollar; the losses table names the calls that made them.` });
   }
   if (world.player.salary > 0 && assets > 0 && world.player.salary > 0.01 * assets) out.push({ key: 'paytoo', text: `Your salary is ${pct(world.player.salary / assets, 2)} of assets. Every dollar you pay yourself is capital the bank does not have when the cycle turns.` });
   return out;

@@ -65,13 +65,30 @@ describe('large depositors (D62)', () => {
     bank.confidence = 0.5;
     expect(depositTargets(world, bank)[offer.type]).toBeLessThan(before + offer.amount);
     bank.confidence = 1;
-    // The term ends: the agreement goes, the balance stays.
+    // The term ends: the depositor asks to renew (D69). Renewed, it stays
+    // for a new term at today's market plus the new premium.
+    world.pending = world.pending.filter((x) => x.kind !== 'deposit_offer');
     bank.relationships![0]!.until = world.day;
     relationshipsMonthly(ctx, bank);
+    const ask = world.pending.find((x) => x.kind === 'deposit_offer' && x.data.renew)!;
+    expect(ask).toBeDefined();
+    expect(bank.relationships?.length).toBe(1);
+    world.pending = world.pending.filter((x) => x.id !== ask.id);
+    decideDepositOffer(ctx, ask, { pendingId: ask.id, choice: 'a' });
+    expect(bank.relationships![0]!.until).toBeGreaterThan(world.day + 300);
+    // At the next term end, let it go: the whole balance leaves at once.
+    bank.relationships![0]!.until = world.day;
+    relationshipsMonthly(ctx, bank);
+    const again = world.pending.find((x) => x.kind === 'deposit_offer' && x.data.renew)!;
+    world.pending = world.pending.filter((x) => x.id !== again.id);
+    const held = bank.acct[offer.type];
+    const amount = (again.data.offer as DepositOffer).amount;
+    decideDepositOffer(ctx, again, null);
     expect(bank.relationships?.length).toBe(0);
-    expect(totalDeposits(bank.acct) - dep).toBeGreaterThanOrEqual(offer.amount); // the balance stays, plus the interest credited
+    expect(held - bank.acct[offer.type]).toBe(amount);
     expect(depositTargets(world, bank)[offer.type]).toBe(before);
-    expect(ctx.events.some((e) => /rate agreement ended/.test((e as { text: string }).text))).toBe(true);
+    expect(imbalance(bank.acct)).toBe(0);
+    expect(ctx.events.some((e) => /moved its .* to another bank/.test((e as { text: string }).text))).toBe(true);
   });
 
   it('a declined or expired offer changes nothing', () => {
