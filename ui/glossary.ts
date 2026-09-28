@@ -53,6 +53,7 @@ export const TERMS: Record<string, string> = {
   swaps: 'Interest rate swaps: pay a fixed rate, receive a floating one, to offset losses on your bonds when rates rise.',
   CAMELS: 'The examiner’s rating from 1 (strong) to 5 (failing) across Capital, Assets, Management, Earnings, Liquidity and Sensitivity.',
   'memorandum of understanding': 'An informal agreement with the regulator to fix the listed problems by the next exam.',
+  'room to grow': 'How much more the bank can lend, funded by deposits, before it stops being well capitalized. Each capital ratio has a line; the first one the bank would cross sets the room. Capital raised or profit kept adds room; every new loan uses some.',
   'consent order': 'A formal enforcement order: no growth, no dividends and no brokered deposits until the findings are fixed.',
   'prompt corrective action': 'The directive an undercapitalized bank receives, with a 90 day clock to recapitalize or be closed.',
   'FDIC assessment': 'The deposit insurance premium: a few basis points of assets a year, more for riskier banks.',

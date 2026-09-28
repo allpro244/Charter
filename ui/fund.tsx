@@ -56,7 +56,7 @@ export function FundScreen({ world, bank, unit, act }: Props) {
       )}
       {tab === 'capital' && (
         <div>
-          <BalanceSheetScreen bank={bank} unit={unit} />
+          <BalanceSheetScreen world={world} bank={bank} unit={unit} />
           <CapitalPanel world={world} bank={bank} act={act} />
         </div>
       )}

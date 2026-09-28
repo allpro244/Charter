@@ -52,7 +52,7 @@ const BUSINESS: Record<Sector, string[]> = {
 const MARGIN: Record<Sector, number> = { energy: 0.2, agriculture: 0.15, manufacturing: 0.12, tech: 0.18, finance: 0.25, healthcare: 0.15, government: 0.1, tourism: 0.1, construction: 0.08, logistics: 0.07, other: 0.1 };
 
 // Base log-odds of annual default for a median loan of each type.
-const BASE_Z: Record<LoanType, number> = { ci: -4.75, cre_oo: -5.15, cre_inv: -5.05, construction: -4.45, resi: -5.3, consumer: -3.2, ag: -5.15, energy: -3.9, cards: -3.2 };
+export const BASE_Z: Record<LoanType, number> = { ci: -4.75, cre_oo: -5.15, cre_inv: -5.05, construction: -4.45, resi: -5.3, consumer: -3.2, ag: -5.15, energy: -3.9, cards: -3.2 };
 
 export function businessName(r: Rng, sector: Sector, county: CountyState): string {
   const town = county.name.replace(/ (County|Parish|Borough|Census Area|Municipality|city)$/i, '');

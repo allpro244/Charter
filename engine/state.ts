@@ -171,6 +171,8 @@ export interface Bank {
   represents: number; // banks represented: 1, or the count inside an aggregate
   weakQuarters: number; // consecutive quarters of losses or thin capital
   underMonths: number; // consecutive months below adequately capitalized
+  cblrIn?: boolean; // measured under the community bank leverage ratio at the last month end (D79)
+  cblrGrace?: number | null; // day the two quarter grace period began, leverage between 8 and 9%
   holdingCompany: boolean;
   priceHistory: { day: number; price: number }[]; // public banks
   marketCapAtIpo: number | null;

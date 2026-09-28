@@ -5,7 +5,7 @@
 import { fhlbCapacity, unrealizedToCapital } from '../engine/funding';
 import { marketDepositRate, sheetRate } from '../engine/deposits';
 import { leverageRatio, totalAssets, totalDeposits } from '../engine/ledger';
-import { capitalStack, creConcentration } from '../engine/regulation';
+import { capitalStack, creConcentration, growthRoom } from '../engine/regulation';
 import { dealCapacity, reservationPriceToBook } from '../engine/deals';
 import { ownership, tangibleEquity } from '../engine/capital';
 import { defaultSalary } from '../engine/wealth';
@@ -54,6 +54,13 @@ export function adviceFor(world: World): Card[] {
     const where = open.map((f) => (f.component === 'A' ? 'the troubled loans (Loans tab: sell the notes or wait out the workouts, and tighten the policy)' : f.component === 'M' ? (/exception/.test(f.text) ? 'policy exceptions (approve inside the written policy, or change the policy)' : 'the empty officer seats (You tab, your team)') : f.component === 'C' ? 'capital (Money tab, balance sheet and capital: raise it, or shrink)' : f.component === 'E' ? 'earnings (Home, results: the margin and the costs)' : f.component === 'L' ? 'cash (Money tab: hold more, borrow less)' : 'the bond book (Money tab, bonds: shorter)'));
     out.push({ key: 'enf', text: `Under ${b.enforcement === 'mou' ? 'an informal agreement' : b.enforcement === 'consent' ? 'a consent order' : 'a directive'}: ${where.length > 0 ? `fix ${[...new Set(where)].join('; ')}` : 'fix the findings'} before the next exam. Ignored, it escalates.` });
   }
+  // Room to grow (D79): the capital line a growing bank is about to cross,
+  // named while there is still time to raise or slow down.
+  const yearAgo = b.reports.length >= 5 ? b.reports[b.reports.length - 5]!.assets : null;
+  const pace = yearAgo !== null ? assets - yearAgo : 0;
+  const g = growthRoom(b);
+  if (g.binding && pace > 0 && g.room < pace && b.enforcement === 'none') out.push({ key: 'room', text: `The bank grew ${usd(pace)} in the last year and has room for about ${usd(g.room)} more loans before ${g.binding.label.toLowerCase()} reaches ${pct(g.binding.line, 1)}. Past that line it is no longer well capitalized, and undercapitalized brings an order. Raise capital (Money tab, balance sheet and capital), keep more of the profit, or slow the lending (Loans, policy and dial).` });
+  if (b.cblrGrace != null) out.push({ key: 'cblr', text: `Leverage is under 9%, so the community bank leverage ratio holds only through its grace period. After it the bank is measured by its risk based ratios: total capital ${pct(capitalStack(b).totalRatio, 1)} against 10% for well capitalized.` });
   // The cycle (D76): the inverted curve that comes before a recession, and
   // the recession that is a strong bank's chance.
   const e = world.economy;

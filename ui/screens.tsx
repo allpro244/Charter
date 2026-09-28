@@ -9,7 +9,7 @@ import { useState } from 'react';
 import type React from 'react';
 import { calibration, unverifiedBands, type Band } from '../data/calibration';
 import { type IncomeStatement, interestExpense, interestIncome, netIncome, netInterestIncome, noninterestExpense, pretaxIncome, totalAssets, totalDeposits, totalEquity, totalLiabilities, leverageRatio, tier1Capital } from '../engine/ledger';
-import { LADDER_LABEL, PCA_LABEL, capitalStack, creConcentration, liquidityCoverage, pcaCategory, THRESHOLD_SIFI, THRESHOLD_STRESS } from '../engine/regulation';
+import { CBLR_GRACE_DAYS, LADDER_LABEL, PCA_LABEL, capitalStack, findingStatus, growthRoom, creConcentration, liquidityCoverage, pcaCategory, THRESHOLD_SIFI, THRESHOLD_STRESS } from '../engine/regulation';
 import { type Bank, type FeedItem, type Pending, type World, bookValuePerShare, playerBank, playerNetWorth } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { playerStake } from '../engine/wealth';
@@ -398,7 +398,7 @@ function Line({ label, value, unit, bold, indent, dim }: { label: React.ReactNod
   );
 }
 
-export function BalanceSheetScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
+export function BalanceSheetScreen({ world, bank, unit }: { world: World; bank: Bank; unit: Unit }) {
   const a = bank.acct;
   const [all, setAll] = useState(false);
   const [regs, setRegs] = useState(false);
@@ -517,13 +517,14 @@ export function BalanceSheetScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
         </button>{' '}
         the capital ratios the examiners measure, the CAMELS rating, and any open findings.
       </p>
-      {regs && <RegulationTables bank={bank} unit={unit} />}
+      {regs && <RegulationTables world={world} bank={bank} unit={unit} />}
     </div>
   );
 }
 
-function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
+function RegulationTables({ world, bank, unit }: { world: World; bank: Bank; unit: Unit }) {
   const stack = capitalStack(bank);
+  const room = growthRoom(bank);
   const c = bank.camels;
   const conc = creConcentration(bank);
   const assets = totalAssets(bank.acct);
@@ -591,6 +592,23 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
             </td>
             <td colSpan={3} className="num">
               payout limit {pct(stack.maxPayout, 0)} of earnings{stack.bufferShortfall > 0 ? `, buffer short by ${pct(stack.bufferShortfall, 1)}` : ''}
+            </td>
+          </tr>
+          {bank.cblrGrace != null && (
+            <tr className="alert">
+              <td>Community bank leverage ratio grace period</td>
+              <td colSpan={3} className="num">
+                ends {formatDate(bank.cblrGrace + CBLR_GRACE_DAYS)}; then total capital must be 10% of risk weighted assets
+              </td>
+            </tr>
+          )}
+          <tr className={room.room === 0 ? 'alert' : ''}>
+            <td>
+              <Term k="room to grow">Room to grow</Term>
+            </td>
+            <td className="num">{room.binding ? dollars(room.room, unit) : ''}</td>
+            <td colSpan={2} className="num">
+              {room.binding ? `of new loans before ${room.binding.label.toLowerCase()} reaches ${pct(room.binding.line, 1)}` : 'none: the bank is not well capitalized'}
             </td>
           </tr>
           <tr className={conc.construction > 1 || conc.cre > 3 ? 'alert' : 'memo-row'}>
@@ -668,16 +686,34 @@ function RegulationTables({ bank, unit }: { bank: Bank; unit: Unit }) {
             <td>Next exam</td>
             <td className="num">{formatDate(c.nextExam)}</td>
           </tr>
+          {bank.enforcement !== 'none' && (
+            <tr className="memo-row">
+              <td colSpan={2}>
+                The way out: at the exam on {formatDate(c.nextExam)}, every finding below cleared, a composite of 2 or better, and well capitalized. The order lifts that day.
+              </td>
+            </tr>
+          )}
           {c.findings
             .filter((f) => !f.resolved)
-            .map((f) => (
-              <tr key={f.id} className="alert">
-                <td className="indent">
-                  {f.component}: {f.text}
-                </td>
-                <td className="num">{formatDate(f.day)}</td>
-              </tr>
-            ))}
+            .flatMap((f) => {
+              const st = findingStatus(world, bank, f);
+              return [
+                <tr key={f.id} className="alert">
+                  <td className="indent">
+                    {f.component}: {f.text}
+                  </td>
+                  <td className="num">{formatDate(f.day)}</td>
+                </tr>,
+                <tr key={`${f.id}-now`} className="memo-row">
+                  <td className="indent">
+                    Now: {st.now}. The line: {st.clears}.
+                  </td>
+                  <td className="num">
+                    <Pill tone={st.met ? 'good' : 'warn'}>{st.met ? 'on track' : 'not yet'}</Pill>
+                  </td>
+                </tr>,
+              ];
+            })}
           {c.findings.filter((f) => !f.resolved).length === 0 && c.lastExam !== null && (
             <tr>
               <td className="indent dim">no open findings</td>

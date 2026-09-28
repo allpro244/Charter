@@ -8,6 +8,8 @@ import { makeRng } from '../engine/rng';
 import { createWorld } from '../engine/state';
 import { newPlayer, principalCounty, startCharter, startTakeover, startableMetros } from '../engine/start';
 import { tick } from '../engine/tick';
+import { reviewGrade } from '../engine/loans';
+import type { Loan } from '../engine/state';
 import { isYearEnd } from '../engine/time';
 import { applicationsDaily, demandMultiplier, setDial, setPolicy, setPricing } from '../engine/underwriting';
 import { createBank } from '../engine/state';
@@ -17,6 +19,18 @@ import { FIXTURES_MISSING, hasFixtures, loadFixtures, affordableTakeover } from 
 const SEEDS = process.env.CHARTER_FULL ? 50 : 20;
 
 describe.skipIf(!hasFixtures())(`underwriting (${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
+  it('a review reads a loan on the scale it was graded on: nothing changed, the grade holds (D78)', () => {
+    const world = createWorld(4, loadFixtures());
+    newPlayer(world);
+    const bank = startCharter({ world, events: [] }, { mode: 'charter', cbsa: startableMetros(world)[0]!.cbsa, name: 'G', invest: 2_000_000 });
+    const county = world.geo.counties[bank.homeCounty!]!;
+    const r = makeRng(9);
+    for (let i = 0; i < 300; i++) {
+      const a = generateApplication(world, bank, county, r);
+      expect(reviewGrade(world, { memo: a.memo, type: a.type } as Loan)).toBe(a.memo.suggestedGrade);
+    }
+  });
+
   it('borrowers come from the county: a Midland book has energy borrowers, a San Jose book has tech', () => {
     const data = loadFixtures();
     const world = createWorld(1, data);

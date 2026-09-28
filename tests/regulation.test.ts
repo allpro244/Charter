@@ -3,7 +3,8 @@
 // test blocks dividends; the capital stack follows the rule book.
 
 import { describe, expect, it } from 'vitest';
-import { canPayDividend, capitalStack, creConcentration, enterSwap, examine, assessmentRate, riskWeightedAssets, CBLR, THRESHOLD_STRESS, stressTestAnnual } from '../engine/regulation';
+import { canPayDividend, capitalStack, creConcentration, enterSwap, examine, assessmentRate, riskWeightedAssets, CBLR, THRESHOLD_STRESS, stressTestAnnual, cblrMonthly, findingStatus, growthRoom } from '../engine/regulation';
+import { post } from '../engine/ledger';
 import { canRaiseBrokered, unrealizedLoss } from '../engine/funding';
 import { totalAssets, totalEquity, totalLiabilities } from '../engine/ledger';
 import { makeRng } from '../engine/rng';
@@ -91,6 +92,52 @@ describe('regulation', () => {
     expect(stack.maxPayout).toBe(1);
   });
 
+  it('the community bank leverage ratio keeps a two quarter grace period between 8 and 9%, then the risk based ratios apply (D79)', () => {
+    const world = createWorld(62);
+    const b = player(world, 500_000_000, 0.086);
+    remix(world, b, { construction: 1 });
+    b.cblrIn = true;
+    const ctx = { world, events: [] as { text: string }[] };
+    cblrMonthly(ctx as never, b);
+    expect(b.cblrGrace).toBe(world.day);
+    expect(capitalStack(b).cblr).toBe(true);
+    expect(capitalStack(b).category).toBe('well');
+    expect(ctx.events.map((e) => e.text).join(' ')).toMatch(/grace period of two quarters/);
+    world.day += 100;
+    cblrMonthly(ctx as never, b);
+    expect(capitalStack(b).category).toBe('well');
+    world.day += 100;
+    cblrMonthly(ctx as never, b);
+    expect(b.cblrIn).toBe(false);
+    expect(b.cblrGrace).toBe(null);
+    const after = capitalStack(b);
+    expect(after.cblr).toBe(false);
+    expect(after.totalRatio).toBeLessThan(0.1);
+    expect(after.category).toBe('adequate');
+    expect(ctx.events.map((e) => e.text).join(' ')).toMatch(/no longer applies/);
+  });
+
+  it('room to grow is the new lending the bank can book and stay well capitalized (D79)', () => {
+    const world = createWorld(63);
+    const b = player(world, 500_000_000, 0.1);
+    remix(world, b, { ci: 1 });
+    const g = growthRoom(b);
+    expect(g.binding).not.toBe(null);
+    expect(g.lines.map((l) => l.key)).toEqual(['cblr', 'leverage', 'cet1', 'tier1', 'total']);
+    const lend = (x: number) => {
+      const pool = b.pools.find((p) => p.type === 'ci')!;
+      pool.balance += x;
+      pool.grades[2] = (pool.grades[2] ?? 0) + x;
+      post(b.acct, { loans: x, checking: x });
+    };
+    lend(Math.round(g.room * 0.98));
+    expect(capitalStack(b).category).toBe('well');
+    lend(Math.round(g.room * 0.05));
+    expect(capitalStack(b).category).not.toBe('well');
+    expect(growthRoom(b).room).toBe(0);
+    balanced(world);
+  });
+
   it('a construction-heavy book gets a CRE concentration finding and ignoring it escalates to an order', () => {
     const world = createWorld(62);
     const b = player(world, 300_000_000, 0.08);
@@ -103,6 +150,11 @@ describe('regulation', () => {
     const finding = result.findings.find((f) => /concentration/.test(f.text));
     expect(finding).toBeDefined();
     expect(result.assets).toBeGreaterThanOrEqual(3);
+    // The path out reads the same measure the exam used (D80).
+    const st = findingStatus(world, b, finding!);
+    expect(st.met).toBe(false);
+    expect(st.now).toMatch(/construction \d+%/);
+    expect(st.clears).toMatch(/100%.*300%/);
     // Keep lending the same way for two exam cycles: the memorandum comes,
     // then the consent order once the finding is a year old.
     b.camels.nextExam = world.day + 30;

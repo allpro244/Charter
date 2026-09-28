@@ -24,6 +24,8 @@ export const TIER1_MIN = 0.06;
 export const TOTAL_MIN = 0.08;
 export const BUFFER = 0.025;
 export const CBLR = 0.09; // community bank leverage ratio option under $10B
+export const CBLR_GRACE_FLOOR = 0.08; // the grace period holds down to 8% (12 CFR 324.12(c))
+export const CBLR_GRACE_DAYS = 182; // two quarters
 export const THRESHOLD_DURBIN = 10e9;
 export const THRESHOLD_RESOLUTION = 50e9;
 export const THRESHOLD_STRESS = 100e9;
@@ -86,7 +88,10 @@ export function capitalStack(b: Bank): CapitalStack {
   const tier1Ratio = tier1 / rwa;
   const totalRatio = total / rwa;
   const assets = totalAssets(a);
-  const cblr = assets < THRESHOLD_DURBIN && leverage >= CBLR;
+  // Under $10B the bank may be measured by leverage alone at 9%; falling
+  // to between 8 and 9% keeps it for a two quarter grace period (12 CFR
+  // 324.12(c)), after which the risk based ratios apply (D79).
+  const cblr = assets < THRESHOLD_DURBIN && (leverage >= CBLR || (b.cblrGrace != null && leverage >= CBLR_GRACE_FLOOR));
   let category: PcaCategory;
   if (cblr || (cet1Ratio >= 0.065 && tier1Ratio >= 0.08 && totalRatio >= 0.1 && leverage >= PCA_WELL)) category = 'well';
   else if (cet1Ratio >= CET1_MIN && tier1Ratio >= TIER1_MIN && totalRatio >= TOTAL_MIN && leverage >= PCA_ADEQUATE) category = 'adequate';
@@ -186,12 +191,59 @@ function trailingRoa(b: Bank): number {
   return x / n;
 }
 
+// What the examiners measure, read the same way by the exam and by the
+// path out of an order (D80).
+function examMeasures(world: World, b: Bank) {
+  const recent = b.loans.filter((l) => l.decision.by !== 'inherited' && world.day - l.originated <= 730);
+  return {
+    stack: capitalStack(b),
+    crit: criticizedShareOf(b),
+    conc: creConcentration(b),
+    vacancies: ['cco', 'cfo', 'clo'].filter((r) => !b.officers.some((o) => o.role === r)).length,
+    exceptions: recent.length >= 5 ? recent.filter((l) => l.decision.note.includes('exception')).length / recent.length : 0,
+    roa: trailingRoa(b),
+    cashToAssets: b.acct.cash / Math.max(1, totalAssets(b.acct)),
+    wholesale: (b.acct.fhlb + b.acct.brokered + b.acct.fedFundsPurchased) / Math.max(1, totalAssets(b.acct)),
+    unrealized: unrealizedToCapital(b),
+  };
+}
+
+// Where an open finding stands today against the line that clears it at
+// the next exam (D80). Plain numbers; the exam is still what clears it.
+export function findingStatus(world: World, b: Bank, f: Finding): { now: string; clears: string; met: boolean } {
+  const m = examMeasures(world, b);
+  const s = m.stack;
+  switch (f.key) {
+    case 'C':
+      return { now: `${PCA_LABEL[s.category]}, total ${pct(s.totalRatio, 1)}, leverage ${pct(s.leverage, 1)}`, clears: 'well capitalized with the full conservation buffer', met: s.category === 'well' && s.bufferShortfall === 0 };
+    case 'C:denovo':
+      return { now: `leverage ${pct(s.leverage, 1)}`, clears: `leverage of ${pct(b.plan?.capitalFloor ?? 0.08, 0)} or the end of the de novo years`, met: !b.plan || b.plan.done || world.day - b.plan.filedDay >= 3 * 365 || s.leverage >= b.plan.capitalFloor };
+    case 'A:concentration':
+      return { now: `construction ${pct(m.conc.construction, 0)}, investor CRE ${pct(m.conc.cre, 0)} of capital`, clears: 'construction at most 100%, investor CRE at most 300%', met: m.conc.construction <= 1 && m.conc.cre <= 3 };
+    case 'A:criticized':
+      return { now: `${pct(m.crit, 1)} of loans criticized`, clears: 'under 10%', met: m.crit < 0.1 };
+    case 'M:vacancies':
+      return { now: `${m.vacancies} seat${m.vacancies === 1 ? '' : 's'} vacant`, clears: 'every officer seat filled', met: m.vacancies === 0 };
+    case 'M:exceptions':
+      return { now: `${pct(m.exceptions, 0)} of the last two years' loans were exceptions`, clears: '15% or less', met: m.exceptions <= 0.15 };
+    case 'E':
+      return { now: `return on assets ${pct(m.roa)} over four quarters`, clears: 'above 0.20%', met: m.roa > 0.002 };
+    case 'L':
+      return { now: `cash ${pct(m.cashToAssets, 1)} of assets, wholesale ${pct(m.wholesale, 0)}`, clears: 'cash over 4% and wholesale under 25%', met: m.cashToAssets > 0.04 && m.wholesale < 0.25 };
+    case 'S':
+      return { now: `unrealized losses ${pct(m.unrealized, 0)} of tier 1`, clears: 'under 25%', met: m.unrealized < 0.25 };
+    default:
+      return { now: '', clears: 'the next exam', met: false };
+  }
+}
+
 // The exam. Each component from the book; findings where the numbers
 // cross the lines examiners use; the composite from the components with
 // management and asset quality weighted.
 export function examine(ctx: Ctx, b: Bank): Camels {
   const { world } = ctx;
-  const stack = capitalStack(b);
+  const measured = examMeasures(world, b);
+  const stack = measured.stack;
   const c = b.camels;
   const findings: Finding[] = c.findings.filter((f) => !f.resolved);
   const raised = new Set<string>();
@@ -205,12 +257,11 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   };
   // Capital.
   const capital = stack.category === 'well' && stack.bufferShortfall === 0 ? (stack.leverage > 0.09 ? 1 : 2) : stack.category === 'well' || stack.category === 'adequate' ? 3 : stack.category === 'under' ? 4 : 5;
-  if (capital >= 3) add('C', 'C', `Capital: ${PCA_LABEL[stack.category]}, CET1 ${pct(stack.cet1Ratio, 1)}, leverage ${pct(stack.leverage, 1)}. Raise capital or shrink.`);
+  if (capital >= 3) add('C', 'C', `Capital: ${PCA_LABEL[stack.category]}, CET1 ${pct(stack.cet1Ratio, 1)}, total ${pct(stack.totalRatio, 1)}, leverage ${pct(stack.leverage, 1)}. Raise capital or shrink.`);
   // A new bank holds the capital its business plan committed to (D73).
   if (b.plan && !b.plan.done && world.day - b.plan.filedDay < 3 * 365 && stack.leverage < b.plan.capitalFloor) add('C', 'C:denovo', `Capital: leverage ${pct(stack.leverage, 1)} is under the ${pct(b.plan.capitalFloor, 0)} the de novo business plan commits to for the first three years. Slow the growth or raise capital.`);
   // Asset quality.
-  const crit = criticizedShareOf(b);
-  const conc = creConcentration(b);
+  const { crit, conc } = measured;
   const last = b.reports[b.reports.length - 1];
   const nco = last?.ncoRate ?? 0;
   let assets = crit < 0.03 && nco < 0.005 ? 1 : crit < 0.06 ? 2 : crit < 0.1 ? 3 : crit < 0.15 ? 4 : 5;
@@ -220,12 +271,11 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   }
   if (crit >= 0.1) add('A', 'A:criticized', `Criticized loans ${pct(crit, 1)} of the book. Workouts and charge-offs are overdue.`);
   // Management: vacancies, weak officers, policy exceptions, unresolved findings.
-  const vacancies = ['cco', 'cfo', 'clo'].filter((r) => !b.officers.some((o) => o.role === r)).length;
+  const vacancies = measured.vacancies;
   const weak = b.officers.filter((o) => o.skill < 40).length;
   // Examiners sample the last two years of originations, not the whole
   // history: a policy followed since the last exam clears the finding (D63).
-  const recent = b.loans.filter((l) => l.decision.by !== 'inherited' && world.day - l.originated <= 730);
-  const exceptions = recent.length >= 5 ? recent.filter((l) => l.decision.note.includes('exception')).length / recent.length : 0;
+  const exceptions = measured.exceptions;
   const unresolved = c.findings.filter((f) => !f.resolved && world.day - f.day > 365).length;
   // A finding ignored through two cycles is a management weakness of its own.
   const ignoredTwice = c.findings.filter((f) => !f.resolved && world.day - f.day > 730).length;
@@ -237,18 +287,17 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   // book: for its first three years (the de novo period) examiners rate
   // earnings against the business plan, not the industry, and raise no
   // finding for planned losses.
-  const roa = trailingRoa(b);
+  const roa = measured.roa;
   const deNovo = world.day - b.charteredDay < 3 * 365;
   let earnings = roa > 0.012 ? 1 : roa > 0.007 ? 2 : roa > 0.002 ? 3 : roa > -0.005 ? 4 : 5;
   if (deNovo) earnings = Math.min(earnings, 3);
   if (earnings >= 4) add('E', 'E', `Earnings: return on assets ${pct(roa)} over the last year. The bank is not earning its cost of capital.`);
   // Liquidity.
-  const cashToAssets = b.acct.cash / Math.max(1, totalAssets(b.acct));
-  const wholesale = (b.acct.fhlb + b.acct.brokered + b.acct.fedFundsPurchased) / Math.max(1, totalAssets(b.acct));
+  const { cashToAssets, wholesale } = measured;
   const liquidity = cashToAssets > 0.08 && wholesale < 0.1 && b.uninsuredShare < 0.5 ? 1 : cashToAssets > 0.04 && wholesale < 0.25 ? 2 : cashToAssets > 0.02 ? 3 : b.liquidityStress > 0.5 ? 5 : 4;
   if (liquidity >= 3) add('L', 'L', `Liquidity: cash ${pct(cashToAssets, 1)} of assets, wholesale funding ${pct(wholesale, 0)}, uninsured deposits ${pct(b.uninsuredShare, 0)}. Hold more liquid assets and reduce reliance on borrowed money.`);
   // Sensitivity to market risk.
-  const u = unrealizedToCapital(b);
+  const u = measured.unrealized;
   const sensitivity = u < 0.1 ? 1 : u < 0.25 ? 2 : u < 0.5 ? 3 : u < 0.8 ? 4 : 5;
   if (sensitivity >= 3) add('S', 'S', `Sensitivity: unrealized securities losses are ${pct(u, 0)} of tier 1 capital. Shorten the book or hedge.`);
   for (const f of findings) if (!raised.has(f.key)) f.resolved = true;
@@ -365,11 +414,84 @@ export function assessmentRate(b: Bank): number {
   return bp;
 }
 
+// The community bank leverage ratio at the month end (D79): in at 9%, a
+// two quarter grace period between 8 and 9%, out below 8% or at $10B.
+export function cblrMonthly(ctx: Ctx, b: Bank): void {
+  const { world } = ctx;
+  const lev = leverageRatio(b.acct);
+  const small = totalAssets(b.acct) < THRESHOLD_DURBIN;
+  const tell = (text: string, severity: 'alert' | 'good' = 'alert') => {
+    if (b.id === world.playerBankId) emit(ctx, 'regulator', text, { severity, bankId: b.id });
+  };
+  if (small && lev >= CBLR) {
+    if (b.cblrGrace != null) tell(`Leverage is back to ${pct(lev, 1)}: the community bank leverage ratio applies again and the grace period is over.`, 'good');
+    b.cblrIn = true;
+    b.cblrGrace = null;
+    return;
+  }
+  if (small && lev >= CBLR_GRACE_FLOOR && b.cblrIn) {
+    if (b.cblrGrace == null) {
+      b.cblrGrace = world.day;
+      const s = capitalStackRiskBased(b);
+      tell(`Leverage fell to ${pct(lev, 1)}, under the 9% community bank leverage ratio. A grace period of two quarters runs to ${formatDate(world.day + CBLR_GRACE_DAYS)}; after it the bank is measured by its risk based ratios, and total capital is ${pct(s.totalRatio, 1)} against 10% for well capitalized. Raise capital or slow the growth to stay under the simple rule.`);
+      return;
+    }
+    if (world.day - b.cblrGrace <= CBLR_GRACE_DAYS) return;
+  }
+  if (b.cblrIn && small) {
+    const s = capitalStackRiskBased(b);
+    tell(`The community bank leverage ratio no longer applies (leverage ${pct(lev, 1)}). The bank is measured by its risk based ratios: CET1 ${pct(s.cet1Ratio, 1)}, tier 1 ${pct(s.tier1Ratio, 1)}, total ${pct(s.totalRatio, 1)}.`);
+  }
+  b.cblrIn = false;
+  b.cblrGrace = null;
+}
+
+function capitalStackRiskBased(b: Bank): CapitalStack {
+  return capitalStack({ ...b, cblrGrace: null, acct: b.acct } as Bank);
+}
+
+// Room to grow (D79): new loans at a 100% risk weight, funded by deposits,
+// that the bank can book before it stops being well capitalized. Each line
+// with its room; the binding one is the smallest, except that a bank under
+// the community bank leverage ratio may fall back on the risk based lines.
+export interface RoomLine {
+  key: 'cblr' | 'leverage' | 'cet1' | 'tier1' | 'total';
+  label: string;
+  ratio: number;
+  line: number;
+  room: number;
+}
+
+export function growthRoom(b: Bank): { lines: RoomLine[]; room: number; binding: RoomLine | null } {
+  const s = capitalStack(b);
+  const a = b.acct;
+  const denom = totalAssets(a) - a.goodwill;
+  const at = (capital: number, base: number, line: number) => Math.max(0, Math.floor(capital / line - base));
+  const risk: RoomLine[] = [
+    { key: 'leverage', label: 'Leverage', ratio: s.leverage, line: PCA_WELL, room: at(s.tier1, denom, PCA_WELL) },
+    { key: 'cet1', label: 'Common equity tier 1', ratio: s.cet1Ratio, line: 0.065, room: at(s.cet1, s.rwa, 0.065) },
+    { key: 'tier1', label: 'Tier 1', ratio: s.tier1Ratio, line: 0.08, room: at(s.tier1, s.rwa, 0.08) },
+    { key: 'total', label: 'Total capital', ratio: s.totalRatio, line: 0.1, room: at(s.total, s.rwa, 0.1) },
+  ];
+  const riskBinding = risk.reduce((m, l) => (l.room < m.room ? l : m));
+  const lines = [...risk];
+  let binding: RoomLine = riskBinding;
+  if (totalAssets(a) < THRESHOLD_DURBIN) {
+    const floor = b.cblrGrace != null ? CBLR_GRACE_FLOOR : CBLR;
+    const c: RoomLine = { key: 'cblr', label: b.cblrGrace != null ? 'Community bank leverage ratio, in its grace period' : 'Community bank leverage ratio', ratio: s.leverage, line: floor, room: s.cblr ? at(s.tier1, denom, floor) : 0 };
+    lines.unshift(c);
+    if (s.cblr && c.room > riskBinding.room) binding = c;
+  }
+  if (s.category !== 'well') return { lines, room: 0, binding: null };
+  return { lines, room: binding.room, binding };
+}
+
 export function regulationMonthly(ctx: Ctx): void {
   const { world } = ctx;
   for (const id of world.bankOrder) {
     const b = world.banks[id] as Bank;
     if (b.status === 'failed' || b.status === 'acquired') continue;
+    cblrMonthly(ctx, b);
     const stack = capitalStack(b);
     const lev = stack.leverage;
     b.underMonths = stack.category === 'well' || stack.category === 'adequate' ? 0 : b.underMonths + 1;

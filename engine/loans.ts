@@ -4,7 +4,7 @@
 // foreclosure, REO, sale, charge-off. Capped in count; the smallest and
 // oldest roll into pools. Every default names the signal that predicted it.
 
-import { type Application, attributionFor, gradeFromZ, scoreSignals } from './borrowers';
+import { type Application, BASE_Z, attributionFor, gradeFromZ, scoreSignals } from './borrowers';
 import { TYPE, addToPool, lgdNow, stressFor, chargeOff } from './credit';
 import { type Ctx, addPending, emit } from './ctx';
 import { sectorReturn12 } from './economy';
@@ -492,7 +492,10 @@ export function loansMonthly(ctx: Ctx, b: Bank, days: number, losses: LossRecord
   }
 }
 
-function regrade(world: World, b: Bank, l: Loan): void {
+// What a review sees for a loan: the memo's numbers read against today's
+// economy on the same scale the loan was graded on at origination. One
+// scale, or a loan changes grade with nothing about it changed (D78).
+export function reviewGrade(world: World, l: Loan): number {
   const m = l.memo;
   const signals = scoreSignals({
     dscr: m.dscr,
@@ -505,9 +508,13 @@ function regrade(world: World, b: Bank, l: Loan): void {
     type: l.type,
     sizeToCapital: 0,
   });
-  let z = 0;
+  let z = BASE_Z[l.type];
   for (const s of signals) z += s.contribution;
-  const base = gradeFromZ(z + baseFor(l.type), l.type);
+  return gradeFromZ(z, l.type);
+}
+
+function regrade(world: World, b: Bank, l: Loan): void {
+  const base = reviewGrade(world, l);
   const target = Math.max(1, Math.min(7, base + (l.monthsLate > 0 ? 1 : 0)));
   // Grades are sticky, as at a real bank: a review moves a loan one notch
   // toward what the reviewer sees (the model's target and the CCO's noise),
@@ -520,10 +527,6 @@ function regrade(world: World, b: Bank, l: Loan): void {
   if (next >= 6 && target < 6 && l.monthsLate === 0) next = Math.max(l.grade <= 5 ? 1 : 6, Math.min(next, 5));
   l.grade = Math.max(1, Math.min(l.status === 'current' ? 6 : 7, next));
   void b;
-}
-
-function baseFor(type: LoanType): number {
-  return { ci: -4.2, cre_oo: -4.6, cre_inv: -4.5, construction: -3.9, resi: -4.8, consumer: -3.5, ag: -4.6, energy: -3.7, cards: -3.2 }[type];
 }
 
 // Foreclosure or charge-off. Real estate goes to REO at liquidation value
