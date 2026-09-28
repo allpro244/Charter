@@ -6,7 +6,10 @@ import { useState } from 'react';
 import { tangibleEquity } from '../engine/capital';
 import { TYPE, bookByType } from '../engine/credit';
 import type { Ctx } from '../engine/ctx';
-import { dealCapacity, makeOffer, reservationPriceToBook } from '../engine/deals';
+import { creditMark, dealCapacity, makeOffer, proFormaLeverage, reservationPriceToBook } from '../engine/deals';
+import { ladder, rungs } from '../engine/ladder';
+import { totalAssets } from '../engine/ledger';
+import { PCA_WELL } from '../engine/regulation';
 import { rivalReport } from '../engine/rivals';
 import { rivalBranches } from '../engine/deposits';
 import { type Bank, type World } from '../engine/state';
@@ -50,6 +53,7 @@ function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; ta
           </td>
           <td className="dim">cash you can spend: {short(cap.cash)}</td>
         </tr>
+        <DealCheck world={world} buyer={buyer} target={target} pb={pb} stock={stock} />
         {last && (
           <tr>
             <td colSpan={3} className="dim">
@@ -59,6 +63,60 @@ function OfferRow({ world, buyer, target, act }: { world: World; buyer: Bank; ta
         )}
       </tbody>
     </table>
+  );
+}
+
+// The deal before the offer (D72): what the regulators, the board and the
+// ladder would say at this price, from the same arithmetic makeOffer runs.
+function DealCheck({ world, buyer, target, pb, stock }: { world: World; buyer: Bank; target: Bank; pb: number; stock: number }) {
+  const book = tangibleEquity(target);
+  const price = Math.round(book * pb);
+  const cashPart = Math.round(price * (1 - stock));
+  const cap = dealCapacity(buyer);
+  const mark = creditMark(world, target);
+  const proForma = proFormaLeverage(buyer, target, price, stock, mark);
+  const ask = reservationPriceToBook(world, target);
+  const combined = totalAssets(buyer.acct) + totalAssets(target.acct);
+  const l = ladder(world);
+  const after = 1 + rungs(world).filter((r) => r.assets > combined && r.name !== target.name).length;
+  const cashOk = cashPart <= cap.cash;
+  const levOk = proForma >= PCA_WELL;
+  const boardOk = pb + 1e-9 >= Math.round(ask * 100) / 100;
+  const blocked = buyer.enforcement === 'consent' || buyer.enforcement === 'pca' ? 'No acquisitions while the enforcement order stands: a clean exam lifts it.' : world.pending.some((x) => x.kind === 'acquisition_offer' || x.kind === 'competing_bid') ? 'A deal is already pending; one at a time.' : null;
+  return (
+    <>
+      {blocked && (
+        <tr>
+          <td colSpan={3} className="bad">
+            {blocked}
+          </td>
+        </tr>
+      )}
+      <tr>
+        <td>Cash part against the cash you can spend</td>
+        <td className={'num' + (cashOk ? '' : ' bad')}>
+          {short(cashPart)} of {short(cap.cash)}
+        </td>
+        <td className="dim">{cashOk ? 'within reach' : 'too much cash: more stock, a lower price, or raise capital first'}</td>
+      </tr>
+      <tr>
+        <td>Your leverage after the deal and its goodwill (regulators want {pct(PCA_WELL, 0)})</td>
+        <td className={'num' + (levOk ? '' : ' bad')}>{pct(proForma, 1)}</td>
+        <td className="dim">{levOk ? 'approvable' : 'regulators would refuse it'}; expected loss on its loans {short(mark)}</td>
+      </tr>
+      <tr>
+        <td>The board</td>
+        <td className={'num' + (boardOk ? '' : ' warn')}>{pb.toFixed(2)}x of {ask.toFixed(2)}x</td>
+        <td className="dim">{boardOk ? 'at or over what boards ask in this cycle: likely yes' : 'under the ask: likely a counter'}</td>
+      </tr>
+      <tr>
+        <td>Where it puts you</td>
+        <td className="num">#{num(after)}</td>
+        <td className={after < l.rank ? 'positive' : 'dim'}>
+          {short(combined)} of assets together{after < l.rank ? `: from #${num(l.rank)}, past ${num(l.rank - after)} banks at once` : ''}
+        </td>
+      </tr>
+    </>
   );
 }
 

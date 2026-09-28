@@ -11,6 +11,7 @@ import { applyDecisions, tick } from '../engine/tick';
 import { isQuarterEnd, nextClose } from '../engine/time';
 import { setDividendPayout, setSalary } from '../engine/wealth';
 import { type Loaded, loadData } from './data';
+import { loadSaveText as readStoredSave, storeSaveText } from './savestore';
 import { type Unit, short, unitFor } from './format';
 import { MapView, type Shade } from './map';
 import { DebugScreen, DecisionDock, HelpModal, MeScreen, SKIP_SPEED, SPEEDS, type Skip, TopBar } from './screens';
@@ -48,13 +49,12 @@ const OLD_SCREENS: Record<string, { screen: Screen; home?: HomeTab; world?: Worl
   MARKET: { screen: 'WORLD', world: 'rivals' },
   PEOPLE: { screen: 'YOU', you: 'team' },
 };
-const SAVE_KEY = 'charter.save';
 
 type Phase = 'loading' | 'nodata' | 'start' | 'play';
 
-function readSave(): World | null {
+async function readSave(): Promise<World | null> {
   try {
-    const text = localStorage.getItem(SAVE_KEY);
+    const text = await readStoredSave();
     if (!text) return null;
     const w = JSON.parse(text) as World;
     return w && w.version === 1 ? w : null;
@@ -63,12 +63,16 @@ function readSave(): World | null {
   }
 }
 
-function writeSave(world: World): void {
+// The text is taken now, so later ticks do not change what is saved; the
+// write finishes in the background (D71).
+function writeSave(world: World): Promise<boolean> {
+  let text: string;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(world));
+    text = JSON.stringify(world);
   } catch {
-    // Storage full or blocked. The export on the DEBUG screen still works.
+    return Promise.resolve(false);
   }
+  return storeSaveText(text);
 }
 
 export function App() {
@@ -139,6 +143,9 @@ export function App() {
       if (!w || w.version !== 1) return false;
       worldRef.current = w;
       setPhase(w.playerBankId || !loadedRef.current ? 'play' : 'start');
+      // A loaded game opens on Home, not on the screen that loaded it.
+      setScreen('HOME');
+      setHomeTab('today');
       setSpeedState(0);
       untilRef.current = null;
       setUntil(null);
@@ -209,24 +216,29 @@ export function App() {
   const saveNow = useCallback(() => {
     const world = worldRef.current;
     if (!world) return;
-    writeSave(world);
-    setHasSave(true);
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1500);
-  }, []);
+    writeSave(world).then((ok) => {
+      if (!ok) {
+        toast('This browser would not store the save. Export it from Debug (Help, Debug screen) to keep it.');
+        return;
+      }
+      setHasSave(true);
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1500);
+    });
+  }, [toast]);
 
   useEffect(() => {
-    loadData().then((r) => {
+    loadData().then(async (r) => {
       if (r.ok) {
         loadedRef.current = r.loaded;
-        const save = readSave();
+        const save = await readSave();
         setHasSave(save !== null);
         worldRef.current = createWorld(Date.now() % 2_147_483_647, r.loaded.data);
         newPlayer(worldRef.current);
         setPhase('start');
       } else {
         setMissing(r.missing);
-        const saved = readSave() !== null;
+        const saved = (await readSave()) !== null;
         setHasSave(saved);
         // A packed build carries a world inside the page: open straight
         // into it unless the browser already holds a saved game.
@@ -255,11 +267,12 @@ export function App() {
       if (n === 0) return;
       acc -= n;
       let arrived = false;
+      const milestonesBefore = world.milestones.length;
       const t0 = performance.now();
       let paused = false;
       while (n-- > 0) {
         const r = tick(world);
-        if (isQuarterEnd(world.day)) writeSave(world);
+        if (isQuarterEnd(world.day)) void writeSave(world).then((ok) => ok || toast('The quarterly autosave did not fit in this browser. Export the save from Debug to keep it.'));
         if (untilRef.current !== null && world.day >= untilRef.current) arrived = true;
         if (arrived || r.pending.some((p) => p.blocking) || world.playerBankId === null) {
           paused = true;
@@ -272,11 +285,15 @@ export function App() {
         setUntil(null);
       }
       setTickMs(performance.now() - t0);
+      // A moment worth marking pops up wherever the player is (D72); the
+      // year in review has its own panel.
+      const fresh = world.milestones.slice(milestonesBefore).filter((m) => !/ in review:/.test(m.text));
+      if (fresh.length > 0) toast(fresh[fresh.length - 1]!.text);
       if (paused) setSpeed(0);
       refresh();
     }, 100);
     return () => clearInterval(id);
-  }, [phase, setSpeed, refresh]);
+  }, [phase, setSpeed, refresh, toast]);
 
   const decide = useCallback(
     (p: Pending, key: string) => {
@@ -309,7 +326,7 @@ export function App() {
       setScreen('HOME');
       setHomeTab('today');
       setSpeed(2);
-      writeSave(world);
+      void writeSave(world);
       refresh();
     },
     [setSpeed, refresh],
@@ -333,8 +350,8 @@ export function App() {
 
   const onCharter = useCallback((cbsa: string, name: string, invest: number) => begin((ctx) => startCharter(ctx, { mode: 'charter', cbsa, name, invest })), [begin]);
   const onTakeover = useCallback((cbsa: string, candidate: TakeoverCandidate) => begin((ctx) => startTakeover(ctx, { mode: 'takeover', cbsa, candidate })), [begin]);
-  const onContinue = useCallback(() => {
-    const save = readSave();
+  const onContinue = useCallback(async () => {
+    const save = await readSave();
     if (!save) return;
     worldRef.current = save;
     // Without data files there is no start screen; a save with no bank shows the feed.

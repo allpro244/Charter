@@ -1113,15 +1113,26 @@ async function main(): Promise<void> {
   }
 
   // ---- SOD by county --------------------------------------------------------
+  // A county's pool is what its offices gathered there. National and card
+  // banks book deposits gathered across the country at one office (a
+  // Charlotte main office holds hundreds of billions); an office counts up
+  // to the 99th percentile of all offices and the rest is booking, not
+  // local money (D71). The cap comes from the same file.
   const sodByCounty = new Map<string, { deposits: number; offices: number }>();
   const sod = fdic?.sod ?? null;
+  let sodCap = Infinity;
   if (sod) {
+    const all = sod.data.map((row) => (fdicNumber(row, 'DEPSUMBR') ?? 0) * 1000).sort((a, b) => a - b);
+    sodCap = all[Math.floor(all.length * 0.99)] ?? Infinity;
+    const excess = all.reduce((x, v) => x + Math.max(0, v - sodCap), 0);
+    const total = all.reduce((x, v) => x + v, 0);
+    log(`  Summary of Deposits: offices counted up to the 99th percentile, ${(sodCap / 1e9).toFixed(2)}B; ${((100 * excess) / Math.max(1, total)).toFixed(1)}% of deposits are booking above it`);
     for (const row of sod.data) {
       const fips = padCode(String(row.STCNTYBR ?? ''), 5);
       if (!/^\d{5}$/.test(fips)) continue;
-      const dep = fdicNumber(row, 'DEPSUMBR') ?? 0;
+      const dep = Math.min((fdicNumber(row, 'DEPSUMBR') ?? 0) * 1000, sodCap);
       const cur = sodByCounty.get(fips) ?? { deposits: 0, offices: 0 };
-      cur.deposits += dep * 1000;
+      cur.deposits += dep;
       cur.offices += 1;
       sodByCounty.set(fips, cur);
     }

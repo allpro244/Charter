@@ -147,6 +147,11 @@ for (let d = 0; d < years * 365; d++) {
     console.log(`    dep chk ${m(a.checking)} sav ${m(a.savings)} mmda ${m(a.mmda)} cd ${m(a.cd)} brk ${m(a.brokered)} fhlb ${m(a.fhlb)} ff ${m(a.fedFundsPurchased)} | cash ${m(a.cash)} loans ${m(a.loans)} sec ${m(a.securitiesAFS + a.securitiesHTM)} | conf ${bank.confidence.toFixed(2)} ff ${(world.economy.fedFunds * 100).toFixed(2)}% enf ${bank.enforcement} rates ${JSON.stringify(bank.rates ?? {})}`);
   }
 }
+if (process.env.SAVE) {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(process.env.SAVE, JSON.stringify(world));
+  console.log('saved', process.env.SAVE);
+}
 const yrs = world.day / 365;
 console.log(`tick ${(tickMs / yrs).toFixed(0)} ms per year (${(tickMs / world.day).toFixed(2)} ms/day)`);
 console.log(`clock stops per year: ${(stopDays / yrs).toFixed(1)}; median gap ${gaps.sort((x, y) => x - y)[Math.floor(gaps.length / 2)] ?? '-'} days`);

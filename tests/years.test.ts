@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { canTakeLargeDeposit } from '../engine/depositors';
+import { localRaceMonthly, localStanding } from '../engine/ladder';
 import { totalAssets } from '../engine/ledger';
 import { createWorld } from '../engine/state';
 import { newPlayer, startCharter, startableMetros } from '../engine/start';
@@ -79,5 +80,27 @@ describe.skipIf(!hasFixtures())(`the desk carries decisions worth making (D67, $
     }
     expect(bank.applications.screened ?? 0).toBeGreaterThan(0);
     expect(world.feed.filter((f) => f.text.startsWith('Turned down at the door this month')).length).toBeLessThanOrEqual(25);
+  });
+});
+
+describe.skipIf(!hasFixtures())(`the race at home (D72, ${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
+  it('names the next bank to pass in the home county and marks the pass', () => {
+    const { world, bank } = charter(72);
+    for (let d = 0; d < 60; d++) tick(world);
+    world.pending = world.pending.filter((p) => !p.blocking);
+    const s = localStanding(world, bank)!;
+    expect(s).not.toBeNull();
+    expect(s.total).toBeGreaterThan(1);
+    expect(s.ahead).not.toBeNull();
+    // Deposits land at home just past the next bank: at the month end the
+    // pass is a milestone and a feed line.
+    const gap = s.ahead!.deposits - s.mine + 1_000_000;
+    bank.acct.checking += gap;
+    bank.acct.cash += gap;
+    bank.branches[0]!.deposits += gap;
+    world.ladder.local = { county: s.county, rank: s.rank, total: s.total, ahead: s.aheadIds };
+    localRaceMonthly({ world, events: [] }, bank);
+    expect(world.milestones.some((m) => m.text.includes(`you passed ${s.ahead!.name}`))).toBe(true);
+    expect(localStanding(world, bank)!.rank).toBe(s.rank - 1);
   });
 });

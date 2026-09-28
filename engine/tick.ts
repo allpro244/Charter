@@ -54,6 +54,8 @@ export interface TickResult {
   events: import('./state').FeedItem[];
 }
 
+const RIVAL_REPORTS = 12;
+
 export function tick(world: World, decisions: Decision[] = []): TickResult {
   const ctx: Ctx = { world, events: [] };
   applyDecisions(ctx, decisions);
@@ -334,6 +336,10 @@ function quarterlyClose(ctx: Ctx): void {
     const b = world.banks[id] as Bank;
     if (!isLive(b)) continue;
     b.reports.push(callReport(world, b));
+    // Other banks keep three years of call reports, all any screen or rule
+    // reads; the history grew without end and made a long save too big for
+    // the browser to hold (D71). The player's bank keeps every quarter.
+    if (b.id !== world.playerBankId && b.reports.length > RIVAL_REPORTS) b.reports.splice(0, b.reports.length - RIVAL_REPORTS);
     if (b.id === world.playerBankId) {
       const { y, q } = quarterOf(world.day);
       (b.quarterHistory ??= []).push({ quarter: `${y}Q${q}`, is: b.is.quarter });

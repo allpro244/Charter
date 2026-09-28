@@ -10,7 +10,7 @@ import { marketDepositRate, sheetRate } from '../engine/deposits';
 import { fhlbCapacity } from '../engine/funding';
 import { type IncomeStatement, interestExpense, interestIncome, leverageRatio, netIncome, noninterestExpense, tier1Capital, totalAssets, totalDeposits } from '../engine/ledger';
 import { PEER_METRICS, levers, peerGroup } from '../engine/peers';
-import { RUNGS, ladder, rungs } from '../engine/ladder';
+import { RUNGS, ladder, localStanding, rungs } from '../engine/ladder';
 import { PCA_LABEL, pcaCategory } from '../engine/regulation';
 import { type Bank, type FeedItem, type Pending, type World, emptyDesk } from '../engine/state';
 import { formatDate, nextClose } from '../engine/time';
@@ -90,7 +90,7 @@ function gauges(world: World, b: Bank): Gauge[] {
     value: last ? usd(last.netIncome) : usd(qtd),
     tone: !last ? 'neutral' : roa >= 0.008 ? 'good' : roa >= 0 ? 'warn' : 'bad',
     status: !last ? 'First quarter' : roa >= 0.008 ? 'Earning' : roa >= 0 ? 'Thin' : 'Losing money',
-    meaning: last ? `Last quarter. Return on assets ${pct(roa)}; a typical bank this size earns about ${band.typical}%. So far this quarter: ${usd(qtd)}.` : `So far this quarter. The first call report closes at the end of the quarter.`,
+    meaning: last ? `Last quarter. Return on assets ${pct(roa)}; a typical bank this size earns about ${band.typical.toFixed(2)}%. So far this quarter: ${usd(qtd)}.` : `So far this quarter. The first call report closes at the end of the quarter.`,
     go: 'EARNINGS',
     goLabel: 'Results',
   });
@@ -164,6 +164,7 @@ export function OverviewScreen({
   return (
     <div>
       <Intro>How the bank is doing, in five numbers, then against the banks your size, then what one step of each lever is worth. Hover any underlined word for what it means; click a gauge or a lever to open the tab that changes it.</Intro>
+      <RecentMoment world={world} />
       <div className="gauges">
         {g.map((x) => (
           <button key={x.key} className={'gauge ' + x.tone} onClick={() => onGo(x.go)}>
@@ -315,8 +316,20 @@ function Goal({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: str
     return { l, mine, nextRung, rungAssets };
   }, [world, bank, month]);
   const { l, mine, nextRung, rungAssets } = g;
-  if (!l.ahead) return null;
+  const local = useMemo(() => localStanding(world, bank), [world, bank, month]);
+  if (!l.ahead && !local) return null;
   return (
+    <>
+    {local && local.total > 1 && (
+      <p className="hint">
+        At home in {local.countyName}: #{num(local.rank)} of {num(local.total)} banks with branches there, with {usd(local.mine)} of deposits.{' '}
+        {local.ahead
+          ? `Next to pass: ${local.ahead.name} with ${usd(local.ahead.deposits)} there (${usd(Math.max(0, local.ahead.deposits - local.mine))} to go)${Math.abs(local.ahead.rateGap) >= 0.001 ? `; its rate sheet pays ${pct(Math.abs(local.ahead.rateGap), 2)} ${local.ahead.rateGap > 0 ? 'more' : 'less'} than yours` : ''}.`
+          : 'No bank holds more of the county than you.'}
+        {local.behind ? ` Behind you: ${local.behind.name} with ${usd(local.behind.deposits)}.` : ''}
+      </p>
+    )}
+    {l.ahead && (
     <p className="hint">
       Next on the ladder: pass {l.ahead.name ?? `a bank in ${l.ahead.state}`} at {usd(l.ahead.assets)} ({usd(Math.max(0, l.ahead.assets - mine))} to go).
       {nextRung !== null && rungAssets !== null ? ` The top ${num(nextRung)} banks start at ${usd(rungAssets)}.` : ''}{' '}
@@ -324,6 +337,26 @@ function Goal({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: str
         The ladder
       </button>
     </p>
+    )}
+    </>
+  );
+}
+
+// The latest moment worth marking (D72): a rung on the ladder, a pass at
+// home, a first branch or deal, a cycle turning. Shown for sixty days,
+// dismissed with a click; the full list is on You.
+function RecentMoment({ world }: { world: World }) {
+  const [hidden, setHidden] = useState<number>(-1);
+  const recent = [...world.milestones].reverse().find((m) => world.day - m.day <= 60 && !/ in review:/.test(m.text));
+  if (!recent || hidden === recent.day) return null;
+  return (
+    <div className="moment">
+      <span className="moment-date">{formatDate(recent.day)}</span>
+      <span className="moment-text">{recent.text}</span>
+      <button className="linkbtn" onClick={() => setHidden(recent.day)}>
+        dismiss
+      </button>
+    </div>
   );
 }
 
@@ -409,7 +442,7 @@ function Levers({ world, bank, onGo }: { world: World; bank: Bank; onGo: (tab: s
             <td>{l.label}</td>
             <td>{l.today}</td>
             <td>{l.step}</td>
-            <td className={'num' + (l.effect > 0 ? ' positive' : l.effect < 0 ? ' alert' : '')}>{l.effect === 0 ? <span className="dim" title="This lever works on balances the bank does not have yet: deposits, a loan book or a year of new loans.">not yet</span> : (l.effect > 0 ? '+' : '-') + usd(Math.abs(l.effect))}</td>
+            <td className={'num' + (l.effect > 0 ? ' positive' : l.effect < 0 ? ' alert' : '')}>{l.effect === 0 ? <span className="dim" title={l.key === 'costs' ? 'Every branch pays for itself at your margin and your salary is at or under what the board would pay.' : 'This lever works on balances the bank does not have yet: deposits, a loan book or a year of new loans.'}>{l.key === 'costs' ? 'none' : 'not yet'}</span> : (l.effect > 0 ? '+' : '-') + usd(Math.abs(l.effect))}</td>
           </tr>
         ))}
         <tr className="memo-row">

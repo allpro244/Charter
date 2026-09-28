@@ -851,6 +851,23 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
               <td className="num">{l.behind ? usd(l.behind.assets) : ''}</td>
               <td className="dim">{l.behind ? `${l.behind.name ?? 'a bank'} in ${l.behind.state}` : 'Nobody yet.'}</td>
             </tr>
+            {bank?.years && bank.years.filter((y) => y.rank > 0).length >= 2 && (() => {
+              const ys = bank.years!.filter((y) => y.rank > 0);
+              const first = ys[0]!;
+              const last = ys[ys.length - 1]!;
+              return (
+                <tr>
+                  <td>Your climb, rank at each year end</td>
+                  <td className="num">
+                    <Sparkline values={ys.map((y) => -y.rank)} width={140} height={24} />
+                  </td>
+                  <td className="dim">
+                    #{num(first.rank)} in {first.year} to #{num(last.rank)} in {last.year}
+                    {first.rank > last.rank ? `: ${num(first.rank - last.rank)} banks passed` : ''}
+                  </td>
+                </tr>
+              );
+            })()}
             <tr className="memo-row">
               <td colSpan={3}>Other banks grow with the economy. Milestones fire at the top 1,000, 500, 250, 100, 50, 25, 10 and 5, and once more at the top.</td>
             </tr>
@@ -863,14 +880,14 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
             <thead>
               <tr>
                 <th>Personal</th>
-                <th className="num">($)</th>
+                <th className="num"></th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>Cash</td>
-                <td className="num">{num(p.cash)}</td>
+                <td className="num">{usd(p.cash)}</td>
                 <td></td>
               </tr>
               <tr>
@@ -885,22 +902,22 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
               </tr>
               <tr>
                 <td>{bank?.isPublic ? 'Market value per share' : <Term k="book value">Book value per share</Term>}</td>
-                <td className="num">{perShare.toFixed(2)}</td>
+                <td className="num">{`$${perShare.toFixed(2)}`}</td>
                 <td></td>
               </tr>
               <tr>
                 <td>Stake value</td>
-                <td className="num">{num(stakeValue)}</td>
+                <td className="num">{usd(stakeValue)}</td>
                 <td></td>
               </tr>
               <tr className="total">
                 <td>Net worth</td>
-                <td className="num">{num(playerNetWorth(world))}</td>
+                <td className="num">{usd(playerNetWorth(world))}</td>
                 <td></td>
               </tr>
               <tr>
                 <td>Salary, annual</td>
-                <td className="num">{num(p.salary)}</td>
+                <td className="num">{usd(p.salary)}</td>
                 <td>
                   <Stepper value={p.salary} steps={[{ d: 1_000, label: '1K' }, { d: 10_000, label: '10K' }]} fmt={(v) => usd(v)} onChange={onSalary} min={0} max={1e8} />
                 </td>
@@ -919,22 +936,22 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
               </tr>
               <tr>
                 <td>Invested in banks</td>
-                <td className="num">{num(p.invested)}</td>
+                <td className="num">{usd(p.invested)}</td>
                 <td></td>
               </tr>
               <tr>
                 <td>Salary received after tax</td>
-                <td className="num">{num(p.salaryReceived)}</td>
+                <td className="num">{usd(p.salaryReceived)}</td>
                 <td></td>
               </tr>
               <tr>
                 <td>Dividends received after tax</td>
-                <td className="num">{num(p.dividendsReceived)}</td>
+                <td className="num">{usd(p.dividendsReceived)}</td>
                 <td></td>
               </tr>
               <tr>
                 <td>Stock sale proceeds</td>
-                <td className="num">{num(p.stockSaleProceeds)}</td>
+                <td className="num">{usd(p.stockSaleProceeds)}</td>
                 <td></td>
               </tr>
             </tbody>

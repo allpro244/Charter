@@ -6,6 +6,7 @@
 import { type Ctx, emit, milestone } from './ctx';
 import { totalAssets } from './ledger';
 import { type Bank, type World, playerBank } from './state';
+import { sheetRate } from './deposits';
 import { money } from './format';
 
 export interface Rung {
@@ -72,6 +73,7 @@ export function ladderMonthly(ctx: Ctx): void {
   const { world } = ctx;
   const b = playerBank(world);
   if (!b || b.status !== 'open') return;
+  localRaceMonthly(ctx, b);
   const l = ladder(world);
   const before = world.ladder.rank;
   world.ladder.rank = l.rank;
@@ -84,4 +86,73 @@ export function ladderMonthly(ctx: Ctx): void {
       emit(ctx, 'system', text, { severity: 'good', bankId: b.id });
     }
   }
+}
+
+// The race at home (D72): the banks with branches in the player's home
+// county, by the deposits each holds there. The next bank to pass is the
+// smallest one still ahead: a goal a young bank can reach, where the
+// national ladder is years away. Simulated banks only; the aggregates are
+// many banks at once and are not a name to pass.
+export interface LocalRival {
+  id: string;
+  name: string;
+  deposits: number; // what it holds in the county
+  rateGap: number; // its rate sheet against yours, a fraction; positive pays more
+}
+
+export interface LocalStanding {
+  county: string;
+  countyName: string;
+  rank: number;
+  total: number;
+  mine: number;
+  ahead: LocalRival | null;
+  behind: LocalRival | null;
+  aheadIds: string[];
+}
+
+export function localStanding(world: World, b: Bank): LocalStanding | null {
+  const fips = b.homeCounty;
+  const county = fips ? world.geo.counties[fips] : undefined;
+  if (!fips || !county) return null;
+  const mine = b.branches.filter((br) => br.county === fips).reduce((x, br) => x + br.deposits, 0);
+  const others: LocalRival[] = [];
+  for (const id of world.bankOrder) {
+    const x = world.banks[id] as Bank;
+    if (x.id === b.id || x.kind !== 'rival' || x.status !== 'open') continue;
+    const held = x.branches.filter((br) => br.county === fips).reduce((s, br) => s + br.deposits, 0);
+    if (held > 0) others.push({ id: x.id, name: x.name, deposits: held, rateGap: sheetRate(x) - sheetRate(b) });
+  }
+  const aheadOf = others.filter((o) => o.deposits > mine).sort((a, c) => a.deposits - c.deposits);
+  const behindOf = others.filter((o) => o.deposits <= mine).sort((a, c) => c.deposits - a.deposits);
+  return { county: fips, countyName: county.name, rank: aheadOf.length + 1, total: others.length + 1, mine, ahead: aheadOf[0] ?? null, behind: behindOf[0] ?? null, aheadIds: aheadOf.map((o) => o.id) };
+}
+
+// Monthly: the passes both ways make the feed, and a pass up is a
+// milestone; first place at home is one of its own.
+export function localRaceMonthly(ctx: Ctx, b: Bank): void {
+  const { world } = ctx;
+  const s = localStanding(world, b);
+  if (!s || s.total < 2) return;
+  const prev = world.ladder.local;
+  if (prev && prev.county === s.county) {
+    const passed = prev.ahead.filter((id) => !s.aheadIds.includes(id) && world.banks[id]?.status === 'open');
+    const passedBy = s.aheadIds.filter((id) => !prev.ahead.includes(id));
+    if (passed.length > 0 && s.rank < prev.rank) {
+      const names = passed.map((id) => world.banks[id]?.name ?? 'a bank');
+      const text = `In ${s.countyName} you passed ${names.join(' and ')}: now #${s.rank} of ${s.total} banks with branches there by deposits`;
+      milestone(ctx, text);
+      emit(ctx, 'system', text, { severity: 'good', bankId: b.id });
+    } else if (passedBy.length > 0 && s.rank > prev.rank) {
+      const names = passedBy.map((id) => world.banks[id]?.name ?? 'a bank');
+      emit(ctx, 'rival', `${names.join(' and ')} passed you in ${s.countyName}: now #${s.rank} of ${s.total} there by deposits`, { severity: 'alert', bankId: b.id });
+    }
+  }
+  const led = prev?.ledOnce ?? false;
+  if (s.rank === 1 && !led) {
+    const text = `The largest bank in ${s.countyName} by deposits`;
+    milestone(ctx, text);
+    emit(ctx, 'system', text, { severity: 'good', bankId: b.id });
+  }
+  world.ladder.local = { county: s.county, rank: s.rank, total: s.total, ahead: s.aheadIds, ledOnce: led || s.rank === 1 };
 }

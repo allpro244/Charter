@@ -168,9 +168,18 @@ export function competeCounties(world: World): void {
     if (b.status !== 'open' && b.status !== 'closing') continue;
     for (const br of b.branches) (byCounty[br.county] ??= []).push({ bank: b, br });
   }
-  for (const [fips, list] of Object.entries(byCounty)) {
+  for (const [fips, all] of Object.entries(byCounty)) {
     const county = world.geo.counties[fips];
     if (!county || county.depositPool <= 0) continue;
+    // A home office that dwarfs its county (a money center's main office)
+    // gathers from its franchise, not from the county, and stays out of the
+    // county's contest; capping it at the county pool drained a national
+    // bank's deposits into Home Loan Bank advances quarter by quarter (D71).
+    const list = all.filter(({ bank, br }) => {
+      const franchise = br.county === bank.homeCounty && bank.franchise.pool > county.depositPool;
+      if (franchise) br.competitiveTarget = null;
+      return !franchise;
+    });
     if (list.length < 2) {
       for (const x of list) x.br.competitiveTarget = null;
       continue;

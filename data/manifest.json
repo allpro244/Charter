@@ -1,5 +1,5 @@
 {
-  "builtOn": "2026-09-28T04:08:58.774Z",
+  "builtOn": "2026-09-28T04:32:42.271Z",
   "vintage": 2024,
   "asOf": "2024-12-31",
   "fixtures": false,
@@ -340,7 +340,7 @@
     "CSUSHPISA": "2023-12-01 to 2024-12-01"
   },
   "outputs": {
-    "counties.json": "7a8b1f0862502bfec2bee336ebd7ed1091b4a54cc66690bc1de39e0604a44e4a",
+    "counties.json": "992019189a328d9b5c088ab0be049065d99aeaa7e9f621d78727165865eddf66",
     "metros.json": "23e77398ccab2e3fbe559169c8ed53b9655affbc2d8c29b1b3e043610427f126",
     "states.json": "11b04df5a3b533175c4727be168e782ca7515b03fdf50ce8a316fbb905b5551c",
     "banks-by-state.json": "d3f309f2332a5991dcdc311fca24e70a7b6e5ac517fc5ef369fa0581ba989224",

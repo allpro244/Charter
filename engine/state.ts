@@ -723,7 +723,7 @@ export interface World {
   deals: DealRecord[]; // closed deals, for the record
   countries: Record<string, Country>; // the global stage (D45)
   largestNational: number; // assets of the largest bank in America at the start, the bar to pass
-  ladder: { rank: number; total: number; crossed: number[]; rankYearAgo?: number }; // the player's place among America's banks by assets (D49)
+  ladder: { rank: number; total: number; crossed: number[]; rankYearAgo?: number; local?: { county: string; rank: number; total: number; ahead: string[]; ledOnce?: boolean } }; // the player's place among America's banks by assets (D49), and in the home county by deposits (D72)
 }
 
 export interface DealRecord {
@@ -864,27 +864,24 @@ export function buildGeo(data: WorldData | null): Geo {
     };
   }
   // No FDIC data at any level: pools follow real personal income and the
-  // state totals follow the pools (D48). Otherwise counties without a
-  // Summary of Deposits figure get their share of the state's real deposit
-  // total by population weighted by income.
+  // state totals follow the pools (D48).
   const fdicPresent = data.states.some((s) => s.totalDeposits > 0 || s.bankCount > 0);
   geo.bankData = fdicPresent ? 'fdic' : 'generated';
   if (!fdicPresent) {
     depositPoolsFromIncome(geo);
     return geo;
   }
-  const byState: Record<string, CountyState[]> = {};
-  for (const c of Object.values(geo.counties)) (byState[c.state] ??= []).push(c);
-  for (const [abbr, counties] of Object.entries(byState)) {
-    const st = geo.states[abbr];
-    if (!st) continue;
-    const known = counties.reduce((s, c) => s + (c.depositPool > 0 ? c.depositPool : 0), 0);
-    const missing = counties.filter((c) => c.depositPool === 0);
-    if (missing.length === 0) continue;
-    const remaining = Math.max(0, st.totalDeposits - known);
-    const weight = (c: CountyState) => c.population * Math.max(1, c.income);
-    const totalWeight = missing.reduce((s, c) => s + weight(c), 0);
-    for (const c of missing) c.depositPool = totalWeight > 0 ? Math.round((remaining * weight(c)) / totalWeight) : 0;
+  // A county with no bank office in the Summary of Deposits still has
+  // savers; their money sits in banks next door. Its pool follows its own
+  // residents' income, as in the no-FDIC world, never a share of the
+  // state's institution total: that total counts every dollar the national
+  // banks headquartered in the state gathered across the country, and it
+  // once handed a North Carolina county of 9,000 people $2.5 trillion (D71).
+  const missing = Object.values(geo.counties).filter((c) => c.depositPool === 0);
+  if (missing.length > 0) {
+    const shadow: Geo = { ...geo, counties: Object.fromEntries(Object.values(geo.counties).map((c) => [c.fips, { ...c }])) };
+    depositPoolsFromIncome(shadow);
+    for (const c of missing) c.depositPool = shadow.counties[c.fips]?.depositPool ?? 0;
   }
   return geo;
 }
