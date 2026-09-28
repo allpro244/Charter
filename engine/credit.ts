@@ -695,7 +695,7 @@ export function bookByType(b: Bank): { type: LoanType; label: string; balance: n
       count += 1;
       ysum += l.balance * l.rate;
       if (l.grade >= 6) criticized += l.balance;
-      if (l.status === 'nonaccrual' || l.status === 'workout' || l.grade >= 7) nonaccrual += l.balance;
+      if (l.status === 'nonaccrual' || l.status === 'workout') nonaccrual += l.balance;
     }
     if (balance > 0 || count > 0) out.push({ type: t, label: TYPE[t].label, balance, count, criticized, nonaccrual, yield: balance > 0 ? ysum / balance : 0 });
   }

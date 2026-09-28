@@ -320,7 +320,11 @@ export function examsMonthly(ctx: Ctx): void {
     const before = b.camels.composite;
     const result = examine(ctx, b);
     const stack = capitalStack(b);
-    if (b.kind === 'player') {
+    if (b.kind === 'player' && result.composite <= 2 && result.findings.every((f) => f.resolved)) {
+      // A clean exam is news, not a decision: one line, no stop.
+      emit(ctx, 'regulator', `Exam closed: rated ${result.composite} of 5, a sound bank with nothing to fix. Next exam about ${formatDate(result.nextExam)}.`, { severity: 'good', bankId: b.id });
+      if (result.composite !== before) emit(ctx, 'regulator', `CAMELS moved from ${before} to ${result.composite}`, { severity: result.composite > before ? 'alert' : 'good', bankId: b.id });
+    } else if (b.kind === 'player') {
       const open = result.findings.filter((f) => !f.resolved);
       addPending(ctx, {
         kind: 'exam_result',

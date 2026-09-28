@@ -137,6 +137,7 @@ export const calibration = {
   operatingBalanceShare: hand(5, 20, 10, 'percent of C&I and owner occupied CRE balances the borrowers keep on deposit with the lender', 'compensating balance practice; Federal Reserve Senior Loan Officer Opinion Survey on business deposit relationships'),
   branchDepositPremium: hand(2, 8, 4, 'percent of deposits assumed in a branch purchase', 'S&P Global Market Intelligence, US branch deal deposit premiums 2015 to 2023'),
   largeDepositPremium: hand(25, 100, 50, 'basis points over the market rate on a negotiated business or public deposit', 'public funds and corporate treasury deposit pricing practice; FDIC national rate cap methodology'),
+  branchOverCapacityGrowth: hand(0.5, 2, 1, 'percent a month a branch past its capacity can still add toward its share of the county', 'FDIC Summary of Deposits: single office banks over $1B are rare outliers; branch deposit growth past maturity runs a few percent a year'),
   officerSearchDays: hand(60, 180, 90, 'days from a senior officer leaving to an interim or permanent replacement in the seat', 'executive search practice; community banks name an interim officer at once and fill the seat within one to six months'),
   takeoverPremium: hand(100, 160, 125, 'percent of book value for a control stake', 'S&P bank M&A price to tangible book, small deals'),
   // Global stage (D45). Start values for the countries the game opens

@@ -7,6 +7,9 @@ import { totalAssets } from '../engine/ledger';
 import { createWorld } from '../engine/state';
 import { newPlayer, startCharter, startableMetros } from '../engine/start';
 import { applyDecisions, tick } from '../engine/tick';
+import { generateApplication } from '../engine/borrowers';
+import { makeRng } from '../engine/rng';
+import { leverageTested, policyCheck, termsFrom } from '../engine/underwriting';
 import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
 
 function charter(seed: number) {
@@ -49,5 +52,32 @@ describe.skipIf(!hasFixtures())(`year in review and the desk (${hasFixtures() ? 
     }
     expect(apps).toBe(0);
     expect(world.feed.some((f) => f.text.includes('enforcement order freezes the bank'))).toBe(true);
+  });
+});
+
+describe.skipIf(!hasFixtures())(`the desk carries decisions worth making (D67, ${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
+  it('never fails a real estate or household loan on the leverage cap, and screens multi-break applications at the door', () => {
+    const { world, bank } = charter(67);
+    const county = world.geo.counties[bank.homeCounty!]!;
+    const r = makeRng(9);
+    let leverageFails = 0;
+    for (let i = 0; i < 2000; i++) {
+      const app = generateApplication(world, bank, county, r);
+      const c = policyCheck(bank, app, termsFrom(app));
+      if (!leverageTested(app.type) && c.reasons.some((x) => x.startsWith('leverage'))) leverageFails++;
+    }
+    expect(leverageFails).toBe(0);
+    // Two years at the desk: every loan that reaches it breaks at most one line.
+    for (let d = 0; d < 730; d++) {
+      tick(world);
+      for (const p of world.pending.filter((x) => x.kind === 'loan_application')) {
+        const app = p.data.app as Parameters<typeof policyCheck>[1];
+        expect(policyCheck(bank, app, termsFrom(app)).reasons.length).toBeLessThanOrEqual(1);
+      }
+      const blocking = world.pending.filter((p) => p.blocking);
+      if (blocking.length > 0) applyDecisions({ world, events: [] }, blocking.map((p) => ({ pendingId: p.id, choice: p.options.some((o) => o.key === 'd') ? 'd' : p.options[0]!.key })));
+    }
+    expect(bank.applications.screened ?? 0).toBeGreaterThan(0);
+    expect(world.feed.filter((f) => f.text.startsWith('Turned down at the door this month')).length).toBeLessThanOrEqual(25);
   });
 });

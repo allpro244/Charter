@@ -99,11 +99,32 @@ export function dialMonthly(ctx: Ctx, b: Bank): void {
     emit(ctx, 'borrower', `Loan committee this month: approved ${cm.approved} for ${money(cm.amount)}, declined ${cm.declined}`, { bankId: b.id });
   }
   b.committeeMonth = { approved: 0, amount: 0, declined: 0 };
+  // What never reached the desk, once a month instead of a line a day (D67).
+  const dm = b.doorMonth;
+  if (dm && dm.limit + dm.room + dm.frozen + dm.screened > 0) {
+    const parts: string[] = [];
+    if (dm.screened > 0) parts.push(`${dm.screened} broke two or more lines of your written policy`);
+    if (dm.limit > 0) parts.push(`${dm.limit} asked more than the legal lending limit of ${money(lendingLimit(b))} to one name (capital raises it)`);
+    if (dm.room > 0) parts.push(`${dm.room} needed more than the bank could lend that day (deposits raise it)`);
+    if (dm.frozen > 0) parts.push(`${dm.frozen} came while the enforcement order freezes the bank at its size`);
+    const n = dm.limit + dm.room + dm.frozen + dm.screened;
+    emit(ctx, 'borrower', `Turned down at the door this month: ${n} application${n === 1 ? '' : 's'}; ${parts.join('; ')}.`, { bankId: b.id });
+  }
+  b.doorMonth = { limit: 0, room: 0, frozen: 0, amount: 0, screened: 0 };
 }
 
 export interface PolicyCheck {
   pass: boolean;
   reasons: string[];
+}
+
+// A written policy caps total leverage (debt to earnings) on operating
+// company credit: C&I, farm and energy lending. Real estate is underwritten
+// on the property's coverage and loan to value, and a household on its
+// income coverage and loan to value; a leverage cap on those would reject
+// every building loan, since the loan is most of the borrower's debt (D67).
+export function leverageTested(type: LoanType): boolean {
+  return type === 'ci' || type === 'ag' || type === 'energy';
 }
 
 export function policyCheck(b: Bank, app: Application, terms: FundTerms): PolicyCheck {
@@ -113,7 +134,7 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
   if (!p.allowed[app.type]) reasons.push(`${TYPE[app.type].label} lending is off`);
   if (m.dscr < p.minDscr) reasons.push(`coverage ${m.dscr.toFixed(2)}x under ${p.minDscr.toFixed(2)}x`);
   if (terms.ltv > p.maxLtv[app.type]) reasons.push(`LTV ${(terms.ltv * 100).toFixed(0)}% over ${(p.maxLtv[app.type] * 100).toFixed(0)}%`);
-  if (m.leverage > p.maxLeverage) reasons.push(`leverage ${m.leverage.toFixed(1)}x over ${p.maxLeverage.toFixed(1)}x`);
+  if (leverageTested(app.type) && m.leverage > p.maxLeverage) reasons.push(`leverage ${m.leverage.toFixed(1)}x over ${p.maxLeverage.toFixed(1)}x`);
   if (p.requireGuarantor && !terms.guarantor && m.employees > 0) reasons.push('no guarantor');
   if (terms.amount > p.maxSize) reasons.push(`size ${money(terms.amount)} over ${money(p.maxSize)}`);
   const maxGrade = p.maxGrade ?? 6;
@@ -121,7 +142,11 @@ export function policyCheck(b: Bank, app: Application, terms: FundTerms): Policy
   const limit = lendingLimit(b);
   if (terms.amount > limit) reasons.push(`over the legal lending limit of ${money(limit)} to one borrower`);
   const sectorShare = sectorExposure(b, m.sector) ;
-  if (sectorShare > p.sectorCap && b.acct.loans > 0) reasons.push(`${m.sector} concentration ${(sectorShare * 100).toFixed(0)}% over ${(p.sectorCap * 100).toFixed(0)}%`);
+  // A sector share means something once there is a book to be concentrated
+  // (loans at least equal to capital) and a real industry to be in: the
+  // first three loans of a new bank are always 'concentrated', and 'other'
+  // is the catch-all, not a sector (D67).
+  if (m.sector !== 'other' && sectorShare > p.sectorCap && b.acct.loans >= tier1Capital(b.acct)) reasons.push(`${m.sector} concentration ${(sectorShare * 100).toFixed(0)}% over ${(p.sectorCap * 100).toFixed(0)}%`);
   // The interagency commercial real estate guidance is part of every
   // written policy: construction past 100% of capital, or investor CRE
   // past 300%, is an exception the CCO will not approve on their own.
@@ -237,6 +262,7 @@ export function applicationsDaily(ctx: Ctx): void {
   const forPlayer: Application[] = [];
   let turnedAway = 0;
   let turnedAwayAmount = 0;
+  let screened = 0;
   const limit = lendingLimit(b);
   // A bank frozen at its size by an order cannot make a new loan, so none
   // reaches the desk: a decision that cannot be taken is not a decision (D51).
@@ -269,12 +295,22 @@ export function applicationsDaily(ctx: Ctx): void {
         turnedAwayAmount += app.memo.amount;
         b.applications.turnedAway = (b.applications.turnedAway ?? 0) + 1;
         b.applications.turnedAwayAmount = (b.applications.turnedAwayAmount ?? 0) + app.memo.amount;
+      } else if (b.dial.maxAuto > 0 && policyCheck(b, app, termsFrom(app)).reasons.length >= 2) {
+        // Breaking two or more lines of the written policy, the application
+        // never goes to committee: the loan officer declines it (D67).
+        screened += 1;
+        b.applications.screened = (b.applications.screened ?? 0) + 1;
       } else if (b.dial.committee && app.memo.amount <= committeeLine(b)) committeeDecide(ctx, b, app);
       else forPlayer.push(app);
     } else autoDecide(ctx, b, app, skill);
   }
-  if (turnedAway > 0) {
-    emit(ctx, 'borrower', `Turned away ${turnedAway} borrower${turnedAway === 1 ? '' : 's'} asking ${money(turnedAwayAmount)}: ${turnedAwayAmount > limit * turnedAway ? `over the legal lending limit of ${money(limit)} to one name` : growthRestricted(b) ? 'the enforcement order freezes the bank at its size' : `beyond the ${money(room)} the bank can lend today`}. ${growthRestricted(b) ? 'Capital and a clean exam lift the order.' : 'Capital raises the limit; deposits raise the room.'}`, { bankId: b.id });
+  if (turnedAway > 0 || screened > 0) {
+    const dm = (b.doorMonth ??= { limit: 0, room: 0, frozen: 0, amount: 0, screened: 0 });
+    dm.screened += screened;
+    dm.amount += turnedAwayAmount;
+    if (growthRestricted(b)) dm.frozen += turnedAway;
+    else if (turnedAwayAmount > limit * turnedAway) dm.limit += turnedAway;
+    else dm.room += turnedAway;
   }
   if (forPlayer.length === 0) return;
   if (forPlayer.length > 5) {

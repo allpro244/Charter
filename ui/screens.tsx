@@ -195,7 +195,7 @@ function DecisionBody({ world, p, onDecide, onFewer, onCommittee }: { world: Wor
             <span className={h.pricing.tone === 'bad' ? 'bad' : h.pricing.tone === 'warn' ? 'warn' : 'positive'}>{h.pricing.margin >= 0 ? 'The rate pays' : 'The rate does not pay'}: {(h.pricing.margin * 100).toFixed(2)}% a year after losses and costs.</span>{' '}
             <span>CCO grade {app.memo.suggestedGrade}.</span>{' '}
             <button className="btn small" onClick={() => setShowRead((v) => !v)}>
-              {showRead ? 'Hide the banker\'s read' : 'Show the banker\'s read'}
+              {showRead ? 'Hide the banker\'s read' : 'What this means and the banker\'s read'}
             </button>
             {onFewer && (
               <button className="btn small" onClick={onFewer} title="Doubles the size line: smaller loans are decided under your written policy">
@@ -220,7 +220,10 @@ function DecisionBody({ world, p, onDecide, onFewer, onCommittee }: { world: Wor
           ))}
         </div>
       )}
-      {preview.length > 0 && (
+      {app && !showRead && preview.some((l) => l.startsWith('Policy exception')) && (
+        <p className="warn">{preview.find((l) => l.startsWith('Policy exception'))}</p>
+      )}
+      {preview.length > 0 && (!app || showRead) && (
         <div className="preview">
           <div className="preview-title">What this means</div>
           {preview.map((l, i) => (

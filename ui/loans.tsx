@@ -158,9 +158,26 @@ function statusLabel(l: Loan): string {
 function Book({ world, bank, unit, openLoan, setOpenLoan, act }: { world: World; bank: Bank; unit: Unit; openLoan: string | null; setOpenLoan: (id: string | null) => void; act?: Props['act'] }) {
   const loans = [...bank.loans].sort((a, b) => (a.status === b.status ? b.balance - a.balance : rank(a) - rank(b)));
   const troubled = loans.filter((l) => isTroubled(l) || l.status === 'reo');
-  const onFile = loans.filter((l) => l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'sold').length;
+  const isOpen = (l: Loan) => l.status !== 'paid' && l.status !== 'chargedOff' && l.status !== 'sold';
+  const onFile = loans.filter(isOpen).length;
+  // The open files first, largest and troubled on top; closed files on
+  // request. A long book shows its first 25 until asked for the rest.
+  const [view, setView] = useState<'open' | 'closed'>('open');
+  const [all, setAll] = useState(false);
+  const listed = loans.filter((l) => (view === 'open' ? isOpen(l) : !isOpen(l)));
+  const shown = all ? listed.slice(0, 500) : listed.slice(0, 25);
   return (
     <div>
+    <div className="toolbar">
+      <div className="seg">
+        <button className={view === 'open' ? 'on' : ''} onClick={() => { setView('open'); setAll(false); }}>
+          Open files ({num(onFile)})
+        </button>
+        <button className={view === 'closed' ? 'on' : ''} onClick={() => { setView('closed'); setAll(false); }}>
+          Paid off and closed ({num(loans.length - onFile)})
+        </button>
+      </div>
+    </div>
     {troubled.length > 0 && (
       <p className="hint">
         When a loan fails: 30, 60 and 90 days late, then <Term k="nonaccrual">nonaccrual</Term> (its interest stops counting), workout, and at nine months the bank forecloses real estate into <Term k="REO">REO</Term> or charges the rest off. You can sell a troubled loan first with a <Term k="note sale">note sale</Term>: cash now, the shortfall written off today, the workout gone. Buttons are on the rows.
@@ -188,9 +205,19 @@ function Book({ world, bank, unit, openLoan, setOpenLoan, act }: { world: World;
         </tr>
       </thead>
       <tbody>
-        {loans.slice(0, 300).map((l) => (
+        {shown.map((l) => (
           <LoanRows key={l.id} world={world} bank={bank} l={l} unit={unit} open={openLoan === l.id} toggle={() => setOpenLoan(openLoan === l.id ? null : l.id)} act={act} />
         ))}
+        {listed.length > shown.length && (
+          <tr>
+            <td colSpan={10}>
+              <button className="btn small" onClick={() => setAll(true)}>
+                Show all {num(listed.length)} {view === 'open' ? 'open' : 'closed'} files
+              </button>{' '}
+              <span className="dim">the {num(shown.length)} above are the troubled ones and the largest</span>
+            </td>
+          </tr>
+        )}
         {loans.length === 0 && (
           <tr>
             <td colSpan={10} className="empty">

@@ -334,6 +334,14 @@ tr.positive td {
   color: var(--good);
 }
 
+.warn:not(.pill):not(.gauge):not(.fill) {
+  color: var(--accent);
+}
+
+.bad:not(.pill):not(.gauge):not(.fill) {
+  color: var(--bad);
+}
+
 table.stats {
   width: auto;
   margin: 8px 0 4px;

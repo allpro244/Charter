@@ -68,7 +68,7 @@ export function km(a: [number, number], b: [number, number]): number {
 // A branch's target deposits: its county's pool times a share that ramps
 // with years in market toward the ceiling, discounted by distance from
 // home, capped by branch capacity at local wages.
-export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.county === b.homeCounty): number {
+export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.county === b.homeCounty, ratchet = true): number {
   const county = world.geo.counties[br.county];
   // A bank whose deposits dwarf its home county gathers them from a wider
   // market than the county: its franchise pool, set at creation, stands in
@@ -101,11 +101,13 @@ export function branchTarget(world: World, b: Bank, br: Branch, isHome = br.coun
   const perBranch = calibration.depositsPerBranch.typical * 1e6 * wageIndex * (isHome ? 3 : 1) * seasoning;
   // Capacity caps growth; it never pushes out what a branch already holds,
   // it grows with nominal income like every other dollar figure, and a
-  // full branch can still add a few percent a month toward its share.
+  // full branch can still add a little each month toward its share
+  // (branchOverCapacityGrowth; it was 4% a month, which let one office
+  // compound past a billion once the county contest stopped losing money, D67).
   // Far from home the capacity shrinks with the reach too: an unknown
   // name fills no branch, however big the county.
   const index = world.economy.nominalIndex ?? 1;
-  return Math.round(Math.min(fromShare, Math.max(perBranch * index * distance, br.deposits * 1.04)));
+  return Math.round(Math.min(fromShare, ratchet ? Math.max(perBranch * index * distance, br.deposits * (1 + calibration.branchOverCapacityGrowth.typical / 100)) : perBranch * index * distance));
 }
 
 // Attractiveness of a branch to depositors in its county: the rate sheet
@@ -180,7 +182,10 @@ export function competeCounties(world: World): void {
       held += br.deposits;
       br.competitiveTarget = null;
       const mine = branchTarget(world, bank, br);
-      own.push(mine);
+      // The cap on what a branch can win comes from its own capacity, not
+      // from what it holds: a cap on held deposits ratcheted a branch up a
+      // quarter at a time without end (D67).
+      own.push(branchTarget(world, bank, br, undefined, false));
       natural += mine;
       const years = (world.day - br.openedDay) / 365;
       return { attract: attractiveness(sheetRate(bank) - marketDepositRate(world), years, totalAssets(bank.acct), bank.confidence) };

@@ -60,7 +60,7 @@ export function YearPanel({ world, bank, onHide }: { world: World; bank: Bank; o
         <tr>
           <td>Rank in America</td>
           <td className="num">{r.rank > 0 ? `#${num(r.rank)}` : ''}</td>
-          <td className="dim">{climb(r)}</td>
+          <td className="dim">{climb(r).replace(/^#[\d,]+, /, '')}</td>
         </tr>
         <tr>
           <td>Your calls</td>

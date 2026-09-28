@@ -148,7 +148,7 @@ export function loanHealth(world: World, b: Bank, app: Application, exception = 
   const exposure = m.amount / t1;
   let conc = ramp(exposure, [[0.02, 100], [0.05, 90], [0.1, 60], [0.15, 25], [0.2, 0]]);
   const sectorShare = sectorExposure(b, m.sector);
-  if (sectorShare > b.policy.sectorCap) conc -= 25;
+  if (m.sector !== 'other' && sectorShare > b.policy.sectorCap && b.acct.loans >= tier1Capital(b.acct)) conc -= 25;
   const cre = creConcentration(b);
   if ((app.type === 'construction' && cre.construction + exposure > 1) || ((app.type === 'construction' || app.type === 'cre_inv') && cre.cre + exposure > 3)) conc -= 40;
   factors.push({

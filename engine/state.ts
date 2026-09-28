@@ -136,6 +136,7 @@ export interface Bank {
   policy: LoanPolicy;
   dial: { maxAuto: number; minGrade: number; autoSize?: boolean; committee?: boolean }; // above maxAuto dollars or worse than minGrade comes to the player (D20); autoSize keeps the line at 5% of capital; committee decides up to three times the line (D52)
   committeeMonth?: { approved: number; amount: number; declined: number }; // the loan committee's month to date (D52)
+  doorMonth?: { limit: number; room: number; frozen: number; amount: number; screened: number }; // applications that never reached the desk this month (D67)
   officers: Officer[];
   reviews: QuarterReview[]; // earnings reviews, player's bank only (D34)
   interestByType: Record<LoanType, number>; // quarter to date
@@ -159,7 +160,7 @@ export interface Bank {
   lastBranchOfferDay?: number; // the last branch offer on the desk (D59)
   relationships?: DepositRelationship[]; // negotiated large accounts (D62)
   originationAppetite: number; // 1 is normal demand; CLO skill and the AI move it
-  applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number };
+  applications: { received: number; toDesk: number; toDeskYtd: number; autoApproved: number; autoApprovedAmount: number; autoDeclined: number; playerApproved: number; playerDeclined: number; turnedAway: number; turnedAwayAmount: number; screened?: number };
   losses: LossRecordState[]; // relationship book losses, quarter to date
   lifetimeChargeOffsByType: Record<LoanType, number>;
   ai: AiPolicy | null; // rivals only
