@@ -8,7 +8,8 @@ import { calibration } from '../data/calibration';
 import { SECTORS, type Sector } from '../data/types';
 import { businessName } from './borrowers';
 import { type Ctx, addPending, emit, milestone } from './ctx';
-import { type DepositType, post } from './ledger';
+import { type DepositType, leverageRatio, post } from './ledger';
+import { PCA_WELL } from './regulation';
 import { coreDeposits, marketRate } from './deposits';
 import { chance, derive, hashString, pick, rand } from './rng';
 import { type Bank, type CountyState, type Decision, type Pending, nextId, playerBank } from './state';
@@ -30,6 +31,10 @@ function topSector(c: CountyState): Sector {
   return best;
 }
 
+export function canTakeLargeDeposit(b: Bank): boolean {
+  return b.enforcement !== 'consent' && b.enforcement !== 'pca' && leverageRatio(b.acct) >= PCA_WELL;
+}
+
 export interface DepositOffer {
   name: string;
   type: DepositType;
@@ -47,6 +52,9 @@ export function depositOffersMonthly(ctx: Ctx): void {
   const b = playerBank(world);
   if (!b || b.status !== 'open' || !b.homeCounty) return;
   if (world.pending.some((p) => p.kind === 'deposit_offer')) return;
+  // Treasurers and public bodies place big money only with a bank that is
+  // well capitalized and free to grow: never under a formal order.
+  if (!canTakeLargeDeposit(b)) return;
   const core = coreDeposits(b);
   if (core < 5_000_000) return;
   const r = derive(world.seed, hashString(`depositor:${b.id}:${world.day}`));
@@ -89,6 +97,10 @@ export function decideDepositOffer(ctx: Ctx, pending: Pending, d: Decision | nul
   if (!b || !offer) return;
   if (!d || d.choice !== 'a') {
     emit(ctx, 'depositor', `${offer.name} took its ${money(offer.amount)} to a rival.`, { bankId: b.id });
+    return;
+  }
+  if (!canTakeLargeDeposit(b)) {
+    emit(ctx, 'depositor', `${offer.name} withdrew its offer: it places money only with a well capitalized bank free of regulatory orders.`, { severity: 'alert', bankId: b.id });
     return;
   }
   post(b.acct, { cash: offer.amount, [offer.type]: offer.amount });

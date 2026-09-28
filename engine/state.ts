@@ -145,6 +145,8 @@ export interface Bank {
   applicationsByType: Record<LoanType, number>; // year to date, received
   declinedForFunding: number; // year to date: auto-declined because cash was short of the working cushion
   desk: DeskRecord; // the player's own calls, lifetime
+  years?: YearReview[]; // the year in review, one per December, player's bank only (D65)
+  deskAtYear?: { approved: number; wentBad: number }; // the desk record at the last review, so each year counts its own calls
   customers?: Record<string, Customer>; // every borrower the bank has lent to, by name and county (D53)
   pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
   ratePeg: Record<DepositType, number> | null; // the deposit sheet follows the market at these offsets; null holds the sheet by hand (D50)
@@ -364,6 +366,23 @@ export interface DeskRecord {
   paidOff: number;
   wentBad: number; // reached nonaccrual
   lost: number; // dollars charged off on the player's own approvals
+}
+
+// The year in review (D65): the scorecard a board reads each December.
+export interface YearReview {
+  year: number;
+  profit: number;
+  roa: number;
+  assets: number;
+  growth: number | null; // assets against a year ago
+  rank: number;
+  rankAgo: number | null;
+  approved: number; // loans approved at the desk this year
+  wentBad: number; // desk loans that reached nonaccrual this year
+  peerRoa: number | null; // median return of the banks your size
+  peers: number;
+  netWorth: number; // the player's, at the close
+  deNovo?: boolean; // inside the first three years of a new charter, when earning little is the plan
 }
 
 export function emptyDesk(): DeskRecord {

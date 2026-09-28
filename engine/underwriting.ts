@@ -238,7 +238,9 @@ export function applicationsDaily(ctx: Ctx): void {
   let turnedAway = 0;
   let turnedAwayAmount = 0;
   const limit = lendingLimit(b);
-  const room = fundable(b);
+  // A bank frozen at its size by an order cannot make a new loan, so none
+  // reaches the desk: a decision that cannot be taken is not a decision (D51).
+  const room = growthRestricted(b) ? 0 : fundable(b);
   for (let i = 0; i < n; i++) {
     const branch = b.branches.length > 0 ? pick(world.rng, b.branches) : null;
     const county = world.geo.counties[branch ? branch.county : b.homeCounty];
@@ -272,7 +274,7 @@ export function applicationsDaily(ctx: Ctx): void {
     } else autoDecide(ctx, b, app, skill);
   }
   if (turnedAway > 0) {
-    emit(ctx, 'borrower', `Turned away ${turnedAway} borrower${turnedAway === 1 ? '' : 's'} asking ${money(turnedAwayAmount)}: ${turnedAwayAmount > limit * turnedAway ? `over the legal lending limit of ${money(limit)} to one name` : `beyond the ${money(room)} the bank can lend today`}. Capital raises the limit; deposits raise the room.`, { bankId: b.id });
+    emit(ctx, 'borrower', `Turned away ${turnedAway} borrower${turnedAway === 1 ? '' : 's'} asking ${money(turnedAwayAmount)}: ${turnedAwayAmount > limit * turnedAway ? `over the legal lending limit of ${money(limit)} to one name` : growthRestricted(b) ? 'the enforcement order freezes the bank at its size' : `beyond the ${money(room)} the bank can lend today`}. ${growthRestricted(b) ? 'Capital and a clean exam lift the order.' : 'Capital raises the limit; deposits raise the room.'}`, { bankId: b.id });
   }
   if (forPlayer.length === 0) return;
   if (forPlayer.length > 5) {

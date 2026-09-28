@@ -168,7 +168,7 @@ export function FeedList({ items, speed, onPlay }: { items: FeedItem[]; speed: n
   );
 }
 
-function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void; onFewer?: () => void }) {
+function DecisionBody({ world, p, onDecide, onFewer, onCommittee }: { world: World; p: Pending; onDecide: (p: Pending, key: string) => void; onFewer?: () => void; onCommittee?: () => void }) {
   const preview = previewFor(world, p);
   const bank = playerBank(world);
   const app = p.kind === 'loan_application' ? (p.data.app as Application | undefined) : undefined;
@@ -200,6 +200,11 @@ function DecisionBody({ world, p, onDecide, onFewer }: { world: World; p: Pendin
             {onFewer && (
               <button className="btn small" onClick={onFewer} title="Doubles the size line: smaller loans are decided under your written policy">
                 Fewer loans on my desk
+              </button>
+            )}
+            {onCommittee && bank && !bank.dial.committee && (
+              <button className="btn small" onClick={onCommittee} title="The loan committee decides credits up to three times the size line under your policy; only the biggest reach you, with one summary line a month">
+                Only the biggest
               </button>
             )}
           </div>
@@ -366,7 +371,7 @@ export function DecisionCard({ world, p, onDecide }: { world: World; p: Pending;
 
 // A decision that stops the clock docks under the tabs on every screen, so
 // the player can look at the book or the balance sheet before answering.
-export function DecisionDock({ world, p, more, onDecide, onFewer }: { world: World; p: Pending; more: number; onDecide: (p: Pending, key: string) => void; onFewer?: () => void }) {
+export function DecisionDock({ world, p, more, onDecide, onFewer, onCommittee }: { world: World; p: Pending; more: number; onDecide: (p: Pending, key: string) => void; onFewer?: () => void; onCommittee?: () => void }) {
   return (
     <div className="dock" role="dialog" aria-label={p.title}>
       <div className="dock-inner">
@@ -374,7 +379,7 @@ export function DecisionDock({ world, p, more, onDecide, onFewer }: { world: Wor
           Decision{more > 0 ? ` (${more} more waiting)` : ''}
           <span className="dim"> The clock is stopped until you answer. The other tabs still work.</span>
         </div>
-        <DecisionBody world={world} p={p} onDecide={onDecide} onFewer={onFewer} />
+        <DecisionBody world={world} p={p} onDecide={onDecide} onFewer={onFewer} onCommittee={onCommittee} />
       </div>
     </div>
   );

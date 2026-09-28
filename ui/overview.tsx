@@ -17,6 +17,7 @@ import { formatDate } from '../engine/time';
 import { num, pct, usd } from './format';
 import { Pill, Term } from './parts';
 import { DecisionCard, FeedList, Sparkline } from './screens';
+import { YearPanel } from './years';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral';
 
@@ -148,6 +149,7 @@ export function OverviewScreen({
   onPlay: () => void;
 }) {
   const [fullFeed, setFullFeed] = useState(false);
+  const [hiddenYear, setHiddenYear] = useState(-1);
   const g = gauges(world, bank);
   const waiting = world.pending.filter((p) => !p.blocking);
   // The recent feed is what touches this bank: its own events, the
@@ -178,6 +180,7 @@ export function OverviewScreen({
       <Goal world={world} bank={bank} onGo={onGo} />
       <div className="feed-grid">
         <div>
+          {hiddenYear !== bank.years?.length && <YearPanel world={world} bank={bank} onHide={() => setHiddenYear(bank.years?.length ?? 0)} />}
           <Peers world={world} bank={bank} />
           <Levers world={world} bank={bank} onGo={onGo} />
           <table className="wrap">

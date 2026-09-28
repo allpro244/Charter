@@ -24,7 +24,7 @@ import { EarningsScreen } from './earnings';
 import { EconomyScreen } from './economy';
 import { MarketScreen } from './market';
 import { openBranch } from '../engine/deposits';
-import { setDial } from '../engine/underwriting';
+import { setDial, setDialMode } from '../engine/underwriting';
 
 // Six tabs, grouped by the question a player is asking (DESIGN.md Part 3).
 type Screen = 'HOME' | 'LENDING' | 'MONEY' | 'WORLD' | 'MAP' | 'YOU' | 'DEBUG';
@@ -95,6 +95,9 @@ export function App() {
   // Skip ahead (D64): the day the clock runs to at SKIP_SPEED, or null.
   const untilRef = useRef<number | null>(null);
   const [until, setUntil] = useState<number | null>(null);
+  // A skip that reached its close holds the clock there, even when a
+  // decision arrived on the same day: answering it does not restart play.
+  const holdRef = useRef(false);
   const resumeRef = useRef(2);
   const [version, setVersion] = useState(0);
   const [tickMs, setTickMs] = useState(0);
@@ -175,6 +178,7 @@ export function App() {
     setSpeedState(s);
   }, []);
   const stopSkip = useCallback(() => {
+    holdRef.current = false;
     untilRef.current = null;
     setUntil(null);
   }, []);
@@ -193,6 +197,7 @@ export function App() {
       if (!world) return;
       const target = nextClose(world.day, span);
       untilRef.current = target;
+      holdRef.current = false;
       setUntil(target);
       if (!world.pending.some((p) => p.blocking)) setSpeed(speedRef.current || resumeRef.current);
     },
@@ -261,6 +266,7 @@ export function App() {
           break;
         }
       }
+      if (arrived) holdRef.current = true;
       if (arrived || world.playerBankId === null) {
         untilRef.current = null;
         setUntil(null);
@@ -284,7 +290,7 @@ export function App() {
       if (p.kind === 'failure') {
         setPhase('start');
         setSelectedMetro(null);
-      } else if (!world.pending.some((x) => x.blocking)) {
+      } else if (!world.pending.some((x) => x.blocking) && !holdRef.current) {
         setSpeed(resumeRef.current);
       }
       refresh();
@@ -529,6 +535,7 @@ export function App() {
             p={blocking}
             more={world.pending.filter((x) => x.blocking).length - 1}
             onDecide={decide}
+            onCommittee={bank ? () => act(({ world: w }) => setDialMode(w, { committee: true }), 'The loan committee now decides credits up to three times the size line; only the biggest come to you') : undefined}
             onFewer={bank ? () => act(({ world: w }) => setDial(w, Math.max(250_000, Math.round((bank.dial.maxAuto || 250_000) * 2 / 50_000) * 50_000), bank.dial.minGrade), `Loans under ${short(Math.max(250_000, Math.round((bank.dial.maxAuto || 250_000) * 2 / 50_000) * 50_000))} are now decided under your policy`) : undefined}
           />
         )}

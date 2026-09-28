@@ -14,12 +14,14 @@ import { type Bank, type Pending, type World, createWorld } from '../engine/stat
 import { newPlayer, seedsForMetro, startCharter, startTakeover, startableMetros, takeoverCandidates } from '../engine/start';
 import { applyDecisions, tick } from '../engine/tick';
 import { isYearEnd, isMonthEnd } from '../engine/time';
-import { branchTarget, depositTargets, bankDepositRate, marketDepositRate } from '../engine/deposits';
+import { branchTarget, depositTargets, bankDepositRate, marketDepositRate, branchCandidates, branchOpenCheck, openBranch } from '../engine/deposits';
+import { isMonthEnd as monthEnd } from '../engine/time';
 
 const seed = Number(process.argv[2] ?? 1);
 const years = Number(process.argv[3] ?? 10);
 const metroRank = Number(process.argv[4] ?? 0);
 const mode = process.argv[5] ?? 'charter';
+const active = process.argv[6] === 'active';
 
 const DIR = join(import.meta.dirname, '..', 'data');
 const read = (f: string) => JSON.parse(readFileSync(join(DIR, f), 'utf8'));
@@ -50,6 +52,7 @@ function choose(p: Pending): string {
   }
   if (p.kind === 'loan_batch') return keys.includes('s') ? 's' : keys[0]!;
   if (p.kind === 'rate_prompt') return keys.includes('m') ? 'm' : keys[0]!;
+  if (active && p.kind === 'assisted_auction') return '2';
   if (keys.includes('k')) return 'k';
   if (keys.includes('p')) return 'p';
   if (keys.includes('d')) return 'd';
@@ -89,7 +92,28 @@ for (let d = 0; d < years * 365; d++) {
     applyDecisions(c, blocking.map((p) => ({ pendingId: p.id, choice: choose(p) })));
     world.feed.push(...c.events);
   }
-  // Offers: take the default (let them expire).
+  // Offers: an active CEO takes the growth ones; a casual one lets them expire.
+  if (active) {
+    const offers = world.pending.filter((p) => !p.blocking && (p.kind === 'branch_offer' || p.kind === 'deposit_offer'));
+    if (offers.length > 0) {
+      const c: Ctx = { world, events: [] };
+      applyDecisions(c, offers.map((p) => ({ pendingId: p.id, choice: p.kind === 'branch_offer' ? 'b' : 'a' })));
+      world.feed.push(...c.events);
+      for (const p of offers) console.log(`   [${(world.day / 365).toFixed(1)}] took ${p.kind}: ${p.title}`);
+    }
+    // A branch a year when the ranked list says one pays within four years.
+    if (monthEnd(world.day) && world.day % 365 < 31 && world.day > 365) {
+      const best = branchCandidates(world, bank, 5).find((c) => c.paybackYear !== null && c.paybackYear <= 4 && c.existing === 0);
+      const county = best ? world.geo.counties[best.fips] : undefined;
+      if (county && branchOpenCheck(world, county).ok) {
+        const c: Ctx = { world, events: [] };
+        openBranch(c, county);
+        world.feed.push(...c.events);
+        console.log(`   [${(world.day / 365).toFixed(1)}] opened a branch in ${county.name} (payback year ${best!.paybackYear})`);
+      }
+    }
+  }
+  // Offers otherwise: take the default (let them expire).
   if (world.playerBankId !== bank.id) {
     console.log(`bank gone on day ${world.day}`);
     break;

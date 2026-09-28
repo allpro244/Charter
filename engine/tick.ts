@@ -44,7 +44,7 @@ import {
   tier1Capital,
 } from './ledger';
 import { assessmentRate, growthRestricted, regulationMonthly, stressTestAnnual } from './regulation';
-import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP, branchFixedCost } from './state';
+import { type Bank, type Decision, type Pending, type World, emptyAdb, FEED_CAP, branchFixedCost, playerNetWorth } from './state';
 import { dateOf, daysInMonth, formatDate, isMonthEnd, isQuarterEnd, isYearEnd, quarterOf } from './time';
 import { wealthMonthly, wealthQuarterly } from './wealth';
 
@@ -370,14 +370,33 @@ function yearInReview(ctx: Ctx): void {
   const growth = ago && ago.assets > 0 ? assets / ago.assets - 1 : null;
   const rank = world.ladder.rank;
   const rankAgo = world.ladder.rankYearAgo ?? null;
-  const desk = b.desk;
+  // The year's own desk calls: the lifetime record less where it stood at
+  // the last review.
+  const was = b.deskAtYear ?? { approved: 0, wentBad: 0 };
+  const desk = b.desk ? { approved: b.desk.approved - was.approved, wentBad: b.desk.wentBad - was.wentBad } : null;
+  if (b.desk) b.deskAtYear = { approved: b.desk.approved, wentBad: b.desk.wentBad };
   // Against the banks your size: the year's return on assets beside theirs.
   const g = peerGroup(world, b);
   const roa = ni / Math.max(1, assets);
   const verdict = Number.isFinite(g.peers.roa) && g.n >= 3 ? (roa > g.peers.roa + 0.002 ? ` A better year than most of the ${g.n} banks your size (they earned ${(100 * g.peers.roa).toFixed(2)}%).` : roa < g.peers.roa - 0.002 ? ` A worse year than most of the ${g.n} banks your size (they earned ${(100 * g.peers.roa).toFixed(2)}%).` : ` About the same year as the ${g.n} banks your size.`) : '';
-  const text = `${y} in review: ${ni >= 0 ? 'profit' : 'loss'} ${money(Math.abs(ni))} (${(100 * ni / Math.max(1, assets)).toFixed(2)}% on assets), assets ${money(assets)}${growth !== null ? `, ${growth >= 0 ? 'up' : 'down'} ${(100 * Math.abs(growth)).toFixed(1)}%` : ''}${rank > 0 ? `, rank #${rank.toLocaleString('en-US')}${rankAgo !== null && rankAgo > 0 ? ` (from #${rankAgo.toLocaleString('en-US')})` : ''}` : ''}${desk ? `, ${desk.approved} loans approved at your desk, ${desk.wentBad} went bad` : ''}.${verdict}`;
+  const text = `${y} in review: ${ni >= 0 ? 'profit' : 'loss'} ${money(Math.abs(ni))} (${(100 * ni / Math.max(1, assets)).toFixed(2)}% on assets), assets ${money(assets)}${growth !== null ? `, ${growth >= 0 ? 'up' : 'down'} ${(100 * Math.abs(growth)).toFixed(1)}%` : ''}${rank > 0 ? `, rank #${rank.toLocaleString('en-US')}${rankAgo !== null && rankAgo > 0 ? ` (from #${rankAgo.toLocaleString('en-US')})` : ''}` : ''}${desk ? `, ${desk.approved} loans approved at your desk this year, ${desk.wentBad} went bad` : ''}.${verdict}`;
   emit(ctx, 'system', text, { severity: ni >= 0 ? 'good' : 'alert', bankId: b.id });
   milestone(ctx, text);
+  (b.years ??= []).push({
+    year: y,
+    profit: ni,
+    roa,
+    assets,
+    growth,
+    rank,
+    rankAgo: rankAgo && rankAgo > 0 ? rankAgo : null,
+    approved: desk?.approved ?? 0,
+    wentBad: desk?.wentBad ?? 0,
+    peerRoa: Number.isFinite(g.peers.roa) && g.n >= 3 ? g.peers.roa : null,
+    peers: g.n,
+    netWorth: playerNetWorth(world),
+    deNovo: b.takeover === null && world.day - b.charteredDay < 3 * 365,
+  });
   world.ladder.rankYearAgo = rank;
 }
 
