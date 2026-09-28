@@ -5,7 +5,7 @@
 import { type IncomeStatement, interestExpense, interestIncome, netIncome, netInterestIncome, noninterestExpense, pretaxIncome } from '../engine/ledger';
 import type { Bank, CallReport } from '../engine/state';
 import { change, pct, usd } from './format';
-import { Term } from './parts';
+import { Term, Intro } from './parts';
 
 type Mode = 'qoq' | 'yoy';
 
@@ -55,11 +55,11 @@ export function GrowthScreen({ bank, mode }: { bank: Bank; mode: Mode }) {
   const then = n - 1 - back >= 0 ? periods[n - 1 - back] : undefined;
   return (
     <div>
-      <p className="hint">
+      <Intro>
         {mode === 'qoq'
           ? 'Each line of the last closed quarter against the quarter before it. A plus is growth; parentheses mean a fall. For costs, a fall is the good direction.'
           : 'Each line of the last closed quarter against the same quarter a year earlier, so seasonal swings cancel out. Below, the last twelve months against the twelve before.'}
-      </p>
+      </Intro>
       <div className="cols">
         <CompareTable title={mode === 'qoq' ? 'Quarter over quarter' : 'Year over year'} now={now} then={then} thenLabel={then ? then.label : mode === 'qoq' ? 'no earlier quarter yet' : 'needs a year of history'} />
         {mode === 'yoy' && <TrailingTable periods={periods} />}

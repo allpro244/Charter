@@ -12,7 +12,7 @@ import { type Bank, type LotKind, type Product, type World } from '../engine/sta
 import { SWAP_FLOOR, enterSwap, terminateSwap } from '../engine/regulation';
 import { formatDate } from '../engine/time';
 import { type Unit, dollars, num, pct, unitLabel, usd } from './format';
-import { AmountField, Stepper, Term } from './parts';
+import { AmountField, Stepper, Term, Intro } from './parts';
 import { CapitalPanel } from './capital';
 import { BalanceSheetScreen } from './screens';
 
@@ -72,9 +72,9 @@ function Deposits({ world, bank, unit, act }: Props) {
   const county = bank.homeCounty ? world.geo.counties[bank.homeCounty] : undefined;
   return (
     <div>
-      <p className="hint">
+      <Intro>
         What depositors keep with you and what you pay them. A rate below the market slowly loses <Term k="Money market">money market</Term> and <Term k="Certificates">certificate</Term> balances; checking and savings barely move. Steps are one basis point or twenty five.
-      </p>
+      </Intro>
       <div className="toolbar">
         <div className="seg">
           <button className={bank.ratePeg ? 'on' : ''} onClick={() => act(({ world: w }) => setPegMode(w, true), 'The sheet now follows the market at your offsets')}>
@@ -400,9 +400,9 @@ function Bonds({ world, bank, unit, act }: Props) {
   const bookDuration = bookCost > 0 ? (a.securitiesAFS * bank.afsDuration + a.securitiesHTM * bank.htmDuration) / bookCost : 0;
   return (
     <div>
-      <p className="hint">
+      <Intro>
         Idle cash earns the overnight rate. A bond locks money up for a term and pays more; the longer the term, the more it pays and the more its price moves when rates move. Pick a yield on the sheet, choose a book, and the panel shows exactly what you get before you buy.
-      </p>
+      </Intro>
       <div className="cols">
         <table>
           <thead>

@@ -10,6 +10,7 @@ import type { Bank, CountyState, MetroState, World } from '../engine/state';
 import type { GeoCollection } from './data';
 import { HEIGHT, WIDTH, bboxFor, pathFor, projectPoint } from './projection';
 import { num, pct, short, usd } from './format';
+import { Intro } from './parts';
 
 export type Shade = 'none' | 'share' | 'condition' | Sector;
 export const SHADES: Shade[] = ['none', 'share', 'condition', ...SECTORS];
@@ -95,7 +96,7 @@ export function MapView({ world, geo, mode, shade, onShade, selectedMetro, onSel
   const k = zoomed && stateBox ? Math.max(1, Math.min(WIDTH / stateBox.w, HEIGHT / stateBox.h)) : 1;
   return (
     <div className="mapwrap">
-      {mode === 'play' && <p className="hint">Real counties. Hover one for its numbers and click it to pin it; a city dot stands for its metro, so hovering or clicking it shows the metro's main county and every county in the metro below. The list under the map ranks where a new branch would earn the most; open one there, from the metro's counties, or from a pinned county's card. Shade the map by your share of each county's deposits, by a sector's share of jobs, or by how each county is doing.</p>}
+      {mode === 'play' && <Intro>Real counties. Hover one for its numbers and click it to pin it; a city dot stands for its metro, so hovering or clicking it shows the metro's main county and every county in the metro below. The list under the map ranks where a new branch would earn the most; open one there, from the metro's counties, or from a pinned county's card. Shade the map by your share of each county's deposits, by a sector's share of jobs, or by how each county is doing.</Intro>}
       {empty && <p className="hint">This build has no county map: the playtest bank has no home town. The map fills in once the county data is built.</p>}
       {mode === 'play' && !empty && focusState && (
         <div className="toolbar">
@@ -231,7 +232,7 @@ function WhereToOpen({ world, bank, picked, onPick, onOpenBranch }: { world: Wor
       picked={picked}
       onPick={onPick}
       onOpenBranch={onOpenBranch}
-      footer={`Ranked by a mature year's earnings against the banks already there: your margin (${pct(cands[0]?.margin ?? 0, 1)}) on the deposits the branch would hold, less its running cost. Alone is what one branch could gather with nobody contesting the county; against them is its share of the county contest after six years. Click a row to see the county on the map.`}
+      footer={`Ranked by a mature year's earnings against the banks already there: what a dollar of deposits earns you once lent (${pct(cands[0]?.margin ?? 0, 1)}: your margin less the cost of running those loans and a year of losses) on the deposits the branch would hold, less the branch's running cost. Pays for itself is the year its earnings to date cover the premises paid on day one. Alone is what one branch could gather with nobody contesting the county; against them is its share of the county contest after six years. Click a row to see the county on the map.`}
     />
   );
 }

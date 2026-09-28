@@ -401,7 +401,7 @@ export function depositsMonthly(ctx: Ctx): void {
       for (const t of DEPOSIT_TYPES) b.rates[t] = Math.max(0, Math.round(ff * calibration.depositBeta[t].typical * 10_000) / 10_000);
     } else if (b.id === world.playerBankId && b.ratePeg) {
       // The CFO resets the sheet to the market at the offsets the CEO set (D50).
-      for (const t of DEPOSIT_TYPES) b.rates[t] = Math.max(0, Math.round((marketRate(world, t) + (b.ratePeg[t] ?? 0)) * 10_000) / 10_000);
+      repriceToPeg(world, b);
     }
     b.fhlbRate = ff + 0.003;
     b.fedFundsRate = ff + 0.001;
@@ -457,6 +457,14 @@ export function decideRatePrompt(ctx: Ctx, pending: Pending, d: Decision): void 
   }
 }
 
+// The sheet at the market plus the CEO's offsets (D50). Run at each month
+// end and on the day the bank opens, so a new bank does not spend its
+// first month under the market without having chosen to.
+export function repriceToPeg(world: World, b: Bank): void {
+  if (!b.ratePeg) return;
+  for (const t of DEPOSIT_TYPES) b.rates[t] = Math.max(0, Math.round((marketRate(world, t) + (b.ratePeg[t] ?? 0)) * 10_000) / 10_000);
+}
+
 // Player controls. With the sheet pegged to the market, setting a rate by
 // hand sets the offset that produces it, so the sheet keeps following.
 export function setRate(world: World, t: DepositType, rate: number): void {
@@ -504,14 +512,21 @@ export interface BranchCase {
   contested: number; // mature, against the branches already there (the county contest's own split)
   margin: number; // the bank's net interest margin, or the band's typical
   breakEven: number; // deposits that cover the fixed cost at the margin
-  paybackYear: number | null; // first year the target covers the fixed cost
+  paybackYear: number | null; // first year the earnings to date recover the premises and the running cost (D68)
   profit: number; // a mature year: margin on deposits less the fixed cost
   existing: number; // own branches there
 }
 
+// What a dollar of new deposits earns the bank once lent: the margin, less
+// the running cost of the assets it funds (the bank's own overhead rate,
+// which is before branches) and a year of loan losses at the bank's own
+// charge-off rate. Crediting a branch with the whole margin made every
+// county pay for itself in its first year (D68).
 export function branchMargin(b: Bank): number {
   const last = b.reports[b.reports.length - 1];
-  return last && last.nim > 0.005 ? last.nim : calibration.nim.under1b.typical / 100;
+  const nim = last && last.nim > 0.005 ? last.nim : calibration.nim.under1b.typical / 100;
+  const losses = last ? Math.max(0, last.ncoRate) : 0.003;
+  return Math.max(0.002, nim - b.overheadRate - losses);
 }
 
 // Other banks' branches by county, one pass over the world.
@@ -554,9 +569,14 @@ export function branchCase(world: World, b: Bank, county: CountyState, rivals: B
     contested = Math.min(mature, split[split.length - 1] ?? 0);
   }
   const ratio = mature > 0 ? contested / mature : 1;
+  // Pays for itself: the first year the branch's earnings to date, less
+  // its running cost each year, have recovered the premises paid on day
+  // one (D68).
   let paybackYear: number | null = null;
+  let cumulative = -fixedCost;
   for (let y = 1; y <= 10; y++) {
-    if (at(y) * ratio * margin >= fixedCost) {
+    cumulative += (at(y - 0.5) * ratio * margin) - fixedCost;
+    if (cumulative >= 0) {
       paybackYear = y;
       break;
     }

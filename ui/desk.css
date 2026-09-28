@@ -1255,3 +1255,17 @@ th.subhead {
 .verdict-text {
   flex: 1 1 320px;
 }
+
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linkbtn:hover {
+  color: var(--accent);
+}

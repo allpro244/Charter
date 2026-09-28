@@ -14,7 +14,7 @@ import { type Bank, type FeedItem, type Pending, type World, bookValuePerShare, 
 import { formatDate } from '../engine/time';
 import { playerStake } from '../engine/wealth';
 import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
-import { Pill, Stepper, Term } from './parts';
+import { Pill, Stepper, Term, Intro, setTips, useTips } from './parts';
 import { previewFor } from './preview';
 import { healthTone, loanHealth } from '../engine/health';
 import type { Application } from '../engine/borrowers';
@@ -406,12 +406,12 @@ export function BalanceSheetScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const borrowings = a.fhlb + a.fedFundsPurchased + a.subDebt;
   return (
     <div>
-      <p className="hint">
+      <Intro>
         What the bank owns, what it owes, and what is left for shareholders.{' '}
         <button className="btn small" onClick={() => setAll((v) => !v)}>
           {all ? 'Fewer lines' : 'Show every line'}
         </button>
-      </p>
+      </Intro>
       <div className="cols">
         <table className="wrap">
           <thead>
@@ -813,9 +813,9 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
   const myAssets = bank ? totalAssets(bank.acct) : 0;
   return (
     <div>
-      <p className="hint">
+      <Intro>
         Your own money: salary, dividends and your stake in the bank. <Term k="net worth">Net worth</Term> is the score; the ladder is the goal. Raising capital, selling shares and going public live under Money, balance sheet and capital.
-      </p>
+      </Intro>
       {l && (
         <table className="wrap">
           <thead>
@@ -1023,21 +1023,20 @@ export function Sparkline({ values, width = 320, height = 28 }: { values: number
 
 export function HelpModal({ onClose, onNewWorld, onDebug }: { onClose: () => void; onNewWorld: () => void; onDebug: () => void }) {
   const rows: [string, string][] = [
-    ['Overview', 'five gauges: capital, cash, loans, profit, growth; profit in plain words; what to do next'],
-    ['Lending', 'your book with a health bar per loan type; the written policy and the dial; the pools'],
-    ['Money', 'deposit rates a basis point at a time, cash and borrowing, bonds, the balance sheet and capital actions'],
-    ['Earnings', 'the income statement, and where every dollar of the last quarter came from'],
-    ['People', 'your three officers and this month’s candidates'],
-    ['Market', 'every other bank, offers to buy them, business lines, and the world abroad'],
-    ['Map', 'real counties; hover for numbers, open branches'],
-    ['You', 'salary, dividends, your stake, your record'],
+    ['Home', 'Today: what to do next, five gauges, the banks your size, what moves the needle, your calls, the year in review. Results: the statements, where every dollar came from, your years'],
+    ['Loans', 'your book (open files first), the loan rate sheet, the written policy and the dial that decides which loans reach you'],
+    ['Money', 'the deposit rate sheet, cash and borrowing, bonds, the balance sheet and capital actions'],
+    ['World', 'the economy and where to lend; the other banks, with offers to buy them, business lines and abroad'],
+    ['Map', 'real counties; hover for numbers, the ranked list of where to open a branch'],
+    ['You', 'your money, salary, dividends and the ladder; your team of officers'],
     ['Play and Pause, or space', 'start and stop the clock; Slow to Max, or keys 1 to 5, set the speed (Max runs a year in about six seconds)'],
     ['Skip to month, quarter or year end', 'runs fast to that close and stops; any decision stops it first, and answering carries on to the close'],
     ['Decision buttons, or the key shown on them', 'answer a loan, an exam, an offer. Every decision says what it means first'],
     ['Underlined words', 'hover for a plain explanation'],
-    ['Save, or s', 'save in this browser; the game also saves every year end'],
+    ['Save, or s', 'save in this browser; the game also saves at every quarter end'],
     ['Letters beside the tabs', 'keyboard shortcuts; Escape closes this'],
   ];
+  const tips = useTips();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-label="Help" onClick={(e) => e.stopPropagation()}>
@@ -1060,6 +1059,9 @@ export function HelpModal({ onClose, onNewWorld, onDebug }: { onClose: () => voi
           </tbody>
         </table>
         <div className="modal-foot">
+          <button className="btn" onClick={() => setTips(!tips)}>
+            {tips ? 'Hide the screen tips' : 'Show the screen tips'}
+          </button>
           <button className="btn" onClick={onDebug}>
             Debug screen
           </button>

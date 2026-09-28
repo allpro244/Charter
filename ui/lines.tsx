@@ -9,13 +9,14 @@ import { LINE_LABEL, LINE_ORDER, LINE_THRESHOLDS, lineAvailable, setupCost, togg
 import { type Bank, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { type Unit, dollars, short, unitLabel, usd } from './format';
+import { Intro } from './parts';
 
 export function LinesScreen({ world, bank, unit, act, part = 'lines' }: { world: World; bank: Bank; unit: Unit; act: (fn: (ctx: Ctx) => void) => void; part?: 'lines' | 'abroad' }) {
   const assets = totalAssets(bank.acct);
   if (part === 'abroad') return <GlobalTables world={world} bank={bank} unit={unit} act={act} />;
   return (
     <div>
-      <p className="hint">Business lines beyond lending, each unlocked when the bank reaches a size. A line is a staffed operation with its own revenue and cost; both flow through earnings.</p>
+      <Intro>Business lines beyond lending, each unlocked when the bank reaches a size. A line is a staffed operation with its own revenue and cost; both flow through earnings.</Intro>
       <table className="wrap">
         <thead>
           <tr>
@@ -112,7 +113,7 @@ function GlobalTables({ world, bank, unit, act }: { world: World; bank: Bank; un
   }
   return (
     <div>
-      <p className="hint">Countries, your subsidiaries abroad, and the banks for sale there. Books abroad stay in local currency; the translation runs through AOCI.</p>
+      <Intro>Countries, your subsidiaries abroad, and the banks for sale there. Books abroad stay in local currency; the translation runs through AOCI.</Intro>
       <div>
         <table>
           <thead>

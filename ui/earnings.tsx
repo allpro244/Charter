@@ -9,12 +9,13 @@ import { QtrScreen } from './qtr';
 import { IncomeScreen } from './screens';
 import { Sparks } from './overview';
 import { YearsTable } from './years';
+import { Intro } from './parts';
 
 export function EarningsScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const [tab, setTab] = useState<'period' | 'why' | 'qoq' | 'yoy' | 'years'>('period');
   return (
     <div>
-      <p className="hint">Where the money comes from and where it goes. This period shows the statement; where it came from names every dollar earned and lost in the last quarter, and the decisions behind the losses. The two growth views show what is rising and what is falling.</p>
+      <Intro>Where the money comes from and where it goes. This period shows the statement; where it came from names every dollar earned and lost in the last quarter, and the decisions behind the losses. The two growth views show what is rising and what is falling.</Intro>
       <div className="toolbar">
         <div className="seg">
           <button className={tab === 'period' ? 'on' : ''} onClick={() => setTab('period')}>

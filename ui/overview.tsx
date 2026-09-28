@@ -13,9 +13,9 @@ import { PEER_METRICS, levers, peerGroup } from '../engine/peers';
 import { RUNGS, ladder, rungs } from '../engine/ladder';
 import { PCA_LABEL, pcaCategory } from '../engine/regulation';
 import { type Bank, type FeedItem, type Pending, type World, emptyDesk } from '../engine/state';
-import { formatDate } from '../engine/time';
+import { formatDate, nextClose } from '../engine/time';
 import { num, pct, usd } from './format';
-import { Pill, Term } from './parts';
+import { Pill, Term, Intro } from './parts';
 import { DecisionCard, FeedList, Sparkline } from './screens';
 import { YearPanel } from './years';
 
@@ -163,7 +163,7 @@ export function OverviewScreen({
   const nonaccrual = mine.filter((l) => l.status === 'nonaccrual').length;
   return (
     <div>
-      <p className="hint">How the bank is doing, in five numbers, then against the banks your size, then what one step of each lever is worth. Hover any underlined word for what it means; click a gauge or a lever to open the tab that changes it.</p>
+      <Intro>How the bank is doing, in five numbers, then against the banks your size, then what one step of each lever is worth. Hover any underlined word for what it means; click a gauge or a lever to open the tab that changes it.</Intro>
       <div className="gauges">
         {g.map((x) => (
           <button key={x.key} className={'gauge ' + x.tone} onClick={() => onGo(x.go)}>
@@ -332,6 +332,24 @@ function Peers({ world, bank }: { world: World; bank: Bank }) {
   const month = Math.floor(world.day / 30);
   const g = useMemo(() => peerGroup(world, bank), [world, bank, month]);
   const filed = bank.reports.length > 0;
+  // Before the first quarter closes nobody has filed: one line on when the
+  // comparison starts, not eight rows of n/a.
+  if (!filed || g.n === 0) {
+    return (
+      <table className="wrap">
+        <thead>
+          <tr>
+            <th>Banks your size</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="memo-row">
+            <td>Your first call report closes on {formatDate(nextClose(world.day, 'quarter'))}{g.n === 0 ? ', with every other bank\'s' : ''}. From then this table sets your return, margin, costs, losses and growth beside the banks between a third and three times your size.</td>
+          </tr>
+        </tbody>
+      </table>
+    );
+  }
   return (
     <table className="wrap">
       <thead>

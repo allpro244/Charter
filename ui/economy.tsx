@@ -13,7 +13,7 @@ import { LOAN_TYPES, type LoanType, emptyByType } from '../engine/loantypes';
 import { type Bank, type CountyState, type Regime, type World } from '../engine/state';
 import { REGIME_DEMAND, arrivalRate } from '../engine/underwriting';
 import { num, pct, usd } from './format';
-import { Term } from './parts';
+import { Term, Intro } from './parts';
 import { Sparkline } from './screens';
 
 type Tab = 'lend' | 'cycle' | 'sectors';
@@ -22,7 +22,7 @@ export function EconomyScreen({ world, bank, onGo }: { world: World; bank: Bank;
   const [tab, setTab] = useState<Tab>('lend');
   return (
     <div>
-      <p className="hint">The market you lend into. Where to lend ranks every loan type by what it pays after the losses you should expect today; the cycle says what stage the economy is in and what that usually means for a bank; sectors show which industries are rising and falling, and how much of your market depends on each.</p>
+      <Intro>The market you lend into. Where to lend ranks every loan type by what it pays after the losses you should expect today; the cycle says what stage the economy is in and what that usually means for a bank; sectors show which industries are rising and falling, and how much of your market depends on each.</Intro>
       <div className="toolbar">
         <div className="seg">
           <button className={tab === 'lend' ? 'on' : ''} onClick={() => setTab('lend')}>

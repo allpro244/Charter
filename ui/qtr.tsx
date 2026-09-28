@@ -7,6 +7,7 @@ import { TYPE } from '../engine/credit';
 import { type Bank, type QuarterReview } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { type Unit, dollars, unitLabel } from './format';
+import { Intro } from './parts';
 
 export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const [idx, setIdx] = useState<number | null>(null);
@@ -19,7 +20,7 @@ export function QtrScreen({ bank, unit }: { bank: Bank; unit: Unit }) {
   const overhead = r.overhead.salaries + r.overhead.occupancy + r.overhead.other + r.overhead.assessment;
   return (
     <div>
-      <p className="hint">The quarterly earnings review: every dollar earned and lost, and which decisions made the losses. It ties to the ledger to the dollar.</p>
+      <Intro>The quarterly earnings review: every dollar earned and lost, and which decisions made the losses. It ties to the ledger to the dollar.</Intro>
       <div className="toolbar">
         <button className="btn" onClick={() => setIdx(i - 1)} disabled={i === 0}>
           Previous quarter

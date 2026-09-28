@@ -2,7 +2,7 @@
 // explanation, a stepper with a fine and a coarse step, an amount field
 // with presets, a status pill. Plain functions over plain props.
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import type React from 'react';
 import { TERMS } from './glossary';
 import { usd } from './format';
@@ -86,4 +86,48 @@ export function parseAmount(s: string): number | null {
 
 export function Pill({ tone, children }: { tone: 'good' | 'warn' | 'bad' | 'neutral'; children: React.ReactNode }) {
   return <span className={'pill ' + tone}>{children}</span>;
+}
+
+// The line that opens each screen says what it is for. A new player reads
+// it; a player who knows the desk hides them all at once, and Help brings
+// them back. Remembered in this browser only, a convenience (D68).
+const TIPS_KEY = 'charter.tips';
+let tipsOn = (() => {
+  try {
+    return localStorage.getItem(TIPS_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+})();
+const tipListeners = new Set<() => void>();
+export function setTips(on: boolean): void {
+  tipsOn = on;
+  try {
+    localStorage.setItem(TIPS_KEY, on ? 'on' : 'off');
+  } catch {
+    // Storage blocked: the choice lasts for this visit.
+  }
+  for (const f of tipListeners) f();
+}
+export function useTips(): boolean {
+  return useSyncExternalStore(
+    (f) => {
+      tipListeners.add(f);
+      return () => tipListeners.delete(f);
+    },
+    () => tipsOn,
+    () => tipsOn,
+  );
+}
+export function Intro({ children }: { children: React.ReactNode }) {
+  const on = useTips();
+  if (!on) return null;
+  return (
+    <p className="hint intro">
+      {children}{' '}
+      <button className="linkbtn" onClick={() => setTips(false)} title="Hide the line that opens every screen. Help brings them back.">
+        hide tips
+      </button>
+    </p>
+  );
 }

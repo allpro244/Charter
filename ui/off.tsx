@@ -7,12 +7,13 @@ import { totalAssets } from '../engine/ledger';
 import { type Bank, type World } from '../engine/state';
 import { formatDate } from '../engine/time';
 import { num, pct } from './format';
+import { Intro } from './parts';
 
 export function OfficersScreen({ world, bank, act }: { world: World; bank: Bank; act: (fn: (ctx: Ctx) => void) => void }) {
   const assets = totalAssets(bank.acct);
   return (
     <div>
-      <p className="hint">Your three officers. Skill drives the quality of loan memos, lending volume and funding costs; loyalty decides who stays when a rival calls.</p>
+      <Intro>Your three officers. Skill drives the quality of loan memos, lending volume and funding costs; loyalty decides who stays when a rival calls.</Intro>
       <table>
         <thead>
           <tr>

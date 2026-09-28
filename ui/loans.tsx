@@ -16,7 +16,7 @@ import { baseRate } from '../engine/credit';
 import { bankDepositRate } from '../engine/deposits';
 import { calibration } from '../data/calibration';
 import { type Unit, dollars, num, pct, short, unitLabel, usd } from './format';
-import { AmountField, Stepper, Term } from './parts';
+import { AmountField, Stepper, Term, Intro } from './parts';
 
 interface Props {
   world: World;
@@ -35,7 +35,7 @@ export function LoansScreen({ world, bank, unit, refresh, act }: Props) {
   const total = rows.reduce((s, r) => s + r.balance, 0);
   return (
     <div>
-      <p className="hint">The loans on your books by type, with a health bar showing the share graded weak. Below: the whole book, then the rate sheet, then the written policy and dial that decide what reaches your desk.</p>
+      <Intro>The loans on your books by type, with a health bar showing the share graded weak. Below: the whole book, then the rate sheet, then the written policy and dial that decide what reaches your desk.</Intro>
       <div className="toolbar">
         <div className="seg">
           <button className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
@@ -481,9 +481,9 @@ function Policy({ world, bank, refresh }: { world: World; bank: Bank; refresh: (
   };
   return (
     <div>
-      <p className="hint">
+      <Intro>
         The <Term k="delegation dial">dial</Term> decides which loans reach your desk; the <Term k="loan policy">written policy</Term> decides everything else. Small steps are for fine tuning; the larger ones are the old jumps.
-      </p>
+      </Intro>
       <div className="cols">
         <table className="wrap">
           <thead>
@@ -638,9 +638,9 @@ function RateSheet({ world, bank, refresh }: { world: World; bank: Bank; refresh
   };
   return (
     <div>
-      <p className="hint">
+      <Intro>
         What you charge against the market, by loan type. Every 25 basis points under the market brings about {per25}% more borrowers of that type through the door; every 25 over sends that many away. The market rate moves with the Fed and the curve; your offset stays where you put it. Your deposits cost {pct(cost)} today.
-      </p>
+      </Intro>
       <table className="wrap">
         <thead>
           <tr>

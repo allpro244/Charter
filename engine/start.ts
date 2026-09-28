@@ -16,6 +16,7 @@ import { generateApplication, ccoReview } from './borrowers';
 import { inheritBook } from './loans';
 import { totalAssets } from './ledger';
 import { populateRivals } from './rivals';
+import { repriceToPeg } from './deposits';
 
 export function startableMetros(world: World): MetroState[] {
   return Object.values(world.geo.metros)
@@ -202,6 +203,7 @@ export function startCharter(ctx: Ctx, opts: StartCharter): Bank {
     bankId: bank.id,
   });
   milestone(ctx, `Chartered ${bank.name} in ${metro.name}`);
+  repriceToPeg(ctx.world, bank);
   return bank;
 }
 
@@ -259,6 +261,7 @@ export function startTakeover(ctx: Ctx, opts: StartTakeover): Bank {
     bankId: bank.id,
   });
   milestone(ctx, `Took over ${bank.name} in ${metro.name}`);
+  repriceToPeg(ctx.world, bank);
   return bank;
 }
 

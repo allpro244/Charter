@@ -37,6 +37,14 @@ describe('where to open a branch (D55)', () => {
       expect(k.profit).toBe(Math.round(k.contested * k.margin - k.fixedCost));
       if (k.paybackYear !== null) expect(k.paybackYear).toBeGreaterThanOrEqual(1);
     }
+    // The margin is what a dollar of deposits earns after running the
+    // assets it funds and losses, well under the bank's whole margin, and a
+    // branch must earn back its premises: none pays for itself in year one
+    // (D68).
+    for (const k of cands) {
+      expect(k.margin).toBeLessThan(0.04);
+      if (k.paybackYear !== null) expect(k.paybackYear).toBeGreaterThanOrEqual(2);
+    }
     // The card and the list agree.
     const top = cands[0]!;
     const card = branchCase(world, bank, world.geo.counties[top.fips]!);
