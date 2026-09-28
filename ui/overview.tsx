@@ -17,7 +17,7 @@ import { formatDate, nextClose } from '../engine/time';
 import { num, pct, usd } from './format';
 import { Pill, Term, Intro } from './parts';
 import { DecisionCard, FeedList, Sparkline } from './screens';
-import { YearPanel } from './years';
+import { PlanPanel, YearPanel } from './years';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral';
 
@@ -182,6 +182,7 @@ export function OverviewScreen({
       <div className="feed-grid">
         <div>
           {hiddenYear !== bank.years?.length && <YearPanel world={world} bank={bank} onHide={() => setHiddenYear(bank.years?.length ?? 0)} />}
+          <PlanPanel world={world} bank={bank} />
           <Peers world={world} bank={bank} />
           <Levers world={world} bank={bank} onGo={onGo} />
           <table className="wrap">

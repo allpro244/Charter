@@ -3,15 +3,15 @@
 
 import { describe, expect, it } from 'vitest';
 import { canTakeLargeDeposit } from '../engine/depositors';
-import { localRaceMonthly, localStanding } from '../engine/ladder';
+import { localRaceMonthly, localStanding, nextThreshold, thresholdsMonthly } from '../engine/ladder';
 import { totalAssets } from '../engine/ledger';
 import { createWorld } from '../engine/state';
-import { newPlayer, startCharter, startableMetros } from '../engine/start';
+import { newPlayer, startCharter, startTakeover, startableMetros } from '../engine/start';
 import { applyDecisions, tick } from '../engine/tick';
 import { generateApplication } from '../engine/borrowers';
 import { makeRng } from '../engine/rng';
 import { leverageTested, policyCheck, termsFrom } from '../engine/underwriting';
-import { FIXTURES_MISSING, hasFixtures, loadFixtures } from './helpers/fixtures';
+import { FIXTURES_MISSING, affordableTakeover, hasFixtures, loadFixtures } from './helpers/fixtures';
 
 function charter(seed: number) {
   const world = createWorld(seed, loadFixtures());
@@ -102,5 +102,46 @@ describe.skipIf(!hasFixtures())(`the race at home (D72, ${hasFixtures() ? 'fixtu
     localRaceMonthly({ world, events: [] }, bank);
     expect(world.milestones.some((m) => m.text.includes(`you passed ${s.ahead!.name}`))).toBe(true);
     expect(localStanding(world, bank)!.rank).toBe(s.rank - 1);
+  });
+});
+
+describe.skipIf(!hasFixtures())(`the de novo business plan (D73, ${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
+  it('a charter files a rising three year plan and hears the verdict at the end; a takeover files none', () => {
+    const { world, bank } = charter(73);
+    const plan = bank.plan!;
+    expect(plan.assets.length).toBe(3);
+    expect(plan.assets[0]!).toBeLessThan(plan.assets[1]!);
+    expect(plan.assets[1]!).toBeLessThan(plan.assets[2]!);
+    expect(plan.capitalFloor).toBe(0.08);
+    for (let d = 0; d < 3 * 365 + 10; d++) {
+      tick(world);
+      const blocking = world.pending.filter((p) => p.blocking);
+      if (blocking.length > 0) applyDecisions({ world, events: [] }, blocking.map((p) => ({ pendingId: p.id, choice: p.options.some((o) => o.key === 'd') ? 'd' : p.options[0]!.key })));
+    }
+    expect(plan.yearsReported).toBe(3);
+    expect(plan.done).toBe(true);
+    expect(world.milestones.some((m) => m.text.startsWith('De novo years complete'))).toBe(true);
+    expect(world.feed.filter((f) => f.text.startsWith('Business plan, year')).length).toBe(3);
+    const t = createWorld(74, loadFixtures());
+    newPlayer(t);
+    const { metro, candidate } = affordableTakeover(t);
+    expect(startTakeover({ world: t, events: [] }, { mode: 'takeover', cbsa: metro.cbsa, candidate }).plan).toBeUndefined();
+  });
+});
+
+describe.skipIf(!hasFixtures())(`size thresholds (D74, ${hasFixtures() ? 'fixtures loaded' : FIXTURES_MISSING})`, () => {
+  it('announces each threshold once, from the engine constants, and never one the bank started past', () => {
+    const { world, bank } = charter(75);
+    const ctx = { world, events: [] };
+    thresholdsMonthly(ctx, bank);
+    expect(world.ladder.thresholds).toEqual([]);
+    bank.acct.cash += 1_200_000_000;
+    bank.acct.commonStock += 1_200_000_000;
+    thresholdsMonthly(ctx, bank);
+    thresholdsMonthly(ctx, bank);
+    const past = world.milestones.filter((m) => m.text.startsWith('Past '));
+    expect(past.length).toBe(1);
+    expect(past[0]!.text).toMatch(/IPO/);
+    expect(nextThreshold(totalAssets(bank.acct))!.assets).toBe(10e9);
   });
 });

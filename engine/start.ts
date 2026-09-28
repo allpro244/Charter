@@ -17,6 +17,7 @@ import { inheritBook } from './loans';
 import { totalAssets } from './ledger';
 import { populateRivals } from './rivals';
 import { km, repriceToPeg } from './deposits';
+import { filePlan } from './plan';
 
 export function startableMetros(world: World): MetroState[] {
   return Object.values(world.geo.metros)
@@ -223,6 +224,11 @@ export function startCharter(ctx: Ctx, opts: StartCharter): Bank {
   });
   milestone(ctx, `Chartered ${bank.name} in ${metro.name}`);
   repriceToPeg(ctx.world, bank);
+  const plan = filePlan(world, bank);
+  if (plan) {
+    bank.plan = plan;
+    emit(ctx, 'regulator', `The business plan on file with the FDIC: assets of ${money(plan.assets[0] ?? 0)}, ${money(plan.assets[1] ?? 0)} and ${money(plan.assets[2] ?? 0)} at the end of years one to three, a first profitable quarter by quarter ${plan.breakevenBy}, and leverage kept at ${(plan.capitalFloor * 100).toFixed(0)}% or more throughout.`, { bankId: bank.id });
+  }
   return bank;
 }
 

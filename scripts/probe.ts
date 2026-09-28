@@ -152,6 +152,7 @@ if (process.env.SAVE) {
   writeFileSync(process.env.SAVE, JSON.stringify(world));
   console.log('saved', process.env.SAVE);
 }
+if (process.env.PLANLOG) for (const f of world.feed.filter((x) => /business plan|Business plan|De novo|profitable quarter/i.test(x.text))) console.log('  PLAN', Math.floor(f.day / 365), f.text);
 const yrs = world.day / 365;
 console.log(`tick ${(tickMs / yrs).toFixed(0)} ms per year (${(tickMs / world.day).toFixed(2)} ms/day)`);
 console.log(`clock stops per year: ${(stopDays / yrs).toFixed(1)}; median gap ${gaps.sort((x, y) => x - y)[Math.floor(gaps.length / 2)] ?? '-'} days`);

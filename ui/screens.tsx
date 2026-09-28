@@ -21,7 +21,7 @@ import type { Application } from '../engine/borrowers';
 import { TYPE } from '../engine/credit';
 import { counterTerms, fundable, policyCheck, termsFrom } from '../engine/underwriting';
 import { lendingLimit } from '../engine/regulation';
-import { ladder } from '../engine/ladder';
+import { ladder, nextThreshold } from '../engine/ladder';
 
 // Days per real second by speed. Normal reads the feed as it happens;
 // Max runs a year in about six seconds for the long waits between the
@@ -851,6 +851,18 @@ export function MeScreen({ world, onSalary, onPayout }: { world: World; onSalary
               <td className="num">{l.behind ? usd(l.behind.assets) : ''}</td>
               <td className="dim">{l.behind ? `${l.behind.name ?? 'a bank'} in ${l.behind.state}` : 'Nobody yet.'}</td>
             </tr>
+            {(() => {
+              const t = nextThreshold(myAssets);
+              return t ? (
+                <tr>
+                  <td>Next size threshold</td>
+                  <td className="num">{usd(t.assets)}</td>
+                  <td className="dim">
+                    {usd(Math.max(0, t.assets - myAssets))} to go, then {t.stage}: {t.brings}.
+                  </td>
+                </tr>
+              ) : null;
+            })()}
             {bank?.years && bank.years.filter((y) => y.rank > 0).length >= 2 && (() => {
               const ys = bank.years!.filter((y) => y.rank > 0);
               const first = ys[0]!;

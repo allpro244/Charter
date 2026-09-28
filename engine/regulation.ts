@@ -206,6 +206,8 @@ export function examine(ctx: Ctx, b: Bank): Camels {
   // Capital.
   const capital = stack.category === 'well' && stack.bufferShortfall === 0 ? (stack.leverage > 0.09 ? 1 : 2) : stack.category === 'well' || stack.category === 'adequate' ? 3 : stack.category === 'under' ? 4 : 5;
   if (capital >= 3) add('C', 'C', `Capital: ${PCA_LABEL[stack.category]}, CET1 ${pct(stack.cet1Ratio, 1)}, leverage ${pct(stack.leverage, 1)}. Raise capital or shrink.`);
+  // A new bank holds the capital its business plan committed to (D73).
+  if (b.plan && !b.plan.done && world.day - b.plan.filedDay < 3 * 365 && stack.leverage < b.plan.capitalFloor) add('C', 'C:denovo', `Capital: leverage ${pct(stack.leverage, 1)} is under the ${pct(b.plan.capitalFloor, 0)} the de novo business plan commits to for the first three years. Slow the growth or raise capital.`);
   // Asset quality.
   const crit = criticizedShareOf(b);
   const conc = creConcentration(b);

@@ -26,6 +26,7 @@ import { emptyByType } from './loantypes';
 import { closeForeign, countriesMonthly, foreignMonthly, globalQuarterly } from './global';
 import { applicationsDaily, decideApplication, decideBatch, dialMonthly } from './underwriting';
 import { ladderMonthly } from './ladder';
+import { planQuarterly } from './plan';
 import { money } from './format';
 import {
   type Accounts,
@@ -343,6 +344,7 @@ function quarterlyClose(ctx: Ctx): void {
     if (b.id === world.playerBankId) {
       const { y, q } = quarterOf(world.day);
       (b.quarterHistory ??= []).push({ quarter: `${y}Q${q}`, is: b.is.quarter });
+      planQuarterly(ctx, b);
     }
     b.is.lastQuarter = b.is.quarter;
     b.is.quarter = emptyIS();

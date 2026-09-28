@@ -147,6 +147,7 @@ export interface Bank {
   declinedForFunding: number; // year to date: auto-declined because cash was short of the working cushion
   desk: DeskRecord; // the player's own calls, lifetime
   years?: YearReview[]; // the year in review, one per December, player's bank only (D65)
+  plan?: import('./plan').BusinessPlan; // the de novo business plan, a new charter only (D73)
   deskAtYear?: { approved: number; wentBad: number }; // the desk record at the last review, so each year counts its own calls
   customers?: Record<string, Customer>; // every borrower the bank has lent to, by name and county (D53)
   pricing: Record<LoanType, number>; // your rate against the market by type, annual; below market pulls borrowers in
@@ -723,7 +724,7 @@ export interface World {
   deals: DealRecord[]; // closed deals, for the record
   countries: Record<string, Country>; // the global stage (D45)
   largestNational: number; // assets of the largest bank in America at the start, the bar to pass
-  ladder: { rank: number; total: number; crossed: number[]; rankYearAgo?: number; local?: { county: string; rank: number; total: number; ahead: string[]; ledOnce?: boolean } }; // the player's place among America's banks by assets (D49), and in the home county by deposits (D72)
+  ladder: { rank: number; total: number; crossed: number[]; rankYearAgo?: number; local?: { county: string; rank: number; total: number; ahead: string[]; ledOnce?: boolean }; thresholds?: number[] }; // the player's place among America's banks by assets (D49), and in the home county by deposits (D72)
 }
 
 export interface DealRecord {

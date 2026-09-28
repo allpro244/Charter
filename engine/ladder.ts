@@ -7,6 +7,10 @@ import { type Ctx, emit, milestone } from './ctx';
 import { totalAssets } from './ledger';
 import { type Bank, type World, playerBank } from './state';
 import { sheetRate } from './deposits';
+import { IPO_FLOOR } from './capital';
+import { GLOBAL_FLOOR } from './global';
+import { LINE_THRESHOLDS } from './lines';
+import { THRESHOLD_DURBIN, THRESHOLD_GSIB, THRESHOLD_RESOLUTION, THRESHOLD_STRESS } from './regulation';
 import { money } from './format';
 
 export interface Rung {
@@ -74,6 +78,7 @@ export function ladderMonthly(ctx: Ctx): void {
   const b = playerBank(world);
   if (!b || b.status !== 'open') return;
   localRaceMonthly(ctx, b);
+  thresholdsMonthly(ctx, b);
   const l = ladder(world);
   const before = world.ladder.rank;
   world.ladder.rank = l.rank;
@@ -155,4 +160,50 @@ export function localRaceMonthly(ctx: Ctx, b: Bank): void {
     emit(ctx, 'system', text, { severity: 'good', bankId: b.id });
   }
   world.ladder.local = { county: s.county, rank: s.rank, total: s.total, ahead: s.aheadIds, ledOnce: led || s.rank === 1 };
+}
+
+// Size thresholds (D14, D74): each one changes what the bank may do and
+// the rules it lives under. Every line names only what the engine does at
+// that size, from the same constants the rules read.
+export interface Threshold {
+  assets: number;
+  stage: string;
+  brings: string;
+}
+
+export function thresholds(): Threshold[] {
+  return [
+    { assets: IPO_FLOOR, stage: 'a regional bank', brings: `an IPO opens (with a holding company) and so does a mortgage business line (${money(LINE_THRESHOLDS.mortgage)})` },
+    { assets: THRESHOLD_DURBIN, stage: 'a large regional bank', brings: 'debit interchange is halved (Durbin), the community bank leverage ratio no longer applies, exams come every twelve months, deposit insurance prices wholesale and uninsured funding, and a card business line opens' },
+    { assets: LINE_THRESHOLDS.wealth, stage: 'a large regional bank', brings: 'a wealth management business line opens' },
+    { assets: THRESHOLD_RESOLUTION, stage: 'a large regional bank', brings: 'a resolution plan is required, a standing cost of about a basis point of assets a year' },
+    { assets: THRESHOLD_STRESS, stage: 'a national bank', brings: 'the Fed stress tests the bank every year (a failed test stops dividends and sets a stress capital buffer), and investment banking and trading open' },
+    { assets: GLOBAL_FLOOR, stage: 'a national bank', brings: 'banks abroad open to a holding company under no enforcement action' },
+    { assets: THRESHOLD_GSIB, stage: 'a global bank', brings: 'with a business abroad, designation as a global systemically important bank and its capital surcharge' },
+  ];
+}
+
+export function nextThreshold(assets: number): Threshold | null {
+  return thresholds().find((t) => t.assets > assets) ?? null;
+}
+
+// Monthly with the ladder: a threshold crossed is a milestone that says
+// what it brings.
+export function thresholdsMonthly(ctx: Ctx, b: Bank): void {
+  const { world } = ctx;
+  const assets = totalAssets(b.acct);
+  // A bank that starts, or a save that loads, past a threshold did not
+  // just cross it: the first look marks those quietly.
+  if (world.ladder.thresholds === undefined) {
+    world.ladder.thresholds = thresholds().filter((t) => t.assets <= assets).map((t) => t.assets);
+    return;
+  }
+  const crossed = world.ladder.thresholds;
+  for (const t of thresholds()) {
+    if (assets < t.assets || crossed.includes(t.assets)) continue;
+    crossed.push(t.assets);
+    const text = `Past ${money(t.assets)} of assets, ${t.stage}: ${t.brings}`;
+    milestone(ctx, text);
+    emit(ctx, 'system', text, { severity: 'good', bankId: b.id });
+  }
 }
